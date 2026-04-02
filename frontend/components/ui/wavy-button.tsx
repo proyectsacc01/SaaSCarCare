@@ -10,21 +10,21 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-white hover:bg-primary/90',
+        default: 'bg-[#0ee936] text-black hover:bg-[#3bf63b]',
         destructive: 'bg-red-600 text-white hover:bg-red-500',
         outline:
-          'border-2 border-gray-500 bg-transparent text-black dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800',
+          'border-2 border-[#0ee936]/60 bg-transparent text-white hover:bg-[#0ee936]/10',
         secondary: 'bg-gray-500 text-white hover:bg-gray-400',
-        success: 'bg-green-600 text-white hover:bg-green-500',
+        success: 'bg-[#0ee936] text-black hover:bg-[#3bf63b]',
         warning: 'bg-yellow-400 text-black hover:bg-yellow-300',
         info: 'bg-blue-600 text-white hover:bg-blue-500',
-        gradient: 'bg-linear-to-r from-purple-600 to-pink-500 text-white',
-        link: 'text-primary underline-offset-4 hover:underline bg-transparent shadow-none',
+        gradient: 'bg-linear-to-r from-[#04e13f] to-[#22c55e] text-black',
+        link: 'text-[#0ee936] underline-offset-4 hover:underline bg-transparent shadow-none',
       },
       size: {
-        default: 'h-9 px-4 py-2 has-[>svg]:gap-2',
-        sm: 'h-8 rounded-md px-3 text-xs has-[>svg]:gap-1.5',
-        lg: 'h-10 rounded-md px-8 has-[>svg]:gap-2.5',
+        default: 'h-11 px-6 py-2.5 text-sm has-[>svg]:gap-2',
+        sm: 'h-9 rounded-md px-5 py-2 text-sm has-[>svg]:gap-1.5',
+        lg: 'h-12 rounded-md px-10 py-3 text-base has-[>svg]:gap-2.5',
         xl: 'h-24 px-20 text-2xl has-[>svg]:gap-3',
         icon: 'h-9 w-9',
         'icon-sm': 'h-12 w-12',
@@ -55,19 +55,19 @@ const variantColors: Record<
   NonNullable<VariantProps<typeof buttonVariants>['variant']>,
   VariantColorsType
 > = {
-  default: { fromBg: '#4a6b3f', toBg: '#d5e798', stroke: '#d5e798' },
+  default: { fromBg: '#0a7a22', toBg: '#3bf63b', stroke: '#3bf63b' },
   destructive: { fromBg: '#dc2626', toBg: '#fca5a5', stroke: '#fca5a5' },
   outline: {
     fromBg: 'transparent',
-    toBg: 'transparent',
-    stroke: 'currentColor',
+    toBg: 'rgba(14, 233, 54, 0.15)',
+    stroke: '#0ee936',
   },
   secondary: { fromBg: '#64748b', toBg: '#cbd5e1', stroke: '#cbd5e1' },
-  success: { fromBg: '#16a34a', toBg: '#86efac', stroke: '#86efac' },
+  success: { fromBg: '#0a7a22', toBg: '#3bf63b', stroke: '#3bf63b' },
   warning: { fromBg: '#eab308', toBg: '#fde047', stroke: '#fde047' },
   info: { fromBg: '#3b82f6', toBg: '#93c5fd', stroke: '#93c5fd' },
-  gradient: { fromBg: '#8b5cf6', toBg: '#ec4899', stroke: '#ec4899' },
-  link: { fromBg: 'transparent', toBg: 'transparent', stroke: 'currentColor' },
+  gradient: { fromBg: '#04e13f', toBg: '#22c55e', stroke: '#22c55e' },
+  link: { fromBg: 'transparent', toBg: 'transparent', stroke: '#0ee936' },
 };
 
 interface WavyTextProps {
@@ -213,8 +213,8 @@ const WavyButton = React.forwardRef<HTMLButtonElement, WavyButtonProps>(
           className={cn(
             'relative z-20 inline-flex items-center',
             isHovered
-              ? 'text-white dark:text-black'
-              : 'text-black dark:text-white',
+              ? 'text-black dark:text-black'
+              : '',
           )}
         >
           {typeof children === 'string' && !disableTextAnimation ? (
