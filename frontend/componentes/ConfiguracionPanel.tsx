@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "@/lib/i18n";
 import styles from "./ConfiguracionPanel.module.css";
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
 }
 
 export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
+  const t = useTranslation();
+
   const [open, setOpen] = useState(false);
   const [emailCuenta, setEmailCuenta] = useState("");
   const [emailNotif, setEmailNotif] = useState("");
@@ -52,13 +55,13 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       });
       if (res.ok) {
         setEmailOriginal(emailNotif);
-        setMsg({ tipo: "ok", texto: "Guardado correctamente" });
+        setMsg({ tipo: "ok", texto: t.components.savedSuccessfully });
         setTimeout(() => setMsg(null), 4000);
       } else {
-        setMsg({ tipo: "error", texto: "Error al guardar" });
+        setMsg({ tipo: "error", texto: t.components.saveError });
       }
     } catch {
-      setMsg({ tipo: "error", texto: "Error de conexion" });
+      setMsg({ tipo: "error", texto: t.components.connError });
     } finally {
       setGuardando(false);
     }
@@ -74,12 +77,12 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setMsg({ tipo: "ok", texto: data.mensaje || "Email de prueba enviado" });
+        setMsg({ tipo: "ok", texto: data.mensaje || t.components.testEmailSent });
       } else {
-        setMsg({ tipo: "error", texto: data.error || "No se pudo enviar el email" });
+        setMsg({ tipo: "error", texto: data.error || t.components.couldNotSendEmail });
       }
     } catch {
-      setMsg({ tipo: "error", texto: "Error de conexion" });
+      setMsg({ tipo: "error", texto: t.components.connError });
     } finally {
       setTesteando(false);
     }
@@ -90,7 +93,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       <button
         className={`${styles.btn} ${open ? styles.btnActive : ""}`}
         onClick={() => setOpen(v => !v)}
-        title="Ajustes"
+        title={t.components.settings}
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3"/>
@@ -103,14 +106,14 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       {open && (
         <div className={styles.panel}>
           <div className={styles.header}>
-            <span className={styles.title}>Ajustes de Notificaciones</span>
+            <span className={styles.title}>{t.components.notifSettings}</span>
             <button className={styles.closeBtn} onClick={() => setOpen(false)}>x</button>
           </div>
 
           <div className={styles.body}>
             {/* Email de la cuenta */}
             <div className={styles.infoRow}>
-              <span className={styles.label}>Tu email de cuenta</span>
+              <span className={styles.label}>{t.components.yourAccountEmail}</span>
               <span className={styles.value}>{emailCuenta || "..."}</span>
             </div>
 
@@ -118,16 +121,13 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
 
             {/* Email destino */}
             <div className={styles.section}>
-              <label className={styles.sectionTitle}>Recibir reportes en uno o varios emails</label>
-              <p className={styles.sectionDesc}>
-                Por defecto los reportes llegan a tu email de cuenta.
-                Si queres que lleguen a otros correos, separalos con coma.
-              </p>
+              <label className={styles.sectionTitle}>{t.components.receiveReportsMultiple}</label>
+              <p className={styles.sectionDesc}>{t.components.reportsDesc}</p>
 
               <input
                 className={styles.input}
                 type="text"
-                placeholder={emailCuenta || "gerencia@empresa.com, operaciones@empresa.com"}
+                placeholder={emailCuenta || t.components.emailPlaceholder}
                 value={emailNotif}
                 onChange={e => setEmailNotif(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && hayCambios) guardar(); }}
@@ -159,14 +159,14 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
                 onClick={testEmail}
                 disabled={testeando}
               >
-                {testeando ? "Enviando..." : "Enviar test"}
+                {testeando ? t.components.sending : t.components.sendTest}
               </button>
               <button
                 className={styles.btnPrimary}
                 onClick={guardar}
                 disabled={guardando || !hayCambios}
               >
-                {guardando ? "Guardando..." : "Guardar"}
+                {guardando ? t.components.saving : t.components.save}
               </button>
             </div>
           </div>

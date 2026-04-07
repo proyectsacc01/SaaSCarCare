@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n";
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -61,6 +62,8 @@ function GoogleButton({ onSuccess, disabled }: { onSuccess: (resp: { access_toke
 }
 
 export default function RegisterPage() {
+  const t = useTranslation();
+
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);

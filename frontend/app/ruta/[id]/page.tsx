@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
@@ -73,6 +74,8 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === '1
 const DASHBOARD_ROUTE = "/dashboard";
 
 export default function RutaTracking() {
+  const t = useTranslation();
+
     const router = useRouter();
     const params = useParams();
     const id = Array.isArray(params.id) ? params.id[0] : params.id;

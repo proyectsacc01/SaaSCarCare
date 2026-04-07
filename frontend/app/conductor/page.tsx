@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -28,6 +29,8 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === '1
     : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app");
 
 export default function ConductorDashboard() {
+  const t = useTranslation();
+
     const [rutas, setRutas] = useState<Ruta[]>([]);
     const [rutasCompletadas, setRutasCompletadas] = useState<Ruta[]>([]);
     const [loading, setLoading] = useState(true);
@@ -702,9 +705,7 @@ export default function ConductorDashboard() {
                                     router.push("/conductor/login");
                                 }}
                                 style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', letterSpacing: '0.3px' }}
-                            >
-                                Cerrar Sesión
-                            </button>
+                            >{t.auth.logout}</button>
                         </div>
                     )}
                 </div>

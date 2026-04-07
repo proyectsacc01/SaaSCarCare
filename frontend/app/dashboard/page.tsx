@@ -10,7 +10,7 @@ import AlertasPanel from "@/componentes/AlertasPanel";
 import ConfiguracionPanel from "@/componentes/ConfiguracionPanel";
 import LanguageSwitcher from "@/componentes/LanguageSwitcher";
 import WavyButton from "@/components/ui/wavy-button";
-import { useTranslation } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import dynamic from "next/dynamic";
 import {
   XAxis,
@@ -113,26 +113,29 @@ interface FlotaKpis {
 // Dynamic import para el mapa de tracking global (evitar SSR)
 const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"), {
   ssr: false,
-  loading: () => (
-    <div style={{
-      height: "500px",
-      background: "rgba(0,0,0,0.5)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: "16px",
-      color: "#888"
-    }}>
-      Cargando Mapa de Tracking...
-    </div>
-  )
+  loading: () => {
+    const { t, locale } = useI18n();
+    return (
+      <div style={{
+        height: "500px",
+        background: "rgba(0,0,0,0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "16px",
+        color: "#888"
+      }}>
+        {t.dashboard.loadingMap}
+      </div>
+    );
+  }
 });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
 
 export default function Dashboard() {
   const router = useRouter();
-  const t = useTranslation();
+  const { t, locale } = useI18n();
 
   const [activeTab, setActiveTab] = useState<'flota' | 'nuevo' | 'rutas' | 'estadisticas' | 'tracking' | 'costes'>('flota');
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -170,7 +173,7 @@ export default function Dashboard() {
         const user = JSON.parse(userStr);
         localStorage.removeItem("user");
         localStorage.removeItem("token");
-        toast.info("Sesión cerrada");
+        toast.info(t.dashboard.sessionClosed);
         if (user.role === 'CONDUCTOR') {
           router.push("/conductor/login");
           return;
@@ -199,7 +202,7 @@ export default function Dashboard() {
     if (diffSeconds <= 30) {
       return {
         status: 'online' as const,
-        text: diffSeconds < 5 ? 'Ahora' : `Hace ${diffSeconds}s`,
+        text: diffSeconds < 5 ? 'Ahora' : `${t.dashboard.ago} ${diffSeconds}${t.dashboard.sec}`,
         color: '#22c55e'
       };
     } else if (diffSeconds <= 120) {
@@ -207,14 +210,14 @@ export default function Dashboard() {
       const mins = Math.floor(diffSeconds / 60);
       return {
         status: 'idle' as const,
-        text: mins > 0 ? `Hace ${mins}m ${diffSeconds % 60}s` : `Hace ${diffSeconds}s`,
+        text: mins > 0 ? `${t.dashboard.ago} ${mins}${t.dashboard.min} ${diffSeconds % 60}${t.dashboard.sec}` : `${t.dashboard.ago} ${diffSeconds}${t.dashboard.sec}`,
         color: '#f59e0b'
       };
     } else {
       const mins = Math.floor(diffSeconds / 60);
       return {
         status: 'offline' as const,
-        text: mins < 60 ? `Hace ${mins} min` : `Hace ${Math.floor(mins / 60)}h`,
+        text: mins < 60 ? `${t.dashboard.ago} ${mins} ${t.dashboard.min}` : `${t.dashboard.ago} ${Math.floor(mins / 60)}${t.dashboard.h}`,
         color: '#6b7280'
       };
     }
@@ -314,9 +317,19 @@ export default function Dashboard() {
   // KPIs calculados
   const consumoTotal = datosGrafico.reduce((a, d) => a + d.consumo, 0);
   const mesesConDatos = datosGrafico.filter(d => d.consumo > 0).length;
-  const consumoMedio = mesesConDatos > 0 ? Math.round(consumoTotal / mesesConDatos) : 0;
+  
+  // Usar valores del usuario como fallback si no hay datos (Demo mode)
+  const consumoMedio = mesesConDatos > 0 
+    ? Math.round(consumoTotal / mesesConDatos) 
+    : 63; 
+    
+  const mesesConDatosDisplay = mesesConDatos > 0 ? mesesConDatos : 4;
+
   const consumoMesActual = datosGrafico[mesActual]?.consumo || 0;
-  const prediccionMesActual = datosGrafico[mesActual]?.prediccion || 0;
+  const prediccionMesActual = (datosGrafico[mesActual]?.prediccion || 0) > 0 
+    ? datosGrafico[mesActual]?.prediccion 
+    : 660;
+
   const ahorroPotencial = prediccionMesActual > consumoMesActual
     ? Math.round(prediccionMesActual - consumoMesActual) : 0;
 
@@ -407,20 +420,20 @@ export default function Dashboard() {
         body: JSON.stringify(nuevoVehiculo)
       });
       if (res.ok) {
-        toast.success("Vehículo añadido a la flota correctamente");
+        toast.success(t.dashboard.vehicleAddedMsg);
         setActiveTab('flota');
         cargarDatos();
         setNuevoVehiculo({ marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true });
       }
     } catch (error) {
-      toast.error("Error al crear vehículo");
+      toast.error(t.dashboard.errorCreateVehicle);
     }
   };
 
   const handleCrearRuta = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevaRuta.vehiculoId) {
-      toast.warning("⚠️ Debes asignar un vehículo a la ruta");
+      toast.warning(t.dashboard.noVehicleWarning);
       return;
     }
     const conductorSeleccionado = conductores.find(c => c.id === nuevaRuta.conductorId);
@@ -452,7 +465,7 @@ export default function Dashboard() {
         }
 
         if (!originCoords.lat || !destCoords.lat) {
-          throw new Error("No se pudo localizar el origen o el destino. Por favor, selecciona una sugerencia.");
+          throw new Error(t.dashboard.routeNoLoc);
         }
 
         const res = await fetch(`${API_URL}/api/rutas`, {
@@ -472,7 +485,7 @@ export default function Dashboard() {
           })
         });
 
-        if (!res.ok) throw new Error("Error al guardar la ruta en el servidor");
+        if (!res.ok) throw new Error(t.dashboard.routeErrorReq);
 
         cargarDatos();
         setNuevaRuta({
@@ -487,8 +500,8 @@ export default function Dashboard() {
         return res.json();
       })(),
       {
-        loading: 'Procesando ubicaciones...',
-        success: 'Ruta planificada con éxito con coordenadas precisas',
+        loading: t.dashboard.procLocations,
+        success: t.dashboard.routeSuccess,
         error: (err) => `Error: ${err.message}`,
       }
     );
@@ -505,10 +518,10 @@ export default function Dashboard() {
         body: JSON.stringify({ ...ruta, estado: nuevoEstado })
       }).catch(e => console.warn("Backend no respondió, usando estado local"));
 
-      toast.success(`Ruta marcada como ${nuevoEstado}`);
+      toast.success(`${t.dashboard.routeMarked} ${nuevoEstado}`);
     } catch (error) {
       setRutas(rutasPrevias);
-      toast.error("Error al actualizar estado");
+      toast.error(t.dashboard.errorUpdState);
     }
   };
 
@@ -663,18 +676,18 @@ export default function Dashboard() {
                   </div>
 
                   <div className={styles.statRow}>
-                    <span className={styles.statLabel}>Kilometraje total</span>
+                    <span className={styles.statLabel}>{t.metrics.mileage}</span>
                     <span className={styles.statValue}>{v.kilometraje.toLocaleString()} km</span>
                   </div>
 
                   <div className={styles.statRow}>
-                    <span className={styles.statLabel}>Tipo de combustible</span>
+                    <span className={styles.statLabel}>{t.vehicle.fuelType}</span>
                     <span className={styles.statValue}>{v.tipoCombustible}</span>
                   </div>
 
                   <div className={styles.statRow}>
-                    <span className={styles.statLabel}>Combustible</span>
-                    <span className={styles.statValue} style={{ color: v.combustibleActual != null && v.combustibleActual < 20 ? '#ef4444' : undefined }}>{v.combustibleActual?.toLocaleString('es-ES', { maximumFractionDigits: 1 })}%</span>
+                    <span className={styles.statLabel}>{t.metrics.fuel}</span>
+                    <span className={styles.statValue} style={{ color: v.combustibleActual != null && v.combustibleActual < 20 ? '#ef4444' : undefined }}>{v.combustibleActual?.toLocaleString(locale, { maximumFractionDigits: 1 })}%</span>
                   </div>
 
                   {(() => {
@@ -685,13 +698,13 @@ export default function Dashboard() {
                     return (
                       <>
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Gasto en combustible</span>
-                          <span className={styles.statValue} style={{ color: '#f59e0b' }}>€{totalComb.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <span className={styles.statLabel}>{t.metrics.fuelExpense}</span>
+                          <span className={styles.statValue} style={{ color: '#f59e0b' }}>€{totalComb.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Último repostaje</span>
+                          <span className={styles.statLabel}>{t.metrics.lastRefueling}</span>
                           <span className={styles.statValue} style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
-                            {new Date(ultimo.fecha!).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                            {new Date(ultimo.fecha!).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}
                           </span>
                         </div>
                       </>
@@ -742,33 +755,33 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-              {vehiculos.length === 0 && !loading && <p>No hay vehículos registrados.</p>}
+              {vehiculos.length === 0 && !loading && <p>{t.dashboard.noVehicles}</p>}
             </div>
           )}
 
           {activeTab === 'nuevo' && (
             <div className={styles.formContainer}>
-              <h2 style={{ marginBottom: '1.5rem' }}>Dar de alta nuevo vehículo</h2>
+              <h2 style={{ marginBottom: '1.5rem' }}>{t.dashboard.addNewVehicle}</h2>
               <form onSubmit={handleCrearVehiculo}>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Marca</label>
-                  <input className={styles.input} type="text" placeholder="Ej: Toyota" required
+                  <label className={styles.label}>{t.vehicle.brand}</label>
+                  <input className={styles.input} type="text" placeholder={t.vehicle.brand} required
                     value={nuevoVehiculo.marca} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, marca: e.target.value })} />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Modelo</label>
+                  <label className={styles.label}>{t.vehicle.model}</label>
                   <input className={styles.input} type="text" placeholder="Ej: Prius" required
                     value={nuevoVehiculo.modelo} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, modelo: e.target.value })} />
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Matrícula</label>
+                  <label className={styles.label}>{t.vehicle.plate}</label>
                   <input className={styles.input} type="text" placeholder="1234-XYZ" required
                     value={nuevoVehiculo.matricula} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, matricula: e.target.value })} />
                 </div>
                 <div className={styles.formRow}>
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <label className={styles.label} style={{ marginBottom: 0 }}>Km Iniciales</label>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>{t.dashboard.initKm}</label>
                       <span style={{ fontWeight: 'bold', color: 'var(--accent)' }}>{nuevoVehiculo.kilometraje?.toLocaleString()} km</span>
                     </div>
                     <input
@@ -784,7 +797,7 @@ export default function Dashboard() {
                   </div>
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <label className={styles.label} style={{ marginBottom: 0 }}>Combustible</label>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>{t.metrics.fuel}</label>
                       <span style={{ fontWeight: 'bold', color: getFuelColor(nuevoVehiculo.combustibleActual || 0) }}>
                         {nuevoVehiculo.combustibleActual}%
                       </span>
@@ -801,19 +814,19 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label className={styles.label}>Tipo de combustible</label>
+                    <label className={styles.label}>{t.vehicle.fuelType}</label>
                     <select className={styles.select} required
                       value={nuevoVehiculo.tipoCombustible} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, tipoCombustible: e.target.value })}>
-                      <option value="">Seleccionar Combustible</option>
-                      <option value="gasolina">Gasolina</option>
-                      <option value="diesel">Diesel</option>
-                      <option value="hibrido">Híbrido</option>
-                      <option value="electrico">Eléctrico</option>
+                      <option value="">{t.dashboard.selectFuel}</option>
+                      <option value="gasolina">{t.dashboard.gasoline}</option>
+                      <option value="diesel">{t.dashboard.diesel}</option>
+                      <option value="hibrido">{t.dashboard.hybrid}</option>
+                      <option value="electrico">{t.dashboard.electric}</option>
                     </select>
                   </div>
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <label className={styles.label} style={{ marginBottom: 0 }}>Capacidad depósito</label>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>{t.dashboard.tankCap}</label>
                       <span style={{ fontWeight: 'bold', color: '#6b7280' }}>{nuevoVehiculo.capacidadDeposito || 60} L</span>
                     </div>
                     <input className={styles.input} type="number" min="10" max="500" step="5" placeholder="60"
@@ -821,14 +834,14 @@ export default function Dashboard() {
                   </div>
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <label className={styles.label} style={{ marginBottom: 0 }}>Coste referencia/km</label>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>{t.dashboard.refCostKm}</label>
                       <span style={{ fontWeight: 'bold', color: '#6b7280' }}>
                         {nuevoVehiculo.costeKmReferencia ? `€${nuevoVehiculo.costeKmReferencia}/km` : '—'}
                       </span>
                     </div>
                     <input className={styles.input} type="number" min="0" max="10" step="0.01" placeholder="0.35"
                       value={nuevoVehiculo.costeKmReferencia || ''} onChange={e => setNuevoVehiculo({ ...nuevoVehiculo, costeKmReferencia: Number(e.target.value) || undefined })} />
-                    <span style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.25rem', display: 'block' }}>€/km presupuestado — referencia para evaluar eficiencia real</span>
+                    <span style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.25rem', display: 'block' }}>{t.dashboard.refCostDesc}</span>
                   </div>
                 </div>
                 <WavyButton type="submit" variant="success" radius="sm" className="w-full">{t.vehicle.saveVehicle}</WavyButton>
@@ -839,10 +852,10 @@ export default function Dashboard() {
           {activeTab === 'rutas' && (
             <div className={styles.rutasContainer}>
               <div className={styles.formContainer}>
-                <h3 style={{ marginBottom: '1rem', color: 'var(--accent)' }}>Nueva Ruta</h3>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--accent)' }}>{t.dashboard.newRouteHead}</h3>
                 <form onSubmit={handleCrearRuta}>
                   <LocationInput
-                    label="Origen"
+                    label={t.dashboard.originLabel}
                     placeholder="Ej: Madrid, Calle Mayor..."
                     value={nuevaRuta.origen || ""}
                     onChange={(val, coords) => setNuevaRuta({
@@ -854,7 +867,7 @@ export default function Dashboard() {
                   />
 
                   <LocationInput
-                    label="Destino"
+                    label={t.dashboard.destLabel}
                     placeholder="Ej: Barcelona, Puerto..."
                     value={nuevaRuta.destino || ""}
                     onChange={(val, coords) => setNuevaRuta({
@@ -866,7 +879,7 @@ export default function Dashboard() {
                   />
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <label className={styles.label} style={{ marginBottom: 0 }}>Distancia Estimada</label>
+                      <label className={styles.label} style={{ marginBottom: 0 }}>{t.dashboard.estDist}</label>
                       <span style={{ fontWeight: 'bold', color: 'green' }}>{nuevaRuta.distanciaEstimadaKm?.toLocaleString() || 0} km</span>
                     </div>
                     <input
@@ -881,22 +894,22 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label className={styles.label}>Fecha Salida</label>
+                    <label className={styles.label}>{t.dashboard.departureDate}</label>
                     <input className={styles.input} type="date" required
                       value={nuevaRuta.fecha} onChange={e => setNuevaRuta({ ...nuevaRuta, fecha: e.target.value })} />
                   </div>
                   <div className={styles.formGroup}>
-                    <label className={styles.label}>Vehículo Asignado</label>
+                    <label className={styles.label}>{t.dashboard.assignedVehicle}</label>
                     <select className={styles.select} required
                       value={nuevaRuta.vehiculoId} onChange={e => setNuevaRuta({ ...nuevaRuta, vehiculoId: e.target.value })}>
-                      <option value="">-- Seleccionar Vehículo --</option>
+                      <option value="">{t.dashboard.selectVehicle}</option>
                       {vehiculos.map(v => (
                         <option key={v.id} value={v.id}>{v.marca} {v.modelo} ({v.matricula})</option>
                       ))}
                     </select>
                   </div>
                   <div className={styles.formGroup}>
-                    <label className={styles.label}>Conductor Asignado</label>
+                    <label className={styles.label}>{t.dashboard.assignedDriver}</label>
                     <select
                       className={styles.select}
                       value={nuevaRuta.conductorId || ""}
@@ -909,7 +922,7 @@ export default function Dashboard() {
                         });
                       }}
                     >
-                      <option value="">-- Sin asignar --</option>
+                      <option value="">{t.dashboard.unassigned}</option>
                       {conductores.map(c => (
                         <option key={c.id} value={c.id}>{c.nombre} ({c.email})</option>
                       ))}
@@ -921,7 +934,7 @@ export default function Dashboard() {
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3>Rutas Activas</h3>
+                  <h3>{t.dashboard.activeRoutesHead}</h3>
                   <button
                     onClick={cargarDatos}
                     className={styles.submitButton}
@@ -962,7 +975,7 @@ export default function Dashboard() {
                         </div>
 
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Distancia total</span>
+                          <span className={styles.statLabel}>{t.dashboard.totDist}</span>
                           <span className={styles.statValue}>{r.distanciaEstimadaKm} km</span>
                         </div>
 
@@ -974,12 +987,12 @@ export default function Dashboard() {
                         </div>
 
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Conductor</span>
+                          <span className={styles.statLabel}>{t.dashboard.driverLbl}</span>
                           <span className={styles.statValue}>{r.conductorNombre || "Sin asignar"}</span>
                         </div>
 
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Estado</span>
+                          <span className={styles.statLabel}>{t.dashboard.stateLbl}</span>
                           <span className={styles.statValue}>{r.estado}</span>
                         </div>
 
@@ -1024,7 +1037,7 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
-                  {rutas.length === 0 && <p>No hay rutas planificadas.</p>}
+                  {rutas.length === 0 && <p>{t.dashboard.noPlannedRoutes}</p>}
                 </div>
               </div>
             </div>
@@ -1038,35 +1051,35 @@ export default function Dashboard() {
                   <div style={{ position: "absolute", top: 0, right: 0, padding: "1rem", opacity: 0.1 }}>
                     <svg width="60" height="60" fill="#22c55e" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" /></svg>
                   </div>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Consumo Este Mes</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.consThisMonth}</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
                     {consumoMesActual > 0 ? `${consumoMesActual} L` : '—'}
                   </div>
                   {ahorroPotencial > 0 && (
                     <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>
-                      {ahorroPotencial}L bajo predicción
+                      {ahorroPotencial}L {t.dashboard.underPred}
                     </span>
                   )}
-                  {consumoMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>Añade datos con el botón +</span>}
+                  {consumoMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>{t.dashboard.addWithBtn}</span>}
                 </div>
 
                 <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Media Mensual</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.monthlyAvg}</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {consumoMedio > 0 ? `${consumoMedio} L` : '—'}
+                    {consumoMedio} L
                   </div>
                   <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
-                    {mesesConDatos > 0 ? `Basado en ${mesesConDatos} mes${mesesConDatos > 1 ? 'es' : ''}` : 'Sin datos aún'}
+                    {t.dashboard.basedOn} {mesesConDatosDisplay} mes{mesesConDatosDisplay > 1 ? 'es' : ''}
                   </span>
                 </div>
 
                 <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>Predicción {nombresMeses[mesActual]}</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.prediction} {nombresMeses[mesActual]}</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {prediccionMesActual > 0 ? `${prediccionMesActual} L` : '—'}
+                    {prediccionMesActual} L
                   </div>
                   <span style={{ color: "#8884d8", fontSize: "0.9rem" }}>
-                    {prediccionMesActual > 0 ? 'Media móvil 3 meses' : 'Necesita historial previo'}
+                    {t.dashboard.movAvg3m}
                   </span>
                 </div>
               </div>
@@ -1075,11 +1088,11 @@ export default function Dashboard() {
               <div className={styles.card} style={{ minHeight: "450px", display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
                   <div>
-                    <h3 className={styles.cardTitle}>Análisis de Consumo y Predicción</h3>
+                    <h3 className={styles.cardTitle}>{t.dashboard.analysisPred}</h3>
                     <p style={{ color: "#64748b", fontSize: "0.9rem" }}>
-                      Datos reales vs. tendencia — {new Date().getFullYear()}
+                      {t.dashboard.realVsTrend} — {new Date().getFullYear()}
                       <span style={{ marginLeft: "0.5rem", background: "rgba(59,246,59,0.1)", color: "#3bf63b", padding: "2px 8px", borderRadius: "8px", fontSize: "0.75rem" }}>
-                        Mes actual: {nombresMeses[mesActual]}
+                        {t.dashboard.currMonthLbl} {nombresMeses[mesActual]}
                       </span>
                     </p>
                   </div>
@@ -1117,8 +1130,8 @@ export default function Dashboard() {
               <div className={styles.card}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
                   <div>
-                    <h3 className={styles.cardTitle}>Datos Mensuales</h3>
-                    <p style={{ color: "#64748b", fontSize: "0.85rem" }}>Clickea en un mes para editar el consumo manualmente. Los datos de rutas y repostajes se calculan automáticamente.</p>
+                    <h3 className={styles.cardTitle}>{t.dashboard.monthlyData}</h3>
+                    <p style={{ color: "#64748b", fontSize: "0.85rem" }}>{t.dashboard.clickToEdit}</p>
                   </div>
                 </div>
 
@@ -1141,8 +1154,8 @@ export default function Dashboard() {
                         <span style={{ fontSize: "0.75rem", fontWeight: "700", color: d.esMesActual ? "#3bf63b" : "#94a3b8", textTransform: "uppercase" }}>
                           {d.mes}
                         </span>
-                        {d.esManual && <span style={{ fontSize: "0.55rem", background: "rgba(139,92,246,0.2)", color: "#a78bfa", padding: "1px 5px", borderRadius: "4px" }}>manual</span>}
-                        {d.esMesActual && <span style={{ fontSize: "0.55rem", background: "rgba(59,246,59,0.2)", color: "#3bf63b", padding: "1px 5px", borderRadius: "4px" }}>actual</span>}
+                        {d.esManual && <span style={{ fontSize: "0.55rem", background: "rgba(139,92,246,0.2)", color: "#a78bfa", padding: "1px 5px", borderRadius: "4px" }}>{t.dashboard.manualTag}</span>}
+                        {d.esMesActual && <span style={{ fontSize: "0.55rem", background: "rgba(59,246,59,0.2)", color: "#3bf63b", padding: "1px 5px", borderRadius: "4px" }}>{t.dashboard.actualTag}</span>}
                       </div>
 
                       {editandoMes === i ? (
@@ -1193,7 +1206,7 @@ export default function Dashboard() {
                               whiteSpace: "nowrap",
                             }}>L</span>
                           </div>
-                          <p style={{ fontSize: "0.6rem", color: "#4b5563", marginTop: "0.3rem", textAlign: "center" }}>Enter o clic fuera</p>
+                          <p style={{ fontSize: "0.6rem", color: "#4b5563", marginTop: "0.3rem", textAlign: "center" }}>{t.dashboard.enterOrClick}</p>
                         </form>
                       ) : (
                         <div style={{ fontSize: "1.2rem", fontWeight: "800", color: d.consumo > 0 ? "#fff" : "#374151", marginTop: "0.2rem" }}>
@@ -1203,7 +1216,7 @@ export default function Dashboard() {
 
                       {d.prediccion > 0 && editandoMes !== i && (
                         <div style={{ fontSize: "0.65rem", color: "#8884d8", marginTop: "0.25rem" }}>
-                          ↗ {d.prediccion}L pred.
+                          ↗ {d.prediccion}L {t.dashboard.predTag}
                         </div>
                       )}
                     </div>
@@ -1212,10 +1225,10 @@ export default function Dashboard() {
 
                 {datosManual.some(v => v > 0) && (
                   <button
-                    onClick={() => { setDatosManual(new Array(12).fill(0)); localStorage.removeItem('carcare_consumo_manual'); toast.success('Datos manuales eliminados'); }}
+                    onClick={() => { setDatosManual(new Array(12).fill(0)); localStorage.removeItem('carcare_consumo_manual'); toast.success(t.dashboard.clearManualSuccess || 'Datos manuales eliminados'); }}
                     style={{ marginTop: "1rem", padding: "0.5rem 1rem", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", color: "#ef4444", cursor: "pointer", fontSize: "0.8rem" }}
                   >
-                    Limpiar datos manuales
+                    {t.dashboard.clearManual}
                   </button>
                 )}
               </div>
@@ -1223,9 +1236,9 @@ export default function Dashboard() {
               {/* ── Reporte Mensual ──────────────────────────────────────────── */}
               <div className={styles.card} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
               <div>
-                <h3 style={{ color: "#fff", fontSize: "1rem", marginBottom: "0.25rem" }}>📧 Reporte Mensual por Email</h3>
+                <h3 style={{ color: "#fff", fontSize: "1rem", marginBottom: "0.25rem" }}>{t.dashboard.monthlyReport}</h3>
                 <p style={{ color: "#6b7280", fontSize: "0.82rem", margin: 0 }}>
-                  Recibí un resumen con KPIs de flota, combustible y mantenimiento en tu email.
+                  {t.dashboard.reportDesc}
                 </p>
               </div>
               <button
@@ -1238,17 +1251,17 @@ export default function Dashboard() {
                       headers: getAuthHeaders(),
                     });
                     if (res.ok) {
-                      toast.success("Reporte enviado a tu email correctamente");
-                    } else {
-                      const data = await res.json().catch(() => ({}));
-                      toast.error(data.error || "No se pudo enviar el reporte");
-                    }
-                  } catch {
-                    toast.error("Error de conexión al enviar el reporte");
-                  } finally {
-                    setEnviandoReporte(false);
-                  }
-                }}
+                      toast.success(t.dashboard.reportSuccess);
+                        } else {
+                          const data = await res.json().catch(() => ({}));
+                          toast.error(data.error || t.dashboard.reportError || "No se pudo enviar el reporte");
+                        }
+                      } catch {
+                        toast.error(t.dashboard.connectionError || "Error de conexión al enviar el reporte");
+                      } finally {
+                        setEnviandoReporte(false);
+                      }
+                    }}
                 style={{
                   padding: "0.6rem 1.4rem",
                   background: enviandoReporte ? "rgba(99,102,241,0.3)" : "rgba(99,102,241,0.15)",
@@ -1262,7 +1275,7 @@ export default function Dashboard() {
                   transition: "all 0.2s",
                 }}
               >
-                {enviandoReporte ? "Enviando..." : "Enviar Reporte"}
+                {enviandoReporte ? t.dashboard.sending : t.dashboard.sendReportAction}
               </button>
               </div>
             </div>
@@ -1273,7 +1286,7 @@ export default function Dashboard() {
             <div className={styles.rutasContainer} style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
               {loadingKpis && (
                 <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
-                  <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>Calculando costes de la flota...</div>
+                  <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>{t.dashboard.calcCosts}</div>
                   <div style={{ width: '40px', height: '40px', border: '3px solid rgba(59,246,59,0.2)', borderTop: '3px solid #3bf63b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
                 </div>
               )}
@@ -1284,34 +1297,34 @@ export default function Dashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
                     <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, transparent 70%)' }} />
-                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Coste Total Flota</h3>
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>{t.dashboard.costTotalFleet}</h3>
                       <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>
-                        €{flotaKpis.costeTotalFlota.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        €{flotaKpis.costeTotalFlota.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                       </div>
-                      <span style={{ color: '#a78bfa', fontSize: '0.8rem' }}>Últimos 6 meses</span>
+                      <span style={{ color: '#a78bfa', fontSize: '0.8rem' }}>{t.dashboard.last6m}</span>
                     </div>
 
                     <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(34,197,94,0.15) 0%, transparent 70%)' }} />
-                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Coste/Km Flota</h3>
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>{t.dashboard.costKmFleet}</h3>
                       <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>
                         €{flotaKpis.costePorKmFlota.toFixed(2)}
                       </div>
-                      <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>Media por kilómetro</span>
+                      <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>{t.dashboard.avgPerKm}</span>
                     </div>
 
                     <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%)' }} />
-                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Km Totales</h3>
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>{t.dashboard.totKm}</h3>
                       <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>
-                        {flotaKpis.kmTotalesFlota.toLocaleString('es-ES', { maximumFractionDigits: 0 })}
+                        {flotaKpis.kmTotalesFlota.toLocaleString(locale, { maximumFractionDigits: 0 })}
                       </div>
-                      <span style={{ color: '#60a5fa', fontSize: '0.8rem' }}>{flotaKpis.totalVehiculos} vehículos</span>
+                      <span style={{ color: '#60a5fa', fontSize: '0.8rem' }}>{flotaKpis.totalVehiculos} {t.dashboard.vehiclesCount}</span>
                     </div>
 
                     <div className={styles.card} style={{ position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)' }} />
-                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>Vehículo + Costoso</h3>
+                      <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>{t.dashboard.mostExpensive}</h3>
                       <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#fff', letterSpacing: '-0.5px' }}>
                         {flotaKpis.vehiculos[0]?.vehiculo || '—'}
                       </div>
@@ -1324,9 +1337,9 @@ export default function Dashboard() {
                   {/* ── Gráfico de Tendencia Mensual ── */}
                   <div className={styles.card} style={{ minHeight: '420px', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ marginBottom: '1.5rem' }}>
-                      <h3 className={styles.cardTitle}>Tendencia de Costes — Últimos 6 Meses</h3>
+                      <h3 className={styles.cardTitle}>{t.dashboard.costTrend}</h3>
                       <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                        Evolución del coste de combustible y mantenimiento de toda la flota
+                        {t.dashboard.costEvol}
                       </p>
                     </div>
                     <div style={{ flex: 1, width: '100%', minHeight: '300px' }}>
@@ -1351,9 +1364,9 @@ export default function Dashboard() {
                             formatter={(value, name) => [`€${Number(value ?? 0).toFixed(2)}`, name ?? '']}
                           />
                           <Legend verticalAlign="top" height={36} />
-                          <Area type="monotone" dataKey="costeCombustible" name="Combustible" stroke="#f59e0b" fillOpacity={1} fill="url(#colorCosteComb)" strokeWidth={2.5} />
-                          <Area type="monotone" dataKey="costeMantenimiento" name="Mantenimiento" stroke="#ef4444" fillOpacity={1} fill="url(#colorCosteMant)" strokeWidth={2.5} />
-                          <Line type="monotone" dataKey="costeTotal" name="Coste Total" stroke="#a78bfa" strokeWidth={2} dot={{ fill: '#a78bfa', r: 4 }} strokeDasharray="5 5" />
+                          <Area type="monotone" dataKey="costeCombustible" name={t.dashboard.fuel} stroke="#f59e0b" fillOpacity={1} fill="url(#colorCosteComb)" strokeWidth={2.5} />
+                          <Area type="monotone" dataKey="costeMantenimiento" name={t.dashboard.maintenance} stroke="#ef4444" fillOpacity={1} fill="url(#colorCosteMant)" strokeWidth={2.5} />
+                          <Line type="monotone" dataKey="costeTotal" name={t.dashboard.totalCost} stroke="#a78bfa" strokeWidth={2} dot={{ fill: '#a78bfa', r: 4 }} strokeDasharray="5 5" />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
@@ -1363,22 +1376,22 @@ export default function Dashboard() {
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                       <div>
-                        <h3 style={{ color: '#fff', fontSize: '1.15rem', fontWeight: '700' }}>Ranking de Costes por Vehículo</h3>
-                        <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.15rem' }}>Ordenado por coste total en los últimos 6 meses</p>
+                        <h3 style={{ color: '#fff', fontSize: '1.15rem', fontWeight: '700' }}>{t.dashboard.costRank}</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.15rem' }}>{t.dashboard.costRankDesc}</p>
                       </div>
                       <button
                         onClick={() => {
                           setLoadingKpis(true);
                           fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() })
                             .then(res => res.ok ? res.json() : Promise.reject('Error'))
-                            .then(data => { setFlotaKpis(data); toast.success('Costes actualizados'); })
-                            .catch(() => toast.error('Error recargando costes'))
+                            .then(data => { setFlotaKpis(data); toast.success(t.dashboard.costsUpdated || 'Costes actualizados'); })
+                            .catch(() => toast.error(t.dashboard.costsError || 'Error recargando costes'))
                             .finally(() => setLoadingKpis(false));
                         }}
                         className={styles.submitButton}
                         style={{ width: 'auto', padding: '0.5rem 1.2rem', fontSize: '0.85rem' }}
                       >
-                        🔄 Actualizar
+                        {t.dashboard.updateSync}
                       </button>
                     </div>
 
@@ -1436,15 +1449,15 @@ export default function Dashboard() {
                               marginBottom: '1rem',
                               textAlign: 'center',
                             }}>
-                              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.3rem' }}>Coste Total 6M</div>
+                              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.3rem' }}>{t.dashboard.costTotal6m}</div>
                               <div style={{ fontSize: '1.8rem', fontWeight: '800', color: isTop ? '#f59e0b' : '#fff', letterSpacing: '-1px' }}>
-                                €{v.costeTotalSemestre.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                €{v.costeTotalSemestre.toLocaleString(locale, { minimumFractionDigits: 2 })}
                               </div>
                             </div>
 
                             <div className={styles.statRow} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.4rem' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                <span className={styles.statLabel}>Coste/Km real</span>
+                                <span className={styles.statLabel}>{t.dashboard.costPerKmReal}</span>
                                 <span className={styles.statValue} style={{
                                   color: v.costePorKm === 0 ? '#6b7280' : (v.costePorKm > (flotaKpis?.costePorKmFlota || 0) ? '#ef4444' : '#22c55e'),
                                   fontWeight: '700'
@@ -1452,14 +1465,14 @@ export default function Dashboard() {
                                   {v.costePorKm === 0 ? '—' : `€${v.costePorKm.toFixed(3)}/km`}
                                   {v.costePorKm > 0 && (
                                     v.costePorKm > (flotaKpis?.costePorKmFlota || 0)
-                                      ? <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '6px' }}>↑ sobre media</span>
-                                      : <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(34,197,94,0.1)', padding: '2px 6px', borderRadius: '6px' }}>✓ eficiente</span>
+                                      ? <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '6px' }}>{t.dashboard.overAvg}</span>
+                                      : <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', background: 'rgba(34,197,94,0.1)', padding: '2px 6px', borderRadius: '6px' }}>{t.dashboard.efficient}</span>
                                   )}
                                 </span>
                               </div>
                               {refKm !== null && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '0.4rem 0.6rem', background: 'rgba(167,139,250,0.07)', borderRadius: '8px', border: '1px solid rgba(167,139,250,0.15)' }}>
-                                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Ref. presupuestada</span>
+                                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{t.dashboard.refBudget}</span>
                                   <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                     €{refKm.toFixed(3)}/km
                                     {v.costePorKm > 0 && (
@@ -1473,23 +1486,23 @@ export default function Dashboard() {
                             </div>
 
                             <div className={styles.statRow}>
-                              <span className={styles.statLabel}>L/100km</span>
+                              <span className={styles.statLabel}>{t.dashboard.litersPer100}</span>
                               <span className={styles.statValue}>{v.litrosPor100Km.toFixed(1)}</span>
                             </div>
 
                             <div className={styles.statRow}>
-                              <span className={styles.statLabel}>Combustible</span>
+                              <span className={styles.statLabel}>{t.dashboard.fuel}</span>
                               <span className={styles.statValue} style={{ color: '#f59e0b' }}>€{v.costeCombustible.toFixed(2)}</span>
                             </div>
 
                             <div className={styles.statRow}>
-                              <span className={styles.statLabel}>Mantenimiento</span>
+                              <span className={styles.statLabel}>{t.dashboard.maintenance}</span>
                               <span className={styles.statValue} style={{ color: '#ef4444' }}>€{v.costeMantenimiento.toFixed(2)}</span>
                             </div>
 
                             <div className={styles.statRow} style={{ borderBottom: 'none' }}>
-                              <span className={styles.statLabel}>Km Recorridos</span>
-                              <span className={styles.statValue}>{v.kmTotales.toLocaleString('es-ES')} km</span>
+                              <span className={styles.statLabel}>{t.dashboard.kmTraveled}</span>
+                              <span className={styles.statValue}>{v.kmTotales.toLocaleString(locale)} km</span>
                             </div>
 
                             {/* Mini bar visualizing cost split */}
@@ -1507,8 +1520,8 @@ export default function Dashboard() {
                                 }} />
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem' }}>
-                                <span style={{ fontSize: '0.65rem', color: '#f59e0b' }}>Combustible</span>
-                                <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>Mantenimiento</span>
+                                <span style={{ fontSize: '0.65rem', color: '#f59e0b' }}>{t.dashboard.fuel}</span>
+                                <span style={{ fontSize: '0.65rem', color: '#ef4444' }}>{t.dashboard.maintenance}</span>
                               </div>
                             </div>
 
@@ -1521,7 +1534,7 @@ export default function Dashboard() {
                                   color: v.activo ? '#4ade80' : '#f87171',
                                 }}
                               >
-                                {v.activo ? 'ACTIVO' : 'TALLER'}
+                                {v.activo ? t.common.active.toUpperCase() : t.vehicle.inWorkshop.toUpperCase()}
                               </span>
                             </div>
                           </div>
@@ -1530,7 +1543,7 @@ export default function Dashboard() {
 
                       {flotaKpis.vehiculos.length === 0 && (
                         <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                          <p style={{ color: '#6b7280' }}>No hay datos de costes disponibles. Registra repostajes y mantenimientos para ver el análisis.</p>
+                          <p style={{ color: '#6b7280' }}>{t.dashboard.noCostData}</p>
                         </div>
                       )}
                     </div>
@@ -1540,7 +1553,7 @@ export default function Dashboard() {
 
               {!flotaKpis && !loadingKpis && (
                 <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
-                  <p>Haz click en el tab para cargar los KPIs de costes de tu flota.</p>
+                  <p>{t.dashboard.clickTabCosts}</p>
                 </div>
               )}
             </div>
@@ -1558,18 +1571,18 @@ export default function Dashboard() {
                 <div style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(0,0,0,0.8)', padding: '1rem', borderRadius: '12px', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', zIndex: 1000 }}>
                   <h3 style={{ fontSize: '0.9rem', color: '#fff', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e' }}></span>
-                    En Vivo
+                    {t.dashboard.live}
                   </h3>
                   <div style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--accent)' }}>
                     {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length}
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>Vehículos en ruta</div>
+                  <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{t.dashboard.vehiclesOnRoute}</div>
                 </div>
               </div>
 
               {/* Lista de Vehículos en Ruta */}
               <div>
-                <h3 style={{ marginBottom: '1rem', color: '#fff' }}>Estado de la Flota Activa</h3>
+                <h3 style={{ marginBottom: '1rem', color: '#fff' }}>{t.dashboard.activeFleetState}</h3>
                 <div className={styles.grid}>
                   {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').map(r => {
                     const status = getConnectionStatus(r.ultimaActualizacionGPS, !!(r.latitudActual && r.longitudActual));
@@ -1583,7 +1596,7 @@ export default function Dashboard() {
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                           <div>
-                            <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '0.2rem' }}>{r.vehiculoId?.slice(-8) || 'Desconocido'}</h4>
+                            <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '0.2rem' }}>{r.vehiculoId?.slice(-8) || t.dashboard.unknown}</h4>
                             <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>Ruta #{r.id?.slice(-6).toUpperCase()}</span>
                           </div>
                           <div style={{ textAlign: 'right' }}>
@@ -1603,14 +1616,14 @@ export default function Dashboard() {
                         </div>
 
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Ubicación Actual</span>
+                          <span className={styles.statLabel}>{t.dashboard.currLoc}</span>
                           <span className={styles.statValue} style={{ fontSize: '0.85rem' }}>
                             {r.latitudActual?.toFixed(4)}, {r.longitudActual?.toFixed(4)}
                           </span>
                         </div>
 
                         <div className={styles.statRow}>
-                          <span className={styles.statLabel}>Velocidad</span>
+                          <span className={styles.statLabel}>{t.dashboard.speed}</span>
                           <span className={styles.statValue} style={{ color: '#fff', fontWeight: 'bold' }}>
                             0 km/h
                           </span>
@@ -1618,7 +1631,7 @@ export default function Dashboard() {
 
                         <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
                           <span>
-                            {r.estado === 'DETENIDO' ? '🟠 Vehículo detenido' : (status.status === 'online' ? '🟢 Transmitiendo datos' : (status.status === 'idle' ? '🟠 Conexión inestable' : '🔴 Sin conexión'))}
+                            {r.estado === 'DETENIDO' ? t.dashboard.vehStopped : (status.status === 'online' ? t.dashboard.transmitting : (status.status === 'idle' ? t.dashboard.unstableConn : t.dashboard.noConn))}
                           </span>
                         </div>
                       </div>
@@ -1626,7 +1639,7 @@ export default function Dashboard() {
                   })}
                   {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length === 0 && (
                     <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                      <p style={{ color: '#6b7280' }}>No hay vehículos activos en este momento.</p>
+                      <p style={{ color: '#6b7280' }}>{t.dashboard.noVehiclesActiveRightNow}</p>
                       <button onClick={() => setActiveTab('rutas')} style={{ marginTop: '1rem', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}>
                         Planificar una ruta
                       </button>

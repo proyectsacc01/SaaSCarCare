@@ -159,47 +159,47 @@ export default function LandingPage() {
   const features = [
     {
       icon: <CarIcon />,
-      title: "Gestión de Flota",
-      description: "Controla todos tus vehículos desde un solo panel. Monitoriza kilometraje, combustible y estado en tiempo real.",
+      title: t.landing.feature1Title,
+      description: t.landing.feature1Desc,
       color: "#22c55e"
     },
     {
       icon: <LocationIcon />,
-      title: "Tracking GPS en Vivo",
-      description: "Rastrea la ubicación exacta de tus conductores en tiempo real con actualizaciones cada 3 segundos.",
+      title: t.landing.feature2Title,
+      description: t.landing.feature2Desc,
       color: "#3bf63b"
     },
     {
       icon: <ChartIcon />,
-      title: "Control de Consumo",
-      description: "Registra cada repostaje con litros, precio y coste. Historial completo por vehículo para analizar el consumo real.",
+      title: t.landing.feature3Title,
+      description: t.landing.feature3Desc,
       color: "#0ee936"
     },
     {
       icon: <RouteIcon />,
-      title: "Planificación de Rutas",
-      description: "Crea y gestiona rutas con geocodificación automática. Visualiza origen, destino y progreso.",
+      title: t.landing.feature4Title,
+      description: t.landing.feature4Desc,
       color: "#04e13f"
     },
     {
       icon: <MessageIcon />,
-      title: "Chat en Tiempo Real",
-      description: "Comunicación directa con los conductores desde la app móvil y el panel web.",
+      title: t.landing.feature5Title,
+      description: t.landing.feature5Desc,
       color: "#25eb7b"
     },
     {
       icon: <LeafIcon />,
-      title: "Mantenimiento Integral",
-      description: "Preventivo y correctivo por vehículo. Taller, repuestos, costes y programación del próximo servicio.",
+      title: t.landing.feature6Title,
+      description: t.landing.feature6Desc,
       color: "#22c55e"
     }
   ];
 
   const stats = [
-    { number: "6", label: "Módulos" },
-    { number: "3s", label: "Refresh GPS" },
-    { number: "∞", label: "Sin límite" },
-    { number: "24/7", label: "Monitorización" }
+    { number: "6", label: t.landing.statModules },
+    { number: "3s", label: t.landing.statRefresh },
+    { number: "∞", label: t.landing.statLimitless },
+    { number: "24/7", label: t.landing.statMonitoring }
   ];
 
   return (
@@ -233,9 +233,7 @@ export default function LandingPage() {
           <button
             className={styles.navCtaMobile}
             onClick={() => router.push('/login')}
-          >
-            Iniciar Sesión
-          </button>
+          >{t.auth.login}</button>
         </div>
       </nav>
 
@@ -243,7 +241,7 @@ export default function LandingPage() {
       <section className={styles.hero}>
         <div className={`${styles.heroContent} ${isVisible ? styles.visible : ''}`}>
           <div className={styles.heroTag}>
-            <span>La revolución en gestión de flotas</span>
+            <span>{t.landing.heroTag}</span>
           </div>
 
           <h1 className={styles.heroTitle}>
@@ -294,10 +292,10 @@ export default function LandingPage() {
             {/* Main map card - large */}
             <div className={`${styles.dashCard} ${styles.dashCardMap} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
               <div className={styles.dashCardHead}>
-                <span className={styles.dashCardLabel}>Mapa en vivo</span>
+                <span className={styles.dashCardLabel}>{t.landing.liveMap}</span>
                 <div className={styles.dashLiveBadge}>
                   <span className={styles.liveIndicator}></span>
-                  <span>3 vehiculos activos</span>
+                  <span>{t.landing.activeVehiclesCount}</span>
                 </div>
               </div>
               <div className={styles.dashMapBody}>
@@ -331,7 +329,7 @@ export default function LandingPage() {
                 </div>
                 <div className={styles.dashStatData}>
                   <span className={styles.dashStatNum}>24</span>
-                  <span className={styles.dashStatLabel}>Vehiculos</span>
+                  <span className={styles.dashStatLabel}>{t.landing.vehicles}</span>
                 </div>
               </div>
               <div className={`${styles.dashCard} ${styles.dashCardStat} ${styles.scrollReveal}`} style={{ '--delay': '0.25s' } as React.CSSProperties}>
@@ -340,7 +338,7 @@ export default function LandingPage() {
                 </div>
                 <div className={styles.dashStatData}>
                   <span className={styles.dashStatNum}>18</span>
-                  <span className={styles.dashStatLabel}>En ruta</span>
+                  <span className={styles.dashStatLabel}>{t.landing.onRoute}</span>
                 </div>
               </div>
               <div className={`${styles.dashCard} ${styles.dashCardStat} ${styles.scrollReveal}`} style={{ '--delay': '0.35s' } as React.CSSProperties}>
@@ -349,7 +347,7 @@ export default function LandingPage() {
                 </div>
                 <div className={styles.dashStatData}>
                   <span className={styles.dashStatNum}>98%</span>
-                  <span className={styles.dashStatLabel}>Eficiencia</span>
+                  <span className={styles.dashStatLabel}>{t.landing.efficiency}</span>
                 </div>
               </div>
             </div>
@@ -357,35 +355,35 @@ export default function LandingPage() {
             {/* Bottom row - activity + chart */}
             <div className={styles.dashBottomRow}>
               <div className={`${styles.dashCard} ${styles.dashCardActivity} ${styles.scrollReveal}`} style={{ '--delay': '0.45s' } as React.CSSProperties}>
-                <span className={styles.dashCardLabel}>Actividad reciente</span>
+                <span className={styles.dashCardLabel}>{t.landing.recentActivity}</span>
                 <div className={styles.dashActivityList}>
                   <div className={styles.dashActivityItem}>
                     <span className={styles.dashActivityDot} style={{ background: '#3bf63b' }}></span>
-                    <span className={styles.dashActivityTxt}>Vehiculo #07 en ruta</span>
-                    <span className={styles.dashActivityTime}>hace 2m</span>
+                    <span className={styles.dashActivityTxt}>{t.landing.activity1}</span>
+                    <span className={styles.dashActivityTime}>{t.landing.activity1Time}</span>
                   </div>
                   <div className={styles.dashActivityItem}>
                     <span className={styles.dashActivityDot} style={{ background: '#eab308' }}></span>
-                    <span className={styles.dashActivityTxt}>Mantenimiento #12</span>
-                    <span className={styles.dashActivityTime}>hace 15m</span>
+                    <span className={styles.dashActivityTxt}>{t.landing.activity2}</span>
+                    <span className={styles.dashActivityTime}>{t.landing.activity2Time}</span>
                   </div>
                   <div className={styles.dashActivityItem}>
                     <span className={styles.dashActivityDot} style={{ background: '#3bf63b' }}></span>
-                    <span className={styles.dashActivityTxt}>Ruta completada #19</span>
-                    <span className={styles.dashActivityTime}>hace 1h</span>
+                    <span className={styles.dashActivityTxt}>{t.landing.activity3}</span>
+                    <span className={styles.dashActivityTime}>{t.landing.activity3Time}</span>
                   </div>
                 </div>
               </div>
               <div className={`${styles.dashCard} ${styles.dashCardChart} ${styles.scrollReveal}`} style={{ '--delay': '0.55s' } as React.CSSProperties}>
-                <span className={styles.dashCardLabel}>Consumo semanal</span>
+                <span className={styles.dashCardLabel}>{t.landing.weeklyConsumption}</span>
                 <div className={styles.dashChartBars}>
-                  <div className={styles.dashBar} style={{ '--bar-h': '45%' } as React.CSSProperties}><span>L</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '70%' } as React.CSSProperties}><span>M</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '55%' } as React.CSSProperties}><span>X</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '85%' } as React.CSSProperties}><span>J</span></div>
-                  <div className={`${styles.dashBar} ${styles.dashBarActive}`} style={{ '--bar-h': '65%' } as React.CSSProperties}><span>V</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '30%' } as React.CSSProperties}><span>S</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '20%' } as React.CSSProperties}><span>D</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '45%' } as React.CSSProperties}><span>{t.landing.dayL}</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '70%' } as React.CSSProperties}><span>{t.landing.dayM}</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '55%' } as React.CSSProperties}><span>{t.landing.dayX}</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '85%' } as React.CSSProperties}><span>{t.landing.dayJ}</span></div>
+                  <div className={`${styles.dashBar} ${styles.dashBarActive}`} style={{ '--bar-h': '65%' } as React.CSSProperties}><span>{t.landing.dayV}</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '30%' } as React.CSSProperties}><span>{t.landing.dayS}</span></div>
+                  <div className={styles.dashBar} style={{ '--bar-h': '20%' } as React.CSSProperties}><span>{t.landing.dayD}</span></div>
                 </div>
               </div>
             </div>
@@ -397,12 +395,12 @@ export default function LandingPage() {
       {/* Features Section */}
       <section id="features" className={styles.features}>
         <div className={styles.sectionHeader}>
-          <span className={styles.sectionTag}>Características</span>
+          <span className={styles.sectionTag}>{t.landing.featuresTag}</span>
           <h2 className={styles.sectionTitle}>
-            Todo lo que necesitas para tu flota
+            {t.landing.featuresTitle}
           </h2>
           <p className={styles.sectionSubtitle}>
-            Herramientas potentes diseñadas para optimizar cada aspecto de tu operación
+            {t.landing.featuresSubtitle}
           </p>
         </div>
 
@@ -427,16 +425,16 @@ export default function LandingPage() {
       <section className={styles.metricsSection}>
         <div className={styles.metricsInner}>
           <div className={styles.sectionHeader}>
-            <span className={styles.sectionTag}>Módulos integrados</span>
-            <h2 className={styles.sectionTitle}>Todo lo que tu flota necesita</h2>
-            <p className={styles.sectionSubtitle}>Cada módulo resuelve un problema específico de la gestión de flotas. Una sola plataforma, control total.</p>
+            <span className={styles.sectionTag}>{t.landing.modulesTag}</span>
+            <h2 className={styles.sectionTitle}>{t.landing.modulesTitle}</h2>
+            <p className={styles.sectionSubtitle}>{t.landing.modulesSubtitle}</p>
           </div>
           <div className={styles.metricsGrid}>
             {[
-              { icon: <CarIcon />, number: '6', title: 'Módulos integrados', desc: 'Flota, rutas GPS, conductores, mantenimiento, combustible y mensajería en una sola plataforma.' },
-              { icon: <LocationIcon />, number: '3s', title: 'Refresh GPS', desc: 'Posición calculada con fórmula Haversine. Velocidad, distancia restante y detección de desvíos (+20%).' },
-              { icon: <RouteIcon />, number: '2', title: 'Tipos de mantenimiento', desc: 'Preventivo con programación del próximo y correctivo. Registra taller, repuestos y costes.' },
-              { icon: <ChartIcon />, number: 'L/km', title: 'Control de consumo', desc: 'Historial de repostajes con litros, precio/litro, coste total y kilometraje del vehículo.' },
+              { icon: <CarIcon />, number: '6', title: t.landing.mod1Title || 'Módulos integrados', desc: t.landing.mod1Desc },
+              { icon: <LocationIcon />, number: '3s', title: t.landing.mod2Title || 'Refresh GPS', desc: t.landing.mod2Desc },
+              { icon: <RouteIcon />, number: '2', title: t.landing.mod3Title || 'Tipos de mantenimiento', desc: t.landing.mod3Desc },
+              { icon: <ChartIcon />, number: 'L/km', title: t.landing.mod4Title || 'Control de consumo', desc: t.landing.mod4Desc },
             ].map((m, i) => (
               <div key={i} className={`${styles.metricCard} ${styles.scrollReveal}`} style={{ '--delay': `${i * 0.12}s` } as React.CSSProperties}>
                 <div className={styles.metricIconWrap}>{m.icon}</div>
@@ -449,14 +447,14 @@ export default function LandingPage() {
 
           <div className={styles.testimonialRow}>
             <div className={`${styles.useCaseCard} ${styles.scrollReveal}`} style={{ '--delay': '0.1s' } as React.CSSProperties}>
-              <div className={styles.useCaseTitle}>Panel Web — Empresa</div>
+              <div className={styles.useCaseTitle}>{t.landing.useCaseWeb}</div>
               <div className={styles.useCaseList}>
                 {[
-                  { title: 'Dashboard completo', desc: 'Resumen visual de toda tu flota: vehículos activos, rutas en curso, mantenimientos pendientes.' },
-                  { title: 'Mapa global en vivo', desc: 'Todos los vehículos en un mapa con posición GPS, velocidad y estado de cada ruta.' },
-                  { title: 'Gestión de rutas', desc: 'Crea rutas con origen y destino, asigna vehículo y monitoriza el progreso en tiempo real.' },
-                  { title: 'Historial de mantenimientos', desc: 'Preventivos y correctivos por vehículo, con taller, repuestos y coste detallado.' },
-                  { title: 'Chat por ruta', desc: 'Comunicación directa con el conductor asociada a cada ruta específica.' },
+                  { title: t.landing.ucw1Title, desc: t.landing.ucw1Desc },
+                  { title: t.landing.ucw2Title, desc: t.landing.ucw2Desc },
+                  { title: t.landing.ucw3Title, desc: t.landing.ucw3Desc },
+                  { title: t.landing.ucw4Title, desc: t.landing.ucw4Desc },
+                  { title: t.landing.ucw5Title, desc: t.landing.ucw5Desc },
                 ].map((uc, i) => (
                   <div key={i} className={styles.useCaseItem}>
                     <div className={styles.useCaseDot} />
@@ -470,14 +468,14 @@ export default function LandingPage() {
             </div>
 
             <div className={`${styles.useCaseCard} ${styles.scrollReveal}`} style={{ '--delay': '0.2s' } as React.CSSProperties}>
-              <div className={styles.useCaseTitle}>App Android — Conductor</div>
+              <div className={styles.useCaseTitle}>{t.landing.useCaseApp}</div>
               <div className={styles.useCaseList}>
                 {[
-                  { title: 'Recibir rutas asignadas', desc: 'El conductor ve la ruta con origen, destino y distancia estimada directamente en la app.' },
-                  { title: 'GPS automático', desc: 'La app envía coordenadas al servidor cada pocos segundos sin intervención del conductor.' },
-                  { title: 'Progreso en tiempo real', desc: 'Barra de progreso con distancia restante, velocidad actual y tiempo estimado de llegada.' },
-                  { title: 'Detección de desvíos', desc: 'El sistema avisa si el vehículo se desvía más del 20% de la ruta directa planificada.' },
-                  { title: 'Mensajería con la central', desc: 'Chat en tiempo real vinculado a la ruta activa para coordinar con la empresa.' },
+                  { title: t.landing.uca1Title, desc: t.landing.uca1Desc },
+                  { title: t.landing.uca2Title, desc: t.landing.uca2Desc },
+                  { title: t.landing.uca3Title, desc: t.landing.uca3Desc },
+                  { title: t.landing.uca4Title, desc: t.landing.uca4Desc },
+                  { title: t.landing.uca5Title, desc: t.landing.uca5Desc },
                 ].map((uc, i) => (
                   <div key={i} className={styles.useCaseItem}>
                     <div className={styles.useCaseDot} />
@@ -496,9 +494,9 @@ export default function LandingPage() {
       {/* How It Works Section */}
       <section id="how-it-works" className={styles.howItWorks}>
         <div className={styles.sectionHeader}>
-          <span className={styles.sectionTag}>Cómo Funciona</span>
+          <span className={styles.sectionTag}>{t.landing.hiwTag}</span>
           <h2 className={styles.sectionTitle}>
-            Tres pasos para comenzar
+            {t.landing.hiwTitle}
           </h2>
         </div>
 
@@ -506,10 +504,10 @@ export default function LandingPage() {
           <div className={`${styles.step} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
             <div className={styles.stepNumber}>01</div>
             <div className={styles.stepContent}>
-              <h3>Registra tu Flota</h3>
-              <p>Añade tus vehículos con matrícula, modelo, kilometraje y tipo de combustible. Importación masiva disponible.</p>
+              <h3>{t.landing.hiw1Title}</h3>
+              <p>{t.landing.hiw1Desc}</p>
               <div className={styles.stepOutcome}>
-                <CheckIcon /> Panel listo en menos de 15 minutos
+                <CheckIcon /> {t.landing.hiw1Out}
               </div>
             </div>
             <div className={styles.stepIcon}><CarIcon /></div>
@@ -523,10 +521,10 @@ export default function LandingPage() {
           <div className={`${styles.step} ${styles.scrollReveal}`} style={{ '--delay': '0.1s' } as React.CSSProperties}>
             <div className={styles.stepNumber}>02</div>
             <div className={styles.stepContent}>
-              <h3>Descarga la App</h3>
-              <p>Tus conductores instalan la app Android. Reciben rutas asignadas, envían GPS cada 3 segundos y chatean contigo.</p>
+              <h3>{t.landing.hiw2Title}</h3>
+              <p>{t.landing.hiw2Desc}</p>
               <div className={styles.stepOutcome}>
-                <CheckIcon /> Conductores conectados al instante
+                <CheckIcon /> {t.landing.hiw2Out}
               </div>
             </div>
             <div className={styles.stepIcon}><SmartphoneIcon /></div>
@@ -540,10 +538,10 @@ export default function LandingPage() {
           <div className={`${styles.step} ${styles.scrollReveal}`} style={{ '--delay': '0.2s' } as React.CSSProperties}>
             <div className={styles.stepNumber}>03</div>
             <div className={styles.stepContent}>
-              <h3>Controla Todo</h3>
-              <p>Monitoriza rutas en tiempo real, analiza consumos, gestiona mantenimientos y optimiza tu operación completa.</p>
+              <h3>{t.landing.hiw3Title}</h3>
+              <p>{t.landing.hiw3Desc}</p>
               <div className={styles.stepOutcome}>
-                <CheckIcon /> -30% costes en los primeros 6 meses
+                <CheckIcon /> {t.landing.hiw3Out}
               </div>
             </div>
             <div className={styles.stepIcon}><ChartIcon /></div>
@@ -555,32 +553,31 @@ export default function LandingPage() {
       <section id="download" className={styles.download}>
         <div className={styles.downloadContent}>
           <div className={styles.downloadInfo}>
-            <span className={styles.sectionTag}>Disponible ahora</span>
+            <span className={styles.sectionTag}>{t.landing.dlTag}</span>
             <h2 className={styles.downloadTitle}>
-              Descarga la app para{" "}
+              {t.landing.dlTitlePrefix}{" "}
               <span className={styles.gradientText}>Android</span>
             </h2>
             <p className={styles.downloadDesc}>
-              La aplicación para conductores permite recibir rutas asignadas,
-              enviar ubicación GPS en tiempo real y comunicarse con el panel central.
+              {t.landing.dlDesc}
             </p>
 
             <div className={styles.appFeatures}>
               <div className={styles.appFeature}>
                 <span className={styles.checkIcon}><CheckIcon /></span>
-                <span>GPS en tiempo real</span>
+                <span>{t.landing.dlFeat1}</span>
               </div>
               <div className={styles.appFeature}>
                 <span className={styles.checkIcon}><CheckIcon /></span>
-                <span>Notificaciones de rutas</span>
+                <span>{t.landing.dlFeat2}</span>
               </div>
               <div className={styles.appFeature}>
                 <span className={styles.checkIcon}><CheckIcon /></span>
-                <span>Chat integrado</span>
+                <span>{t.landing.dlFeat3}</span>
               </div>
               <div className={styles.appFeature}>
                 <span className={styles.checkIcon}><CheckIcon /></span>
-                <span>Modo offline</span>
+                <span>{t.landing.dlFeat4}</span>
               </div>
             </div>
 
@@ -589,14 +586,14 @@ export default function LandingPage() {
                 <div className={styles.downloadBtnContent}>
                   <span className={styles.downloadBtnIcon}><AndroidIcon /></span>
                   <div className={styles.downloadBtnText}>
-                    <span className={styles.downloadBtnLabel}>Descargar para</span>
+                    <span className={styles.downloadBtnLabel}>{t.landing.dlBtnSubtitle}</span>
                     <span className={styles.downloadBtnPlatform}>Android</span>
                   </div>
                 </div>
               </button>
               <div className={styles.downloadNote}>
                 <PackageIcon />
-                <span>APK disponible para descarga directa</span>
+                <span>{t.landing.dlNote}</span>
               </div>
             </div>
           </div>
@@ -622,12 +619,12 @@ export default function LandingPage() {
                       <span className={styles.appLogo}><CarIcon /></span>
                       <div className={styles.appHeaderText}>
                         <span className={styles.appHeaderTitle}>CarCare Driver</span>
-                        <span className={styles.appHeaderSub}>Conductor activo</span>
+                        <span className={styles.appHeaderSub}>{t.landing.driverActive}</span>
                       </div>
                     </div>
                     <div className={styles.appHeaderStatus}>
                       <span className={styles.liveIndicator}></span>
-                      <span>Online</span>
+                      <span>{t.landing.statusOnline}</span>
                     </div>
                   </div>
 
@@ -640,24 +637,24 @@ export default function LandingPage() {
                     </div>
                     <div className={styles.routeDetails}>
                       <div className={styles.routePoint}>
-                        <span className={styles.routeCity}>Madrid</span>
-                        <span className={styles.routeTime}>06:30 - Salida</span>
+                        <span className={styles.routeCity}>{t.landing.routeCityOrig}</span>
+                        <span className={styles.routeTime}>{t.landing.routeTimeOrig}</span>
                       </div>
                       <div className={styles.routePoint}>
-                        <span className={styles.routeCity}>Barcelona</span>
-                        <span className={styles.routeTime}>12:00 - Llegada est.</span>
+                        <span className={styles.routeCity}>{t.landing.routeCityDest}</span>
+                        <span className={styles.routeTime}>{t.landing.routeTimeDest}</span>
                       </div>
                     </div>
                     <div className={styles.routeBadge}>
                       <span className={styles.liveIndicator}></span>
-                      En curso
+                      {t.landing.statusInProgress}
                     </div>
                   </div>
 
                   {/* Progress bar */}
                   <div className={`${styles.appProgress} ${styles.scrollReveal}`} style={{ '--delay': '0.4s' } as React.CSSProperties}>
                     <div className={styles.progressHeader}>
-                      <span className={styles.progressLabel}>Progreso de ruta</span>
+                      <span className={styles.progressLabel}>{t.landing.routeProgress}</span>
                       <span className={styles.progressPct}>38%</span>
                     </div>
                     <div className={styles.progressTrack}>
@@ -689,8 +686,8 @@ export default function LandingPage() {
                     <div className={styles.mapVehicle}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="#3bf63b"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" /></svg>
                     </div>
-                    <span className={styles.appMapLabel} style={{ bottom: '8px', left: '12px' }}>Madrid</span>
-                    <span className={styles.appMapLabel} style={{ top: '6px', right: '12px' }}>BCN</span>
+                    <span className={styles.appMapLabel} style={{ bottom: '8px', left: '12px' }}>{t.landing.routeCityOrig}</span>
+                    <span className={styles.appMapLabel} style={{ top: '6px', right: '12px' }}>{t.landing.routeCityDest === 'Barcelona' ? 'BCN' : (t.landing.routeCityDest === 'Porto' ? 'OPO' : 'LYS')}</span>
                   </div>
 
                   {/* Stats row */}
@@ -701,14 +698,14 @@ export default function LandingPage() {
                       </span>
                       <span className={styles.appStatValue}>623</span>
                       <span className={styles.appStatUnit}>km</span>
-                      <span className={styles.appStatLabel}>restantes</span>
+                      <span className={styles.appStatLabel}>{t.landing.statRemaining}</span>
                     </div>
                     <div className={styles.appStat}>
                       <span className={styles.appStatIcon}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                       </span>
                       <span className={styles.appStatValue}>5h 30m</span>
-                      <span className={styles.appStatLabel}>tiempo est.</span>
+                      <span className={styles.appStatLabel}>{t.landing.statEstTime}</span>
                     </div>
                     <div className={styles.appStat}>
                       <span className={styles.appStatIcon}>
@@ -716,7 +713,7 @@ export default function LandingPage() {
                       </span>
                       <span className={styles.appStatValue}>82</span>
                       <span className={styles.appStatUnit}>km/h</span>
-                      <span className={styles.appStatLabel}>velocidad</span>
+                      <span className={styles.appStatLabel}>{t.landing.statSpeed}</span>
                     </div>
                   </div>
 
@@ -735,18 +732,18 @@ export default function LandingPage() {
             {[
               {
                 icon: <CarIcon />,
-                title: 'Multi-empresa',
-                desc: 'Cada empresa gestiona su propia flota con datos completamente aislados. Vehículos, conductores y rutas independientes.',
+                title: t.landing.cta1Title,
+                desc: t.landing.cta1Desc,
               },
               {
                 icon: <LocationIcon />,
-                title: 'GPS sin hardware extra',
-                desc: 'La app Android envía coordenadas automáticamente. Sin dispositivos GPS externos ni instalaciones complejas.',
+                title: t.landing.cta2Title,
+                desc: t.landing.cta2Desc,
               },
               {
                 icon: <RouteIcon />,
-                title: 'Detección de desvíos',
-                desc: 'El sistema calcula automáticamente si un vehículo se desvía más del 20% de la ruta directa planificada.',
+                title: t.landing.cta3Title,
+                desc: t.landing.cta3Desc,
               },
             ].map((b, i) => (
               <div key={i} className={`${styles.ctaBenefitCard} ${styles.scrollReveal}`} style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
@@ -761,11 +758,10 @@ export default function LandingPage() {
 
           <div className={styles.ctaContent}>
             <h2 className={styles.ctaTitle}>
-              Empieza a gestionar tu flota hoy
+              {t.landing.startManaging}
             </h2>
             <p className={styles.ctaSubtitle}>
-              Panel web para la empresa, app Android para los conductores.
-              Todo conectado en tiempo real, desde el primer momento.
+              {t.landing.startManagingDesc}
             </p>
             <WavyButton
               variant="success"
@@ -778,13 +774,13 @@ export default function LandingPage() {
             </WavyButton>
             <div className={styles.ctaTrustLine}>
               <span className={styles.ctaTrustItem}>
-                <CheckIcon /> Registro en minutos
+                <CheckIcon /> {t.landing.registrationMinutes}
               </span>
               <span className={styles.ctaTrustItem}>
-                <CheckIcon /> Datos aislados por empresa
+                <CheckIcon /> {t.landing.isolatedData}
               </span>
               <span className={styles.ctaTrustItem}>
-                <CheckIcon /> Multiplataforma web + Android
+                <CheckIcon /> {t.landing.multiPlatform}
               </span>
             </div>
           </div>
@@ -800,32 +796,32 @@ export default function LandingPage() {
               <span className={styles.logoText}>./CarCare Tracker</span>
             </div>
             <p className={styles.footerDesc}>
-              Gestión de flotas inteligente para empresas modernas.
+              {t.landing.footerDesc}
             </p>
           </div>
           <div className={styles.footerLinks}>
             <div className={styles.footerColumn}>
-              <h4>Producto</h4>
-              <a href="#features">Características</a>
-              <a href="#download">Descargar App</a>
-              <a href="#how-it-works">Cómo Funciona</a>
+              <h4>{t.landing.footerProduct}</h4>
+              <a href="#features">{t.landing.featuresTag}</a>
+              <a href="#download">{t.landing.footerDownloadApp}</a>
+              <a href="#how-it-works">{t.landing.hiwTag}</a>
             </div>
             <div className={styles.footerColumn}>
-              <h4>Empresa</h4>
-              <a href="#">Sobre Nosotros</a>
-              <a href="#">Contacto</a>
-              <a href="#">Blog</a>
+              <h4>{t.landing.footerCompany}</h4>
+              <a href="#">{t.landing.footerAbout}</a>
+              <a href="#">{t.landing.footerContact}</a>
+              <a href="#">{t.landing.footerBlog}</a>
             </div>
             <div className={styles.footerColumn}>
-              <h4>Legal</h4>
-              <a href="#">Privacidad</a>
-              <a href="#">Términos</a>
-              <a href="#">Cookies</a>
+              <h4>{t.landing.footerLegal}</h4>
+              <a href="#">{t.landing.footerPrivacy}</a>
+              <a href="#">{t.landing.footerTerms}</a>
+              <a href="#">{t.landing.footerCookies}</a>
             </div>
           </div>
         </div>
         <div className={styles.footerBottom}>
-          <span>© 2026 CarCare Tracker. Todos los derechos reservados.</span>
+          <span>© 2026 CarCare Tracker. {t.landing.footerRights}</span>
         </div>
       </footer>
     </main>

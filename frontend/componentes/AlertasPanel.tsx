@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "@/lib/i18n";
 import styles from "./AlertasPanel.module.css";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -40,12 +42,35 @@ const BG: Record<string, string> = {
   INFO:     "rgba(59,130,246,0.12)",
 };
 
-function tiempoAtras(timestamp: string): string {
+function tiempoAtras(timestamp: string, t: any): string {
   const diff = Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000);
-  if (diff < 60)   return "Hace un momento";
-  if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `Hace ${Math.floor(diff / 3600)}h`;
-  return `Hace ${Math.floor(diff / 86400)}d`;
+  if (diff < 60)   return t.components.justNow;
+  if (diff < 3600) return t.components.agoMin.replace("{min}", Math.floor(diff / 60).toString());
+  if (diff < 86400) return t.components.agoH.replace("{h}", Math.floor(diff / 3600).toString());
+  return t.components.agoD.replace("{d}", Math.floor(diff / 86400).toString());
+}
+
+function traducirAlerta(alerta: Alerta, t: any): { titulo: string; descripcion: string } {
+  const key = alerta.tipo as string;
+  const titleKey = `${key}_title`;
+  const descKey  = `${key}_desc`;
+  const a = t.alerts as Record<string, string>;
+
+  const titulo = a[titleKey]
+    ? (alerta.vehiculoInfo
+        ? `${a[titleKey]} — ${alerta.vehiculoInfo}`
+        : a[titleKey])
+    : alerta.titulo;
+
+  let descripcion = a[descKey] ?? alerta.descripcion;
+  // Reemplazar {tiempo} con la descripción original del backend si tiene el patrón de tiempo
+  if (descripcion.includes("{tiempo}")) {
+    const match = alerta.descripcion.match(/\d+[dhm]\s*\d*[dhm]?/);
+    const tiempo = match ? match[0] : alerta.descripcion.replace(/^\w+\s+.*?(\d+.*)$/, "$1");
+    descripcion = descripcion.replace("{tiempo}", tiempo);
+  }
+
+  return { titulo, descripcion };
 }
 
 function formatearDuracionDesdeMinutos(minutosTotales: number): string {
@@ -172,6 +197,8 @@ function getIcono(tipo: string) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Props) {
+  const t = useTranslation();
+
   const [open, setOpen] = useState(false);
   const [alertas, setAlertas] = useState<Alerta[]>([]);
 
@@ -241,7 +268,7 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
       <button
         className={`${styles.bellBtn} ${noLeidas > 0 ? styles.hasAlertas : ""}`}
         onClick={() => setOpen(v => !v)}
-        title="Centro de alertas"
+        title={t.components.alertsCenter}
       >
         <IconBell hasAlertas={noLeidas > 0} />
         {noLeidas > 0 && (
@@ -249,23 +276,22 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
         )}
       </button>
 
-      {/* Overlay para cerrar al hacer click fuera */}
-      {open && <div className={styles.overlay} onClick={() => setOpen(false)} />}
-
-      {/* Panel dropdown */}
-      {open && (
-        <div className={styles.panel}>
+      {/* Overlay + Panel via Portal para escapar del stacking context de BackgroundMeteors */}
+      {open && createPortal(
+        <>
+          <div className={styles.overlay} onClick={() => setOpen(false)} />
+          <div className={styles.panel}>
           {/* Header */}
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>
-              🔔 Alertas
+              {t.components.alertsTitle}
               <span className={`${styles.panelCount} ${noLeidas === 0 ? styles.panelCountOk : ""}`}>
-                {noLeidas === 0 ? "Todo OK" : `${noLeidas} sin leer`}
+                {noLeidas === 0 ? t.components.allOk : `${t.components.unreadAlerts.replace('{count}', noLeidas.toString())}`}
               </span>
             </span>
             {noLeidas > 0 && (
               <button className={styles.marcarTodasBtn} onClick={marcarTodas}>
-                ✓ Marcar todas
+                {t.components.markAllAsRead}
               </button>
             )}
           </div>
@@ -278,8 +304,8 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                <p className={styles.emptyText}>Todo en orden</p>
-                <p className={styles.emptySubtext}>No hay alertas activas en tu flota</p>
+                <p className={styles.emptyText}>{t.components.allInOrder}</p>
+                <p className={styles.emptySubtext}>{t.components.noActiveAlerts}</p>
               </div>
             ) : (
               activas.map(alerta => {
@@ -300,20 +326,25 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
                     </div>
 
                     {/* Contenido */}
-                    <div className={styles.itemBody}>
-                      <div className={styles.itemTitulo}>{alerta.titulo}</div>
-                      <div className={styles.itemDesc}>{alerta.descripcion}</div>
-                      <div className={styles.itemMeta}>
-                        <span className={styles.itemTiempo}>{tiempoAtras(alerta.timestamp)}</span>
-                      </div>
-                    </div>
+                    {(() => {
+                      const { titulo, descripcion } = traducirAlerta(alerta, t);
+                      return (
+                        <div className={styles.itemBody}>
+                          <div className={styles.itemTitulo}>{titulo}</div>
+                          <div className={styles.itemDesc}>{descripcion}</div>
+                          <div className={styles.itemMeta}>
+                            <span className={styles.itemTiempo}>{tiempoAtras(alerta.timestamp, t)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Dismiss */}
                     {!alerta.leida && (
                       <button
                         className={styles.dismissBtn}
                         onClick={e => marcarLeida(e, alerta.id)}
-                        title="Marcar como leída"
+                        title={t.components.markAsRead}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polyline points="20 6 9 17 4 12"/>
@@ -325,7 +356,9 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
               })
             )}
           </div>
-        </div>
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );

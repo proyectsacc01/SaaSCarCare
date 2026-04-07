@@ -4,21 +4,21 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import es, { type TranslationKeys } from "./es";
 import en from "./en";
 import fr from "./fr";
+import pt from "./pt";
+import de from "./de";
+import it from "./it";
 
-export type Locale = "es" | "en" | "fr";
+export type Locale = "es" | "en" | "fr" | "pt" | "de" | "it";
 
-const locales: Record<Locale, TranslationKeys> = { es, en, fr };
+const locales: Record<Locale, TranslationKeys> = { es, en, fr, pt, de, it };
 
 export const LOCALE_LABELS: Record<Locale, string> = {
   es: "Español",
   en: "English",
   fr: "Français",
-};
-
-export const LOCALE_FLAGS: Record<Locale, string> = {
-  es: "🇪🇸",
-  en: "🇬🇧",
-  fr: "🇫🇷",
+  pt: "Português",
+  de: "Deutsch",
+  it: "Italiano",
 };
 
 interface I18nContextValue {
@@ -35,7 +35,6 @@ function getInitialLocale(): Locale {
   if (typeof window === "undefined") return "es";
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && stored in locales) return stored as Locale;
-  // Detect browser language
   const browserLang = navigator.language.slice(0, 2);
   if (browserLang in locales) return browserLang as Locale;
   return "es";
@@ -61,7 +60,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     t: locales[locale],
   };
 
-  // Avoid hydration mismatch — render with default locale on server
   if (!mounted) {
     return (
       <I18nContext.Provider value={{ locale: "es", setLocale, t: es }}>

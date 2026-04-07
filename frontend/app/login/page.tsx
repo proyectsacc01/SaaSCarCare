@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n";
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -41,10 +42,10 @@ const CarIcon = () => (
     </svg>
 );
 
-function GoogleButton({ onSuccess, disabled }: { onSuccess: (resp: { access_token: string }) => void; disabled: boolean }) {
+function GoogleButton({ onSuccess, disabled, label }: { onSuccess: (resp: { access_token: string }) => void; disabled: boolean; label: string }) {
     const login = useGoogleLogin({
         onSuccess,
-        onError: () => toast.error("Error al iniciar sesión con Google"),
+        onError: () => toast.error(label),
     });
 
     return (
@@ -55,12 +56,14 @@ function GoogleButton({ onSuccess, disabled }: { onSuccess: (resp: { access_toke
             disabled={disabled}
         >
             <GoogleIcon />
-            <span>Continuar con Google</span>
+            <span>{label}</span>
         </button>
     );
 }
 
 export default function LoginPage() {
+    const t = useTranslation();
+
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -90,15 +93,15 @@ export default function LoginPage() {
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
                 if (data.token) localStorage.setItem("token", data.token);
-                toast.success("¡Bienvenido!");
+                toast.success(t.auth.welcome);
                 window.dispatchEvent(new Event("storage"));
                 router.push("/dashboard");
             } else {
-                toast.error(data.error || "Error al iniciar sesión con Google");
+                toast.error(data.error || t.auth.googleError);
             }
         } catch (error) {
             console.error(error);
-            toast.error("Error de conexión con el servidor");
+            toast.error(t.auth.connectionError);
         } finally {
             setLoading(false);
         }
@@ -120,15 +123,15 @@ export default function LoginPage() {
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
                 if (data.token) localStorage.setItem("token", data.token);
-                toast.success("¡Bienvenido de nuevo!");
+                toast.success(t.auth.welcomeBack);
                 window.dispatchEvent(new Event("storage"));
                 router.push("/dashboard");
             } else {
-                toast.error(data.error || "Error al iniciar sesión");
+                toast.error(data.error || t.auth.loginError);
             }
         } catch (error) {
             console.error(error);
-            toast.error("Error de conexión con el servidor");
+            toast.error(t.auth.connectionError);
         } finally {
             setLoading(false);
         }
@@ -157,18 +160,18 @@ export default function LoginPage() {
                     </div>
 
                     <div className={styles.quoteBox}>
-                        <h1>Optimización inteligente para tu flota.</h1>
-                        <p>Toma el control total de tus vehículos, rutas y combustible en tiempo real.</p>
+                        <h1>{t.auth.loginHeroTitle}</h1>
+                        <p>{t.auth.loginHeroSubtitle}</p>
 
                         <div className={styles.statsRow}>
                             <div className={styles.statItem}>
                                 <span className={styles.statVal}>6</span>
-                                <span className={styles.statLabel}>Módulos</span>
+                                <span className={styles.statLabel}>{t.landing.statModules}</span>
                             </div>
                             <div className={styles.divider} />
                             <div className={styles.statItem}>
                                 <span className={styles.statVal}>3s</span>
-                                <span className={styles.statLabel}>Refresh GPS</span>
+                                <span className={styles.statLabel}>{t.landing.statRefresh}</span>
                             </div>
                         </div>
                     </div>
@@ -184,15 +187,15 @@ export default function LoginPage() {
                     </div>
 
                     <div className={styles.header}>
-                        <h2 className={styles.title}>Iniciar Sesión</h2>
+                        <h2 className={styles.title}>{t.auth.login}</h2>
                         <p className={styles.subtitle}>
-                            ¿Nuevo aquí? <Link href="/register">Crear una cuenta gratis</Link>
+                            {t.auth.newHere} <Link href="/register">{t.auth.createFreeAccount}</Link>
                         </p>
                     </div>
 
                     <form onSubmit={handleSubmit} className={styles.form}>
                         <div className={styles.inputGroup}>
-                            <label htmlFor="email">Correo Electrónico</label>
+                            <label htmlFor="email">{t.auth.email}</label>
                             <input
                                 id="email"
                                 type="email"
@@ -206,8 +209,8 @@ export default function LoginPage() {
 
                         <div className={styles.inputGroup}>
                             <div className={styles.labelRow}>
-                                <label htmlFor="password">Contraseña</label>
-                                <a href="#" className={styles.forgotLink}>¿Olvidaste tu contraseña?</a>
+                                <label htmlFor="password">{t.auth.password}</label>
+                                <a href="#" className={styles.forgotLink}>{t.auth.forgotPassword}</a>
                             </div>
                             <div className={styles.passwordWrapper}>
                                 <input
@@ -241,22 +244,23 @@ export default function LoginPage() {
                                 <span className={styles.loadingDots}>
                                     <span>.</span><span>.</span><span>.</span>
                                 </span>
-                            ) : "Acceder al Panel"}
+                            ) : t.auth.accessPanel}
                         </button>
                     </form>
 
                     <div className={styles.oauthDivider}>
-                        <span>o continuar con</span>
+                        <span>{t.auth.orContinueWith}</span>
                     </div>
 
                     <GoogleButton
                         onSuccess={handleGoogleSuccess}
                         disabled={loading}
+                        label={t.auth.continueWithGoogle}
                     />
 
                     <div className={styles.footerLink}>
                         <Link href="/">
-                            ← Volver al inicio
+                            {t.auth.backToHome}
                         </Link>
                     </div>
                 </div>

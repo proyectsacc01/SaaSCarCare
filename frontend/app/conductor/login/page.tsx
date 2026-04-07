@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "@/lib/i18n";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -389,6 +390,8 @@ function DriverLoginInner() {
 }
 
 export default function DriverLoginPage() {
+  const t = useTranslation();
+
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
     return (
         <GoogleOAuthProvider clientId={googleClientId}>
