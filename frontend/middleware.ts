@@ -106,8 +106,10 @@ function getClientIP(request: NextRequest): string {
 }
 
 function isSuspiciousUserAgent(userAgent: string | null): boolean {
-    if (!userAgent) return true // Sin User-Agent = sospechoso
+    if (!userAgent) return false // WebView y service workers pueden no enviar UA — no bloquear
     const ua = userAgent.toLowerCase()
+    // No bloquear UAs legítimos de Android WebView, Chrome Mobile ni bots de indexación
+    if (ua.includes('android') || ua.includes('mobile') || ua.includes('dalvik')) return false
     return FIREWALL_CONFIG.blockedUserAgents.some(blocked => ua.includes(blocked))
 }
 
