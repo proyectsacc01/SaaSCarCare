@@ -70,7 +70,7 @@ function calcularProgreso(distanciaTotal?: number, distanciaRestante?: number): 
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
-    : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app");
+    : (process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app");
 const DASHBOARD_ROUTE = "/dashboard";
 
 export default function RutaTracking() {

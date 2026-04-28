@@ -3,6 +3,7 @@ package com.carcare.app;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.location.Location;
@@ -34,8 +35,8 @@ public class TrackingService extends Service {
     private String rutaId;
     private static final String TAG = "TrackingService";
 
-    // URL de tu backend - Usamos la de Railway por defecto
-    private String API_URL = "https://saas-carcare-production.up.railway.app"; 
+    // URL de tu backend — viene desde BuildConfig (debug = local, release = Railway)
+    private String API_URL = BuildConfig.API_URL;
 
     @Override
     public void onCreate() {
@@ -63,10 +64,22 @@ public class TrackingService extends Service {
             }
         }
 
+        // Intent que abre la app cuando el usuario toca la notificación
+        Intent openAppIntent = new Intent(this, MainActivity.class);
+        openAppIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            pendingFlags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent openAppPI = PendingIntent.getActivity(this, 0, openAppIntent, pendingFlags);
+
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("EcoFleet Tracking Activo")
-                .setContentText("Rastreo de ruta en progreso...")
+                .setContentTitle("CarCare — Ruta en curso")
+                .setContentText("Compartiendo ubicación con la central")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                .setContentIntent(openAppPI)
+                .setOngoing(true)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
 
         // En Android 10 (API 29) y posteriores, es obligatorio especificar el tipo de servicio

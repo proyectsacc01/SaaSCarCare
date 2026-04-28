@@ -496,6 +496,7 @@ const it: TranslationKeys = {
     stopped: "Fermo",
     licensePlate: "Targa",
     editVehicle: "Modifica",
+    saveVehicle: "Salva Veicolo",
   },
 
   fuel: {

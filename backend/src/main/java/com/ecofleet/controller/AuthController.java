@@ -259,6 +259,7 @@ public class AuthController {
             String email = extractJsonField(json, "email");
             String name = extractJsonField(json, "name");
             String googleId = extractJsonField(json, "sub");
+            String picture = extractJsonField(json, "picture");
 
             if (email == null || googleId == null) {
                 logger.error("No se pudo extraer email/sub del token de Google");
@@ -302,6 +303,7 @@ public class AuthController {
             response.put("role", "ADMIN");
             response.put("empresaId", null);
             response.put("token", jwtUtil.generateToken(usuario.getId(), "ADMIN"));
+            if (picture != null) response.put("picture", picture);
 
             return ResponseEntity.ok(response);
 
@@ -351,6 +353,7 @@ public class AuthController {
             String email = extractJsonField(json, "email");
             String name = extractJsonField(json, "name");
             String googleId = extractJsonField(json, "sub");
+            String picture = extractJsonField(json, "picture");
 
             if (email == null || googleId == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Token de Google incompleto"));
@@ -414,6 +417,7 @@ public class AuthController {
             response.put("empresaId", conductor.getEmpresaId());
             // Token subject = empresaId (multi-tenant) + conductorId claim para filtrar rutas
             response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR", conductor.getId()));
+            if (picture != null) response.put("picture", picture);
 
             return ResponseEntity.ok(response);
 

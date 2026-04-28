@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface MantenimientoPreventivoRepository extends MongoRepository<MantenimientoPreventivo, String> {
     List<MantenimientoPreventivo> findByVehiculoIdOrderByFechaDesc(String vehiculoId);
+    List<MantenimientoPreventivo> findByVehiculoIdIn(List<String> vehiculoIds);
 }

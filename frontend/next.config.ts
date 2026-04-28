@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'https://saas-carcare-production-54f9.up.railway.app/api/:path*',
+        destination: 'https://saascarcare-production.up.railway.app/api/:path*',
       },
     ]
   },

@@ -120,7 +120,7 @@ function estadoDocumento(fecha: string, t: any): { label: string; color: string;
   return { label: t?.vehicle?.valid || "Vigente", color: "#22c55e", bg: "rgba(34,197,94,0.12)" };
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 const DASHBOARD_ROUTE = "/dashboard";
 
 export default function VehiculoDetalle() {
@@ -473,8 +473,45 @@ export default function VehiculoDetalle() {
   const litrosTotales = repostajes.reduce((sum, r) => sum + (r.litros || 0), 0);
   const costoTotalVehiculo = costoTotalMantenimiento + costoTotalCombustible;
 
-  // €/km real: coste total / km RECORRIDOS (rango entre registros), NO el total del odómetro
-  // Esto da un número real: si registraste gastos entre km 145.000 y km 148.000, dividimos entre 3.000
+  // L/100km y coste/km: simétricos. Se excluye el PRIMER repostaje tanto para litros como para
+  // euros — ese tanque pagó combustible quemado ANTES del primer odómetro registrado, así que
+  // no se puede atribuir a los km del rango. Si lo incluyéramos solo en euros (no en litros)
+  // el coste/km saldría inflado.
+  const repConKm = repostajes
+    .filter(r => r.kilometrajeActual && r.kilometrajeActual > 0)
+    .sort((a, b) => (a.kilometrajeActual || 0) - (b.kilometrajeActual || 0));
+  let consumoCalculado: number | null = null;
+  let costeCombustibleEnRango = 0;
+  let kmRangoRepostajes = 0;
+  if (repConKm.length >= 2) {
+    kmRangoRepostajes = repConKm[repConKm.length - 1].kilometrajeActual! - repConKm[0].kilometrajeActual!;
+    const repostajesPosteriores = repConKm.slice(1);
+    const litrosEnRango = repostajesPosteriores.reduce((sum, r) => sum + (r.litros || 0), 0);
+    costeCombustibleEnRango = repostajesPosteriores.reduce((sum, r) => sum + (r.costeTotal || 0), 0);
+    if (kmRangoRepostajes > 10 && litrosEnRango > 0) {
+      consumoCalculado = (litrosEnRango / kmRangoRepostajes) * 100;
+    }
+  }
+
+  // Mantenimientos atribuibles al rango: solo los que caen entre el primer y último odómetro
+  const kmMinRep = repConKm.length > 0 ? repConKm[0].kilometrajeActual! : 0;
+  const kmMaxRep = repConKm.length > 0 ? repConKm[repConKm.length - 1].kilometrajeActual! : 0;
+  const costoMantenimientoEnRango = repConKm.length >= 2
+    ? mantenimientos
+        .filter(m => m.kilometrajeRealizado >= kmMinRep && m.kilometrajeRealizado <= kmMaxRep)
+        .reduce((sum, m) => sum + (m.costo || 0), 0)
+    : 0;
+
+  // Coste OPERATIVO (combustible) por km — simétrico al cálculo de L/100km
+  const costeCombustibleKm = kmRangoRepostajes > 10 && costeCombustibleEnRango > 0
+    ? costeCombustibleEnRango / kmRangoRepostajes
+    : null;
+  // Coste TOTAL (combustible + mantenimiento) por km — TCO real del vehículo, mismo rango
+  const costeKmReal = kmRangoRepostajes > 10 && (costeCombustibleEnRango + costoMantenimientoEnRango) > 0
+    ? (costeCombustibleEnRango + costoMantenimientoEnRango) / kmRangoRepostajes
+    : null;
+
+  // Para chips/info de "km recorridos" usamos el rango completo de TODOS los registros
   const todosKmRegistrados = [
     ...mantenimientos.filter(m => m.kilometrajeRealizado > 0).map(m => m.kilometrajeRealizado),
     ...repostajes.filter(r => r.kilometrajeActual && r.kilometrajeActual > 0).map(r => r.kilometrajeActual!),
@@ -482,30 +519,6 @@ export default function VehiculoDetalle() {
   const kmRegistradoMax = todosKmRegistrados.length > 0 ? Math.max(...todosKmRegistrados) : 0;
   const kmRegistradoMin = todosKmRegistrados.length > 0 ? Math.min(...todosKmRegistrados) : 0;
   const kmRecorridos = kmRegistradoMax - kmRegistradoMin;
-  // Coste OPERATIVO (combustible) por km — métrica más estable día a día
-  const costeCombustibleKm = kmRecorridos > 10 && costoTotalCombustible > 0
-    ? costoTotalCombustible / kmRecorridos
-    : null;
-  // Coste TOTAL (combustible + mantenimiento) por km — TCO real del vehículo
-  const costeKmReal = kmRecorridos > 10 && costoTotalVehiculo > 0
-    ? costoTotalVehiculo / kmRecorridos
-    : null;
-
-  // L/100km: calculado desde repostajes consecutivos con odómetro
-  // Se necesitan al menos 2 repostajes con km para calcular el consumo real
-  const repConKm = repostajes
-    .filter(r => r.kilometrajeActual && r.kilometrajeActual > 0)
-    .sort((a, b) => (a.kilometrajeActual || 0) - (b.kilometrajeActual || 0));
-  let consumoCalculado: number | null = null;
-  if (repConKm.length >= 2) {
-    const kmRango = repConKm[repConKm.length - 1].kilometrajeActual! - repConKm[0].kilometrajeActual!;
-    // Litros consumidos = todos los repostajes EXCEPTO el primero (el primer llenado no cuenta
-    // porque no sabemos cuánto había en el tanque antes)
-    const litrosEnRango = repConKm.slice(1).reduce((sum, r) => sum + (r.litros || 0), 0);
-    if (kmRango > 10 && litrosEnRango > 0) {
-      consumoCalculado = (litrosEnRango / kmRango) * 100;
-    }
-  }
   // Fallback: si hay rutas completadas, estimar desde distancia total recorrida
   if (consumoCalculado == null && litrosTotales > 0) {
     const kmCompletadas = rutas

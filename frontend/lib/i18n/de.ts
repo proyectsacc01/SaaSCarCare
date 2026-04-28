@@ -614,6 +614,7 @@ const de: TranslationKeys = {
     stopped: "Gestoppt",
     licensePlate: "Kennzeichen",
     editVehicle: "Bearbeiten",
+    saveVehicle: "Fahrzeug speichern",
   },
 
   // ── Documents ──

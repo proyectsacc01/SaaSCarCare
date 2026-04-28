@@ -20,19 +20,16 @@ import android.graphics.Bitmap;
 public class MainActivity extends Activity {
 
     private WebView mWebView;
-    
+
     // ═══ CONFIGURACIÓN DE URLS ═══
-    // Backend API (Railway - Producción con MongoDB)
-    private static final String API_URL = "https://saas-carcare-production.up.railway.app";
-    
-    // Frontend Web - CAMBIAR según entorno:
-    // Para DESARROLLO (emulador): "http://10.0.2.2:3000"
-    // Para PRODUCCIÓN (Railway): Usa la URL de tu frontend en Vercel/Railway
-    // Para DISPOSITIVO FÍSICO: Usa tu IP local, ej: "http://192.168.1.100:3000"
-    private static final String WEB_URL = "http://10.0.2.2:3000";
-    
+    // Inyectadas desde build.gradle por buildConfigField — NO hardcodear acá.
+    // - debug:   http://10.0.2.2:3000  (frontend Next.js en localhost del host del emulador)
+    // - release: https://saascarcare.up.railway.app (cambiar en build.gradle si usás otro dominio)
+    private static final String API_URL = BuildConfig.API_URL;
+    private static final String WEB_URL = BuildConfig.WEB_URL;
+
     // Ruta inicial - siempre al login de conductor
-    private static final String INITIAL_PATH = "/conductor/login"; 
+    private static final String INITIAL_PATH = "/conductor/login";
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -51,13 +48,17 @@ public class MainActivity extends Activity {
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setUseWideViewPort(true);
         
-        // Permitir contenido mixto (HTTP -> HTTPS) para desarrollo
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // Mixed content y debug solo en builds de desarrollo
+        if (BuildConfig.DEBUG) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            }
+            WebView.setWebContentsDebuggingEnabled(true);
+        } else {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+            }
         }
-        
-        // Habilitar depuración de WebView
-        WebView.setWebContentsDebuggingEnabled(true);
 
         // Pedir permisos de ubicación y notificaciones (Android 13+)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -93,8 +94,9 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                android.util.Log.w("EcoFleet", "Error SSL detectado: " + error.getPrimaryError());
-                handler.proceed(); // Ignorar errores SSL para pruebas
+                // Política de Google Play: NUNCA aceptar certificados SSL inválidos en producción.
+                android.util.Log.e("EcoFleet", "Error SSL bloqueado: " + error.getPrimaryError());
+                handler.cancel();
             }
         });
 

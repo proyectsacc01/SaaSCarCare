@@ -14,5 +14,7 @@ public class Mensaje {
     private String rutaId;
     private String remitente; // "ADMIN" o "CONDUCTOR"
     private String contenido;
+    private String mediaBase64;  // Base64-encoded image/video (max ~2MB)
+    private String mediaType;   // "image/jpeg", "image/png", "video/mp4", etc.
     private LocalDateTime timestamp = LocalDateTime.now();
 }

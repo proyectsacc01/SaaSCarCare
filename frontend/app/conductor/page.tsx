@@ -17,22 +17,34 @@ interface Ruta {
     fecha: string;
 }
 
+interface Vehiculo {
+    id: string;
+    matricula: string;
+    marca: string;
+    modelo: string;
+    kilometraje: number;
+    tipoCombustible: string;
+    activo: boolean;
+}
+
 interface DriverUser {
     id: string;
     nombre?: string;
     email?: string;
     rol?: string;
+    nombreEmpresa?: string;
 }
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
-    : (process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app");
+    : (process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app");
 
 export default function ConductorDashboard() {
   const t = useTranslation();
 
     const [rutas, setRutas] = useState<Ruta[]>([]);
     const [rutasCompletadas, setRutasCompletadas] = useState<Ruta[]>([]);
+    const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'inicio' | 'historial' | 'chat' | 'perfil'>('inicio');
@@ -46,6 +58,20 @@ export default function ConductorDashboard() {
     const [gpsInterval, setGpsInterval] = useState<NodeJS.Timeout | null>(null);
     const [showRefuelForm, setShowRefuelForm] = useState(false);
     const [refuelData, setRefuelData] = useState({ vehiculoId: '', litros: '', precioPorLitro: '1.650', estacion: '', kmActual: '' });
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const profileFileRef = useRef<HTMLInputElement>(null);
+
+    // GPS en vivo durante ruta — para mostrar velocidad y posición real al conductor
+    const [liveGps, setLiveGps] = useState<{ lat: number; lng: number; speed: number; accuracy: number } | null>(null);
+    // Mensajes no leídos para badge en bottom nav
+    const [unreadMessages, setUnreadMessages] = useState(0);
+    const lastReadMsgIdRef = useRef<string | null>(null);
+    // Tracking de rutas vistas para detectar nuevas (notificación in-app)
+    const seenRouteIdsRef = useRef<Set<string>>(new Set());
+    const [newRouteToast, setNewRouteToast] = useState<Ruta | null>(null);
+    // Filtro de historial
+    const [historyFilter, setHistoryFilter] = useState<'hoy' | 'semana' | 'mes' | 'todo'>('todo');
+    const [historySearch, setHistorySearch] = useState('');
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -67,9 +93,28 @@ export default function ConductorDashboard() {
             });
             clearTimeout(timeoutId);
             if (res.ok) {
-                const data = await res.json();
-                setRutas(data.filter((r: Ruta) => r.estado !== 'COMPLETADA'));
-                setRutasCompletadas(data.filter((r: Ruta) => r.estado === 'COMPLETADA'));
+                const data: Ruta[] = await res.json();
+                const activas = data.filter(r => r.estado !== 'COMPLETADA');
+                const completadas = data.filter(r => r.estado === 'COMPLETADA');
+
+                // Detectar nuevas rutas planificadas para notificar al conductor
+                const seen = seenRouteIdsRef.current;
+                if (seen.size > 0) {
+                    const nuevas = activas.filter(r => r.estado === 'PLANIFICADA' && !seen.has(r.id));
+                    if (nuevas.length > 0) {
+                        const ultima = nuevas[nuevas.length - 1];
+                        setNewRouteToast(ultima);
+                        toast.success(`Nueva ruta asignada: ${ultima.origen} → ${ultima.destino}`, { duration: 6000 });
+                        // Vibración suave si el dispositivo lo soporta
+                        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                            try { navigator.vibrate([180, 60, 180]); } catch {}
+                        }
+                    }
+                }
+                activas.forEach(r => seen.add(r.id));
+
+                setRutas(activas);
+                setRutasCompletadas(completadas);
                 setLoading(false);
             } else {
                 if (res.status === 401 || res.status === 403) {
@@ -90,6 +135,16 @@ export default function ConductorDashboard() {
         }
     };
 
+    const cargarVehiculos = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/vehiculos`, { headers: getAuthHeaders() });
+            if (res.ok) {
+                const data: Vehiculo[] = await res.json();
+                setVehiculos(data.filter(v => v.activo));
+            }
+        } catch { /* silencioso — los vehículos son auxiliares */ }
+    };
+
     useEffect(() => {
         const userStr = localStorage.getItem("user");
         if (!userStr) {
@@ -98,13 +153,32 @@ export default function ConductorDashboard() {
             return;
         }
         try { setDriverUser(JSON.parse(userStr)); } catch {}
+        // Load profile photo from localStorage
+        const savedPhoto = localStorage.getItem("profilePhoto");
+        if (savedPhoto) setProfilePhoto(savedPhoto);
         cargarRutas();
+        cargarVehiculos();
         const interval = setInterval(cargarRutas, 10000);
         return () => {
             clearInterval(interval);
             stopBrowserGPS();
         };
     }, []);
+
+    const handleProfilePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 1024 * 1024) { toast.error("Foto muy grande (máx. 1MB)"); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = reader.result as string;
+            setProfilePhoto(dataUrl);
+            localStorage.setItem("profilePhoto", dataUrl);
+            toast.success("Foto de perfil actualizada");
+        };
+        reader.readAsDataURL(file);
+        e.target.value = "";
+    };
 
     // Timer para ruta activa
     useEffect(() => {
@@ -121,6 +195,41 @@ export default function ConductorDashboard() {
         return () => clearInterval(timer);
     }, [routeStartTime]);
 
+    // Polling de mensajes ADMIN no leídos para badge en bottom nav
+    useEffect(() => {
+        const rutaParaChat = rutas.find(r => r.estado === 'EN_CURSO') || rutas.find(r => r.estado === 'PLANIFICADA');
+        if (!rutaParaChat) {
+            setUnreadMessages(0);
+            return;
+        }
+        const fetchMsgs = async () => {
+            try {
+                const res = await fetch(`${API_URL}/api/mensajes/${rutaParaChat.id}`, { headers: getAuthHeaders() });
+                if (!res.ok) return;
+                const msgs: Array<{ id?: string; remitente: string; timestamp?: string }> = await res.json();
+                if (msgs.length === 0) { setUnreadMessages(0); return; }
+                // Si el usuario está en la pestaña chat, todos son leídos
+                if (activeTab === 'chat') {
+                    lastReadMsgIdRef.current = msgs[msgs.length - 1].id || null;
+                    setUnreadMessages(0);
+                    return;
+                }
+                // Contamos mensajes ADMIN posteriores al último leído
+                const lastRead = lastReadMsgIdRef.current;
+                let countingFrom = lastRead ? false : true;
+                let unread = 0;
+                for (const m of msgs) {
+                    if (countingFrom && m.remitente === 'ADMIN') unread++;
+                    if (m.id === lastRead) countingFrom = true;
+                }
+                setUnreadMessages(unread);
+            } catch { /* silencioso */ }
+        };
+        fetchMsgs();
+        const interval = setInterval(fetchMsgs, 5000);
+        return () => clearInterval(interval);
+    }, [rutas, activeTab]);
+
     const formatElapsed = (s: number) => {
         const h = Math.floor(s / 3600);
         const m = Math.floor((s % 3600) / 60);
@@ -129,11 +238,21 @@ export default function ConductorDashboard() {
         return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
     };
 
+    const updateLiveGps = (pos: GeolocationPosition) => {
+        setLiveGps({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            speed: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed * 3.6 : 0,
+            accuracy: pos.coords.accuracy || 0,
+        });
+    };
+
     const startBrowserGPS = (rutaId: string) => {
         if (!navigator.geolocation) { toast.error("GPS no disponible"); return; }
         navigator.geolocation.getCurrentPosition(
             async (position) => {
                 toast.success("GPS activado");
+                updateLiveGps(position);
                 try {
                     await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
                         method: 'POST', headers: getAuthHeaders(),
@@ -142,6 +261,7 @@ export default function ConductorDashboard() {
                 } catch {}
                 const watchId = navigator.geolocation.watchPosition(
                     async (pos) => {
+                        updateLiveGps(pos);
                         try {
                             await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
                                 method: 'POST', headers: getAuthHeaders(),
@@ -165,6 +285,7 @@ export default function ConductorDashboard() {
             gpsWatchIdRef.current = null;
         }
         if (gpsInterval) { clearInterval(gpsInterval); setGpsInterval(null); }
+        setLiveGps(null);
     };
 
     const toggleRuta = async (ruta: Ruta) => {
@@ -189,9 +310,9 @@ export default function ConductorDashboard() {
     const registrarRepostaje = async () => {
         const litros = parseFloat(refuelData.litros);
         const precio = parseFloat(refuelData.precioPorLitro);
-        if (!refuelData.vehiculoId) { toast.warning("Seleccioná el vehículo"); return; }
-        if (!litros || litros <= 0) { toast.warning("Ingresá la cantidad de litros"); return; }
-        if (!precio || precio <= 0) { toast.warning("Ingresá el precio por litro"); return; }
+        if (!refuelData.vehiculoId) { toast.warning("Selecciona el vehículo"); return; }
+        if (!litros || litros <= 0) { toast.warning("Introduce la cantidad de litros"); return; }
+        if (!precio || precio <= 0) { toast.warning("Introduce el precio por litro"); return; }
         const costeTotal = Math.round(litros * precio * 100) / 100;
         try {
             const payload: Record<string, unknown> = {
@@ -215,11 +336,11 @@ export default function ConductorDashboard() {
                 const body = await res.text().catch(() => '');
                 if (res.status === 403) toast.error("Sin permiso para este vehículo");
                 else if (res.status === 404) toast.error("Vehículo no encontrado en el sistema");
-                else if (res.status === 400) toast.error("Datos incompletos — revisá los campos");
+                else if (res.status === 400) toast.error("Datos incompletos — revisa los campos");
                 else toast.error(`Error al registrar repostaje (${res.status})`);
                 console.error('Repostaje error:', res.status, body);
             }
-        } catch { toast.error("Error de conexión — revisá tu internet"); }
+        } catch { toast.error("Error de conexión — revisa tu conexión a internet"); }
     };
 
     const completarRuta = async (ruta: Ruta) => {
@@ -242,26 +363,65 @@ export default function ConductorDashboard() {
 
     const rutaActiva = rutas.find(r => r.estado === 'EN_CURSO');
     const rutasPendientes = rutas.filter(r => r.estado === 'PLANIFICADA');
-    const kmTotalesHoy = rutasCompletadas.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
+
+    // KM RECORRIDOS HOY: solo rutas completadas con fecha = hoy (zona horaria local)
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const completadasHoy = rutasCompletadas.filter(r => {
+        if (!r.fecha) return false;
+        const f = new Date(r.fecha);
+        if (isNaN(f.getTime())) return false;
+        return f.toISOString().slice(0, 10) === hoyStr;
+    });
+    const kmHoyReales = completadasHoy.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
+    const kmTotalAcumulado = rutasCompletadas.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
+
+    // FILTRO DE HISTORIAL — calculamos las rutas visibles según filtro + búsqueda
+    const filtroFecha = (() => {
+        const ahora = Date.now();
+        if (historyFilter === 'hoy') return ahora - 24 * 3600 * 1000;
+        if (historyFilter === 'semana') return ahora - 7 * 24 * 3600 * 1000;
+        if (historyFilter === 'mes') return ahora - 30 * 24 * 3600 * 1000;
+        return 0;
+    })();
+    const rutasHistorialFiltradas = rutasCompletadas.filter(r => {
+        if (filtroFecha > 0) {
+            if (!r.fecha) return false;
+            const t = new Date(r.fecha).getTime();
+            if (isNaN(t) || t < filtroFecha) return false;
+        }
+        if (historySearch.trim()) {
+            const q = historySearch.toLowerCase();
+            return (r.origen?.toLowerCase().includes(q) || r.destino?.toLowerCase().includes(q));
+        }
+        return true;
+    });
+    const kmTotalesPeriodo = rutasHistorialFiltradas.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
 
     if (loading && !error) return (
         <BackgroundMeteors>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem' }}>
-                <div style={{ width: '44px', height: '44px', border: '3px solid rgba(59,246,59,0.1)', borderTop: '3px solid #3bf63b', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }} />
-                <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: 0 }}>Conectando con EcoFleet...</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1.5rem' }}>
+                <div style={{ position: 'relative', width: '56px', height: '56px' }}>
+                    <div style={{ width: '56px', height: '56px', border: '2.5px solid rgba(59,246,59,0.06)', borderTop: '2.5px solid #3bf63b', borderRight: '2.5px solid rgba(59,246,59,0.3)', borderRadius: '50%', animation: 'spin 0.85s linear infinite' }} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                    <p style={{ color: '#e5e7eb', fontSize: '0.9rem', margin: '0 0 0.25rem', fontWeight: '700', letterSpacing: '0.2px' }}>CarCare Driver</p>
+                    <p style={{ color: '#4b5563', fontSize: '0.68rem', margin: 0 }}>Conectando con la flota...</p>
+                </div>
             </div>
         </BackgroundMeteors>
     );
 
     if (error) return (
         <BackgroundMeteors>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center', gap: '1rem' }}>
-                <div style={{ fontSize: '2.5rem' }}>📡</div>
-                <h2 style={{ fontSize: '1.1rem', color: '#ef4444', margin: 0 }}>Sin conexión</h2>
-                <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: 0 }}>{error}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center', gap: '1.2rem' }}>
+                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>📡</div>
+                <div>
+                    <h2 style={{ fontSize: '1.1rem', color: '#ef4444', margin: '0 0 0.4rem', fontWeight: '800' }}>Sin conexión</h2>
+                    <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0, maxWidth: '280px', lineHeight: 1.5 }}>{error}</p>
+                </div>
                 <button
                     onClick={() => { setLoading(true); setError(null); cargarRutas(); }}
-                    style={{ padding: '0.875rem 2rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}
+                    style={{ padding: '0.9rem 2.5rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', color: '#000', border: 'none', borderRadius: '14px', fontWeight: '800', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 6px 20px rgba(59,246,59,0.3)', transition: 'transform 0.2s', letterSpacing: '0.3px' }}
                 >
                     Reintentar
                 </button>
@@ -286,51 +446,73 @@ export default function ConductorDashboard() {
 
                 {/* HEADER */}
                 <header style={{
-                    padding: '0.9rem 1.2rem',
+                    padding: '0.85rem 1.2rem',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    background: 'rgba(8,8,14,0.85)',
+                    background: 'rgba(8,8,14,0.88)',
                     backdropFilter: 'blur(24px)',
                     borderBottom: '1px solid rgba(255,255,255,0.04)',
                     position: 'sticky',
                     top: 0,
                     zIndex: 20
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ width: '38px', height: '38px', borderRadius: '11px', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', color: '#000', fontSize: '0.9rem', boxShadow: '0 4px 16px rgba(59,246,59,0.35)', flexShrink: 0 }}>
-                            CC
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                        <div style={{
+                            width: '36px', height: '36px', borderRadius: '12px',
+                            background: 'linear-gradient(135deg, #3bf63b, #22c55e)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 4px 14px rgba(59,246,59,0.3)', flexShrink: 0
+                        }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.6-1.1-1-1.9-1H5c-.8 0-1.4.4-1.9 1L1 10l-.6 1c-.6.9-.4 2.1.5 2.6.2.1.5.2.8.2H3v1c0 .6.4 1 1 1h1" />
+                                <circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" />
+                            </svg>
                         </div>
                         <div>
-                            <h1 style={{ fontSize: '1rem', fontWeight: '800', margin: 0, lineHeight: 1.2, color: '#fff' }}>
-                                Hola, {driverUser?.nombre?.split(' ')[0] || 'Conductor'}
+                            <h1 style={{ fontSize: '0.95rem', fontWeight: '800', margin: 0, lineHeight: 1.2, color: '#fff' }}>
+                                {driverUser?.nombre?.split(' ')[0] || 'Conductor'}
                             </h1>
-                            <p style={{ fontSize: '0.6rem', color: '#4b5563', margin: 0, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                                EcoFleet Driver
+                            <p style={{ fontSize: '0.58rem', color: '#4b5563', margin: 0, letterSpacing: '0.5px' }}>
+                                {driverUser?.nombreEmpresa || 'CarCare Driver'}
                             </p>
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <button
                             onClick={() => setIsOnline(!isOnline)}
                             style={{
-                                padding: '0.3rem 0.75rem',
+                                padding: '0.25rem 0.6rem',
                                 borderRadius: '99px',
-                                border: `1px solid ${isOnline ? 'rgba(59,246,59,0.4)' : 'rgba(107,114,128,0.3)'}`,
-                                background: isOnline ? 'rgba(59,246,59,0.1)' : 'rgba(255,255,255,0.03)',
+                                border: `1px solid ${isOnline ? 'rgba(59,246,59,0.35)' : 'rgba(107,114,128,0.25)'}`,
+                                background: isOnline ? 'rgba(59,246,59,0.08)' : 'rgba(255,255,255,0.03)',
                                 color: isOnline ? '#3bf63b' : '#6b7280',
-                                fontSize: '0.6rem',
+                                fontSize: '0.55rem',
                                 fontWeight: '800',
                                 cursor: 'pointer',
-                                letterSpacing: '0.5px',
-                                transition: 'all 0.25s ease'
+                                letterSpacing: '0.3px',
+                                transition: 'all 0.25s ease',
+                                display: 'flex', alignItems: 'center', gap: '4px'
                             }}
                         >
+                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: isOnline ? '#3bf63b' : '#6b7280', boxShadow: isOnline ? '0 0 6px rgba(59,246,59,0.6)' : 'none' }} />
                             {isOnline ? 'ACTIVO' : 'INACTIVO'}
                         </button>
-                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: `2px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#3bf63b', flexShrink: 0, transition: 'border-color 0.25s ease' }}>
-                            {getInitials(driverUser?.nombre)}
+                        <div
+                            onClick={() => setActiveTab('perfil')}
+                            style={{
+                                width: '34px', height: '34px', borderRadius: '50%', overflow: 'hidden',
+                                border: `2px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.65rem', fontWeight: '900', color: '#3bf63b', flexShrink: 0,
+                                transition: 'border-color 0.25s ease', cursor: 'pointer',
+                                background: profilePhoto ? 'transparent' : 'rgba(255,255,255,0.05)'
+                            }}
+                        >
+                            {profilePhoto ? (
+                                <img src={profilePhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : getInitials(driverUser?.nombre)}
                         </div>
                     </div>
                 </header>
@@ -345,13 +527,15 @@ export default function ConductorDashboard() {
                             {/* STATS STRIP */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.7rem' }}>
                                 {[
-                                    { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b' },
-                                    { label: 'KM hoy', value: kmTotalesHoy > 0 ? `${kmTotalesHoy.toFixed(0)}` : '0', color: '#60a5fa' },
-                                    { label: 'Pendientes', value: rutasPendientes.length, color: '#f59e0b' },
+                                    { label: `Hoy · ${completadasHoy.length}`, value: kmHoyReales > 0 ? `${kmHoyReales.toFixed(0)}` : '0', sub: 'km', color: '#3bf63b' },
+                                    { label: 'Pendientes', value: rutasPendientes.length, sub: 'rutas', color: '#f59e0b' },
+                                    { label: 'Total', value: rutasCompletadas.length, sub: 'completadas', color: '#60a5fa' },
                                 ].map((s, i) => (
-                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.9rem 0.6rem', textAlign: 'center' }}>
+                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.9rem 0.6rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+                                        <div style={{ position: 'absolute', top: '-8px', right: '-8px', width: '48px', height: '48px', background: `radial-gradient(circle, ${s.color}1f 0%, transparent 70%)` }} />
                                         <div style={{ fontSize: '1.6rem', fontWeight: '900', color: s.color, lineHeight: 1 }}>{s.value}</div>
-                                        <div style={{ fontSize: '0.55rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>{s.label}</div>
+                                        <div style={{ fontSize: '0.5rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: '0.15rem', fontWeight: 600 }}>{s.sub}</div>
+                                        <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.15rem' }}>{s.label}</div>
                                     </div>
                                 ))}
                             </div>
@@ -406,35 +590,72 @@ export default function ConductorDashboard() {
                                             </div>
                                         </div>
 
-                                        {/* Mini stats */}
+                                        {/* Mini stats — incluye velocidad real cuando hay GPS */}
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '1.1rem' }}>
-                                            {[
-                                                { label: 'Distancia', value: `${rutaActiva.distanciaEstimadaKm}`, unit: 'km' },
-                                                { label: 'En curso', value: formatElapsed(elapsedSeconds), unit: '' },
-                                                { label: 'Vehículo', value: rutaActiva.vehiculoId?.slice(-5)?.toUpperCase() || '—', unit: '' },
-                                            ].map((s, i) => (
-                                                <div key={i} style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
-                                                    <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
-                                                        {s.value}{s.unit && <span style={{ fontSize: '0.55rem', color: '#6b7280', marginLeft: '2px' }}>{s.unit}</span>}
-                                                    </div>
-                                                    <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>{s.label}</div>
+                                            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: liveGps && liveGps.speed > 1 ? '1px solid rgba(59,246,59,0.25)' : '1px solid rgba(255,255,255,0.04)' }}>
+                                                <div style={{ fontSize: '0.95rem', fontWeight: '900', color: liveGps ? '#3bf63b' : '#6b7280', lineHeight: 1.1 }}>
+                                                    {liveGps ? Math.round(liveGps.speed) : '—'}
+                                                    <span style={{ fontSize: '0.5rem', color: '#6b7280', marginLeft: '2px', fontWeight: 600 }}>km/h</span>
                                                 </div>
-                                            ))}
+                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Velocidad</div>
+                                            </div>
+                                            <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                                <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
+                                                    {rutaActiva.distanciaEstimadaKm}<span style={{ fontSize: '0.55rem', color: '#6b7280', marginLeft: '2px' }}>km</span>
+                                                </div>
+                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Distancia</div>
+                                            </div>
+                                            <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                                <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
+                                                    {formatElapsed(elapsedSeconds)}
+                                                </div>
+                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Tiempo</div>
+                                            </div>
                                         </div>
 
+                                        {/* GPS accuracy badge cuando hay señal */}
+                                        {liveGps && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.4rem 0.6rem', background: 'rgba(0,0,0,0.25)', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.55rem', color: '#6b7280' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: liveGps.accuracy < 20 ? '#3bf63b' : liveGps.accuracy < 50 ? '#f59e0b' : '#ef4444' }} />
+                                                    GPS · ±{Math.round(liveGps.accuracy)}m
+                                                </span>
+                                                <span style={{ fontFamily: 'monospace', color: '#4b5563' }}>
+                                                    {liveGps.lat.toFixed(4)}, {liveGps.lng.toFixed(4)}
+                                                </span>
+                                            </div>
+                                        )}
+
                                         {/* Actions */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                                            <button
+                                                onClick={() => {
+                                                    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(rutaActiva.destino)}`;
+                                                    window.open(url, '_blank');
+                                                }}
+                                                style={{ padding: '0.8rem 0.4rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
+                                            >
+                                                <span style={{ fontSize: '0.95rem' }}>🧭</span>
+                                                Navegar
+                                            </button>
                                             <button
                                                 onClick={() => setActiveTab('chat')}
-                                                style={{ padding: '0.875rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'all 0.2s' }}
+                                                style={{ padding: '0.8rem 0.4rem', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '12px', color: '#a78bfa', fontWeight: '700', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', position: 'relative' }}
                                             >
-                                                💬 Chat
+                                                <span style={{ fontSize: '0.95rem' }}>💬</span>
+                                                Chat
+                                                {unreadMessages > 0 && (
+                                                    <span style={{ position: 'absolute', top: '4px', right: '8px', minWidth: '14px', height: '14px', background: '#ef4444', borderRadius: '99px', fontSize: '0.5rem', fontWeight: 900, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                                                        {unreadMessages > 9 ? '9+' : unreadMessages}
+                                                    </span>
+                                                )}
                                             </button>
                                             <button
                                                 onClick={() => completarRuta(rutaActiva)}
-                                                style={{ padding: '0.875rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', color: '#ef4444', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}
+                                                style={{ padding: '0.8rem 0.4rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', border: 'none', borderRadius: '12px', color: '#000', fontWeight: '900', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', boxShadow: '0 4px 14px rgba(59,246,59,0.25)' }}
                                             >
-                                                ✓ Completar
+                                                <span style={{ fontSize: '0.95rem' }}>✓</span>
+                                                Completar
                                             </button>
                                         </div>
                                     </div>
@@ -489,17 +710,29 @@ export default function ConductorDashboard() {
 
                             {/* REGISTRAR REPOSTAJE */}
                             {(() => {
-                                const vehiculosUnicos = [...new Set(
+                                // Merge: vehículos de la API + IDs de rutas que no estén en la API
+                                const idsDeRutas = [...new Set(
                                     [...rutas, ...rutasCompletadas].map(r => r.vehiculoId).filter(Boolean)
                                 )];
+                                const idsEnApi = new Set(vehiculos.map(v => v.id));
+                                const idsHuerfanos = idsDeRutas.filter(id => !idsEnApi.has(id));
+
+                                const getVehiculoLabel = (v: Vehiculo) => `${v.matricula} — ${v.marca} ${v.modelo}`;
+
+                                const hayVehiculos = vehiculos.length > 0 || idsHuerfanos.length > 0;
+
                                 const costePreview = parseFloat(refuelData.litros) > 0 && parseFloat(refuelData.precioPorLitro) > 0
                                     ? Math.round(parseFloat(refuelData.litros) * parseFloat(refuelData.precioPorLitro) * 100) / 100
                                     : 0;
+
+                                // Info del vehículo seleccionado para mostrar debajo del selector
+                                const vehiculoSeleccionado = vehiculos.find(v => v.id === refuelData.vehiculoId);
+
                                 return (
                                     <div>
                                         <button
                                             onClick={() => {
-                                                const v = rutaActiva?.vehiculoId || vehiculosUnicos[0] || '';
+                                                const v = rutaActiva?.vehiculoId || (vehiculos.length > 0 ? vehiculos[0].id : idsHuerfanos[0] || '');
                                                 setRefuelData(d => ({ ...d, vehiculoId: v }));
                                                 setShowRefuelForm(!showRefuelForm);
                                             }}
@@ -510,30 +743,62 @@ export default function ConductorDashboard() {
 
                                         {showRefuelForm && (
                                             <div style={{ marginTop: '0.75rem', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '16px', padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                                {/* Selector de vehículo — siempre visible */}
+                                                {/* Selector de vehículo — muestra matrícula + marca modelo */}
                                                 <div>
                                                     <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Vehículo</label>
-                                                    {vehiculosUnicos.length > 0 ? (
+                                                    {hayVehiculos ? (
                                                         <select
                                                             value={refuelData.vehiculoId}
                                                             onChange={e => setRefuelData(d => ({ ...d, vehiculoId: e.target.value }))}
-                                                            style={{ width: '100%', padding: '0.6rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.85rem' }}
+                                                            style={{ width: '100%', padding: '0.7rem 0.6rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.85rem', appearance: 'none', WebkitAppearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.7rem center', paddingRight: '2rem', cursor: 'pointer', transition: 'border-color 0.2s' }}
                                                         >
-                                                            <option value="">Seleccioná un vehículo</option>
-                                                            {vehiculosUnicos.map(vid => (
-                                                                <option key={vid} value={vid}>{vid}</option>
-                                                            ))}
+                                                            <option value="">Selecciona un vehículo</option>
+                                                            {vehiculos.length > 0 && (
+                                                                <optgroup label="Flota disponible">
+                                                                    {vehiculos.map(v => (
+                                                                        <option key={v.id} value={v.id}>
+                                                                            {getVehiculoLabel(v)}
+                                                                        </option>
+                                                                    ))}
+                                                                </optgroup>
+                                                            )}
+                                                            {idsHuerfanos.length > 0 && (
+                                                                <optgroup label="De rutas asignadas">
+                                                                    {idsHuerfanos.map(vid => (
+                                                                        <option key={vid} value={vid}>ID: {vid.slice(-8).toUpperCase()}</option>
+                                                                    ))}
+                                                                </optgroup>
+                                                            )}
                                                         </select>
                                                     ) : (
                                                         <input
                                                             type="text"
-                                                            placeholder="ID del vehículo (consultá al admin)"
+                                                            placeholder="ID del vehículo (consulta al admin)"
                                                             value={refuelData.vehiculoId}
                                                             onChange={e => setRefuelData(d => ({ ...d, vehiculoId: e.target.value }))}
-                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.85rem', boxSizing: 'border-box' }}
                                                         />
                                                     )}
                                                 </div>
+
+                                                {/* Info card del vehículo seleccionado */}
+                                                {vehiculoSeleccionado && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.6rem 0.75rem', background: 'rgba(59,246,59,0.05)', borderRadius: '10px', border: '1px solid rgba(59,246,59,0.15)' }}>
+                                                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59,246,59,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>🚗</div>
+                                                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#e5e7eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {vehiculoSeleccionado.marca} {vehiculoSeleccionado.modelo}
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '0.6rem', fontSize: '0.6rem', color: '#6b7280', marginTop: '2px' }}>
+                                                                <span>{vehiculoSeleccionado.matricula}</span>
+                                                                <span>•</span>
+                                                                <span>{vehiculoSeleccionado.tipoCombustible}</span>
+                                                                <span>•</span>
+                                                                <span>{vehiculoSeleccionado.kilometraje?.toLocaleString()} km</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                                     <div>
@@ -541,21 +806,21 @@ export default function ConductorDashboard() {
                                                         <input type="number" step="0.1" min="0.1" placeholder="45.0"
                                                             value={refuelData.litros}
                                                             onChange={e => setRefuelData(d => ({ ...d, litros: e.target.value }))}
-                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
                                                     </div>
                                                     <div>
                                                         <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>€/Litro</label>
                                                         <input type="number" step="0.001" min="0.001" placeholder="1.650"
                                                             value={refuelData.precioPorLitro}
                                                             onChange={e => setRefuelData(d => ({ ...d, precioPorLitro: e.target.value }))}
-                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                            style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
                                                     </div>
                                                 </div>
 
                                                 {costePreview > 0 && (
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.75rem', background: 'rgba(245,158,11,0.1)', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.25)' }}>
-                                                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Total</span>
-                                                        <span style={{ fontSize: '1rem', fontWeight: '800', color: '#f59e0b' }}>€{costePreview.toFixed(2)}</span>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 0.85rem', background: 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.08))', borderRadius: '10px', border: '1px solid rgba(245,158,11,0.25)' }}>
+                                                        <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: '600' }}>Coste Total</span>
+                                                        <span style={{ fontSize: '1.15rem', fontWeight: '900', color: '#f59e0b', letterSpacing: '-0.3px' }}>€{costePreview.toFixed(2)}</span>
                                                     </div>
                                                 )}
 
@@ -564,7 +829,7 @@ export default function ConductorDashboard() {
                                                     <input type="number" min="0" placeholder="125000"
                                                         value={refuelData.kmActual}
                                                         onChange={e => setRefuelData(d => ({ ...d, kmActual: e.target.value }))}
-                                                        style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                        style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
                                                 </div>
 
                                                 <div>
@@ -572,12 +837,12 @@ export default function ConductorDashboard() {
                                                     <input type="text" placeholder="Ej: Repsol Autovía A-3"
                                                         value={refuelData.estacion}
                                                         onChange={e => setRefuelData(d => ({ ...d, estacion: e.target.value }))}
-                                                        style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                                                        style={{ width: '100%', padding: '0.65rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }} />
                                                 </div>
 
                                                 <button
                                                     onClick={registrarRepostaje}
-                                                    style={{ width: '100%', padding: '0.875rem', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.875rem', cursor: 'pointer' }}
+                                                    style={{ width: '100%', padding: '0.95rem', background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#000', border: 'none', borderRadius: '12px', fontWeight: '900', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(245,158,11,0.25)', letterSpacing: '0.3px', transition: 'transform 0.15s, box-shadow 0.15s' }}
                                                 >
                                                     ✓ Confirmar Repostaje
                                                 </button>
@@ -599,31 +864,118 @@ export default function ConductorDashboard() {
 
                     {/* ─── TAB: HISTORIAL ─── */}
                     {activeTab === 'historial' && (
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>Historial de Rutas</span>
-                                <span style={{ fontSize: '0.65rem', color: '#3bf63b', fontWeight: '700' }}>{rutasCompletadas.length} completadas</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {/* Resumen del periodo */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.7rem' }}>
+                                <div style={{ background: 'rgba(59,246,59,0.06)', border: '1px solid rgba(59,246,59,0.15)', borderRadius: '14px', padding: '0.9rem', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#3bf63b', lineHeight: 1 }}>{rutasHistorialFiltradas.length}</div>
+                                    <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>Rutas</div>
+                                </div>
+                                <div style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: '14px', padding: '0.9rem', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#60a5fa', lineHeight: 1 }}>{kmTotalesPeriodo.toFixed(0)}</div>
+                                    <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>Km totales</div>
+                                </div>
                             </div>
 
-                            {rutasCompletadas.length === 0 ? (
-                                <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                            {/* Filtros por período */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
+                                {([
+                                    { id: 'hoy', label: 'Hoy' },
+                                    { id: 'semana', label: '7d' },
+                                    { id: 'mes', label: '30d' },
+                                    { id: 'todo', label: 'Todo' },
+                                ] as const).map(f => (
+                                    <button
+                                        key={f.id}
+                                        onClick={() => setHistoryFilter(f.id)}
+                                        style={{
+                                            padding: '0.55rem 0.4rem', borderRadius: '10px',
+                                            background: historyFilter === f.id ? 'linear-gradient(135deg, #3bf63b, #22c55e)' : 'rgba(255,255,255,0.03)',
+                                            border: `1px solid ${historyFilter === f.id ? 'transparent' : 'rgba(255,255,255,0.06)'}`,
+                                            color: historyFilter === f.id ? '#000' : '#9ca3af',
+                                            fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer',
+                                            letterSpacing: '0.3px', transition: 'all 0.2s',
+                                        }}
+                                    >
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Búsqueda */}
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="search"
+                                    value={historySearch}
+                                    onChange={e => setHistorySearch(e.target.value)}
+                                    placeholder="Buscar por origen o destino..."
+                                    style={{
+                                        width: '100%', padding: '0.7rem 0.9rem 0.7rem 2.4rem',
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.06)',
+                                        borderRadius: '12px', color: '#e5e7eb',
+                                        fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box',
+                                    }}
+                                />
+                                <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.85rem', opacity: 0.4, pointerEvents: 'none' }}>🔍</span>
+                                {historySearch && (
+                                    <button
+                                        onClick={() => setHistorySearch('')}
+                                        style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '50%', width: '24px', height: '24px', color: '#6b7280', cursor: 'pointer', fontSize: '0.7rem' }}
+                                    >✕</button>
+                                )}
+                            </div>
+
+                            {/* Lista — agrupada por día */}
+                            {rutasHistorialFiltradas.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
                                     <div style={{ fontSize: '2.5rem', opacity: 0.25, marginBottom: '0.75rem' }}>📋</div>
-                                    <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: 0 }}>Sin rutas completadas aún</p>
+                                    <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: 0, fontWeight: 600 }}>
+                                        {historySearch || historyFilter !== 'todo' ? 'Sin resultados' : 'Sin rutas completadas aún'}
+                                    </p>
+                                    {(historySearch || historyFilter !== 'todo') && (
+                                        <button
+                                            onClick={() => { setHistorySearch(''); setHistoryFilter('todo'); }}
+                                            style={{ marginTop: '0.8rem', padding: '0.5rem 1rem', background: 'rgba(59,246,59,0.08)', border: '1px solid rgba(59,246,59,0.2)', borderRadius: '8px', color: '#3bf63b', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                                        >
+                                            Limpiar filtros
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {rutasCompletadas.map(r => (
-                                        <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '1rem', borderLeft: '3px solid rgba(59,246,59,0.4)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                                                <span style={{ fontSize: '0.58rem', color: '#3bf63b', fontWeight: '800', background: 'rgba(59,246,59,0.1)', padding: '0.2rem 0.5rem', borderRadius: '99px' }}>✓ COMPLETADA</span>
-                                                <span style={{ fontSize: '0.55rem', color: '#374151', fontFamily: 'monospace' }}>#{r.id?.slice(-6).toUpperCase()}</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {Object.entries(
+                                        rutasHistorialFiltradas
+                                            .slice()
+                                            .sort((a, b) => (new Date(b.fecha || 0).getTime()) - (new Date(a.fecha || 0).getTime()))
+                                            .reduce<Record<string, Ruta[]>>((acc, r) => {
+                                                const key = r.fecha ? new Date(r.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Sin fecha';
+                                                (acc[key] = acc[key] || []).push(r);
+                                                return acc;
+                                            }, {})
+                                    ).map(([dia, items]) => (
+                                        <div key={dia}>
+                                            <div style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700, marginBottom: '0.5rem', paddingLeft: '0.2rem' }}>
+                                                {dia} <span style={{ color: '#374151', fontWeight: 500 }}>· {items.length} {items.length === 1 ? 'ruta' : 'rutas'}</span>
                                             </div>
-                                            <p style={{ fontSize: '0.85rem', fontWeight: '700', margin: '0 0 0.3rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {r.origen} <span style={{ color: '#4b5563' }}>→</span> {r.destino}
-                                            </p>
-                                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                                <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>{r.distanciaEstimadaKm} km</span>
-                                                {r.fecha && <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>{new Date(r.fecha).toLocaleDateString('es-AR')}</span>}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                                {items.map(r => (
+                                                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '0.9rem 1rem', borderLeft: '3px solid rgba(59,246,59,0.5)' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                                                            <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: 800, background: 'rgba(59,246,59,0.1)', padding: '0.18rem 0.5rem', borderRadius: '99px' }}>✓ COMPLETADA</span>
+                                                            <span style={{ fontSize: '0.55rem', color: '#374151', fontFamily: 'monospace' }}>#{r.id?.slice(-6).toUpperCase()}</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', marginBottom: '0.35rem' }}>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.origen}</span>
+                                                            <span style={{ color: '#374151', fontSize: '0.8rem', flexShrink: 0 }}>→</span>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.destino}</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+                                                            <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: 600 }}>{r.distanciaEstimadaKm} km</span>
+                                                            {r.fecha && <span style={{ fontSize: '0.6rem', color: '#4b5563' }}>{new Date(r.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     ))}
@@ -634,26 +986,73 @@ export default function ConductorDashboard() {
 
                     {/* ─── TAB: CHAT ─── */}
                     {activeTab === 'chat' && (
-                        <div>
-                            <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '700' }}>
-                                Comunicación Directa
-                            </span>
-                            <div style={{ marginTop: '0.75rem' }}>
-                                <ChatRuta
-                                    rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
-                                    rol="CONDUCTOR"
-                                />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                            {/* Connection info */}
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                padding: '0.7rem 0.9rem', borderRadius: '14px',
+                                background: 'rgba(59,246,59,0.04)', border: '1px solid rgba(59,246,59,0.12)',
+                            }}>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#000', flexShrink: 0 }}>🏢</div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#e5e7eb' }}>Soporte Admin</div>
+                                    <div style={{ fontSize: '0.6rem', color: '#4b5563' }}>
+                                        {rutaActiva ? `Ruta #${rutaActiva.id?.slice(-6).toUpperCase()}` : 'Canal general'}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59,246,59,0.08)', padding: '0.2rem 0.5rem', borderRadius: '99px', border: '1px solid rgba(59,246,59,0.2)' }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#3bf63b', boxShadow: '0 0 6px #3bf63b' }} />
+                                    <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: '700' }}>ACTIVO</span>
+                                </div>
                             </div>
+                            {/* Chat component */}
+                            <ChatRuta
+                                rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
+                                rol="CONDUCTOR"
+                            />
                         </div>
                     )}
 
                     {/* ─── TAB: PERFIL ─── */}
                     {activeTab === 'perfil' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                            {/* Avatar */}
+                            {/* Hidden file input for profile photo */}
+                            <input
+                                ref={profileFileRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleProfilePhoto}
+                                style={{ display: 'none' }}
+                            />
+                            {/* Avatar with camera overlay */}
                             <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
-                                <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, rgba(59,246,59,0.15), rgba(34,197,94,0.08))', border: `3px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', fontWeight: '900', color: '#3bf63b', margin: '0 auto 0.75rem', transition: 'border-color 0.3s' }}>
-                                    {getInitials(driverUser?.nombre)}
+                                <div
+                                    onClick={() => profileFileRef.current?.click()}
+                                    style={{
+                                        width: '90px', height: '90px', borderRadius: '50%', margin: '0 auto 0.75rem',
+                                        position: 'relative', cursor: 'pointer',
+                                        background: profilePhoto ? 'transparent' : 'linear-gradient(135deg, rgba(59,246,59,0.15), rgba(34,197,94,0.08))',
+                                        border: `3px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`,
+                                        overflow: 'hidden', transition: 'border-color 0.3s, transform 0.2s',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}
+                                >
+                                    {profilePhoto ? (
+                                        <img src={profilePhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        <span style={{ fontSize: '2rem', fontWeight: '900', color: '#3bf63b' }}>
+                                            {getInitials(driverUser?.nombre)}
+                                        </span>
+                                    )}
+                                    {/* Camera overlay */}
+                                    <div style={{
+                                        position: 'absolute', bottom: 0, left: 0, right: 0,
+                                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                                        padding: '0.25rem 0', textAlign: 'center',
+                                        fontSize: '0.65rem', color: '#fff', fontWeight: '600',
+                                    }}>
+                                        📷
+                                    </div>
                                 </div>
                                 <h2 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 0.2rem', color: '#fff' }}>
                                     {driverUser?.nombre || 'Conductor'}
@@ -669,20 +1068,34 @@ export default function ConductorDashboard() {
                             {/* Stats */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                 {[
-                                    { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b' },
-                                    { label: 'KM Totales', value: `${rutasCompletadas.reduce((acc, r) => acc + r.distanciaEstimadaKm, 0).toFixed(0)}`, color: '#60a5fa' },
-                                    { label: 'En progreso', value: rutas.length, color: '#f59e0b' },
-                                    { label: 'Tiempo activo', value: elapsedSeconds > 0 ? formatElapsed(elapsedSeconds) : '—', color: '#a78bfa' },
+                                    { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b', icon: '✓' },
+                                    { label: 'KM Totales', value: `${rutasCompletadas.reduce((acc, r) => acc + r.distanciaEstimadaKm, 0).toFixed(0)}`, color: '#60a5fa', icon: '🛣' },
+                                    { label: 'En progreso', value: rutas.length, color: '#f59e0b', icon: '⚡' },
+                                    { label: 'Tiempo activo', value: elapsedSeconds > 0 ? formatElapsed(elapsedSeconds) : '—', color: '#a78bfa', icon: '⏱' },
                                 ].map((s, i) => (
-                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '1rem', textAlign: 'center' }}>
+                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '1rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+                                        <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '40px', height: '40px', background: `radial-gradient(circle, ${s.color}15 0%, transparent 70%)` }} />
+                                        <div style={{ fontSize: '0.8rem', marginBottom: '0.4rem', opacity: 0.5 }}>{s.icon}</div>
                                         <div style={{ fontSize: '1.4rem', fontWeight: '900', color: s.color, lineHeight: 1.1 }}>{s.value}</div>
                                         <div style={{ fontSize: '0.58rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '0.3rem' }}>{s.label}</div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Acerca de */}
-                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '1rem' }}>
+                            {/* Quick Actions */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                                <button
+                                    onClick={() => profileFileRef.current?.click()}
+                                    style={{ padding: '0.9rem', background: 'rgba(96,165,250,0.07)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: '14px', color: '#60a5fa', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                >📷 Cambiar Foto</button>
+                                <button
+                                    onClick={() => setActiveTab('chat')}
+                                    style={{ padding: '0.9rem', background: 'rgba(59,246,59,0.07)', border: '1px solid rgba(59,246,59,0.2)', borderRadius: '14px', color: '#3bf63b', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                >💬 Abrir Chat</button>
+                            </div>
+
+                            {/* Info */}
+                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1rem', overflow: 'hidden' }}>
                                 <h3 style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.75rem', fontWeight: '700' }}>Información</h3>
                                 {[
                                     { label: 'Nombre', value: driverUser?.nombre || '—' },
@@ -690,76 +1103,152 @@ export default function ConductorDashboard() {
                                     { label: 'Rol', value: driverUser?.rol || 'CONDUCTOR' },
                                     { label: 'ID', value: `#${driverUser?.id?.slice(-8).toUpperCase() || '—'}` },
                                 ].map((row, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
                                         <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{row.label}</span>
                                         <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#e5e7eb', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{row.value}</span>
                                     </div>
                                 ))}
                             </div>
 
+                            {/* Configuración */}
+                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '0.4rem', overflow: 'hidden' }}>
+                                {[
+                                    {
+                                        icon: '🔒', label: 'Política de Privacidad',
+                                        sub: 'Cómo tratamos tus datos',
+                                        action: () => window.open('/privacy', '_blank'),
+                                    },
+                                    {
+                                        icon: '✉️', label: 'Contactar soporte',
+                                        sub: 'Reporta un problema o sugerencia',
+                                        action: () => {
+                                            const subject = encodeURIComponent('CarCare Driver — Soporte');
+                                            const body = encodeURIComponent(`Hola,\n\nID Conductor: ${driverUser?.id || '—'}\nEmail: ${driverUser?.email || '—'}\n\n[Describe tu consulta]\n`);
+                                            window.location.href = `mailto:elenarodriguez0097@gmail.com?subject=${subject}&body=${body}`;
+                                        },
+                                    },
+                                    {
+                                        icon: '🔄', label: 'Recargar datos',
+                                        sub: 'Forzar sincronización con la central',
+                                        action: () => { setLoading(true); cargarRutas(); toast.success('Sincronizando...'); },
+                                    },
+                                ].map((row, i, arr) => (
+                                    <button
+                                        key={i}
+                                        onClick={row.action}
+                                        style={{
+                                            width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                            padding: '0.85rem 0.7rem', background: 'transparent', border: 'none', cursor: 'pointer',
+                                            borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                                            textAlign: 'left',
+                                        }}
+                                    >
+                                        <span style={{ fontSize: '1.1rem', width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{row.icon}</span>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e5e7eb' }}>{row.label}</div>
+                                            <div style={{ fontSize: '0.62rem', color: '#6b7280', marginTop: '1px' }}>{row.sub}</div>
+                                        </div>
+                                        <span style={{ color: '#4b5563', fontSize: '0.85rem', flexShrink: 0 }}>›</span>
+                                    </button>
+                                ))}
+                            </div>
+
                             {/* Logout */}
                             <button
                                 onClick={() => {
+                                    if (rutaActiva) {
+                                        if (!confirm('Tenés una ruta activa. ¿Cerrar sesión igual?')) return;
+                                        stopBrowserGPS();
+                                        if (typeof window !== 'undefined' && (window as any).AndroidTracker) (window as any).AndroidTracker.stopTracking();
+                                    }
                                     localStorage.removeItem("user");
                                     localStorage.removeItem("token");
+                                    localStorage.removeItem("profilePhoto");
                                     router.push("/conductor/login");
                                 }}
                                 style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', letterSpacing: '0.3px' }}
                             >{t.auth.logout}</button>
+
+                            {/* Footer con versión */}
+                            <div style={{ textAlign: 'center', padding: '0.5rem 0 1rem', color: '#374151', fontSize: '0.6rem' }}>
+                                <p style={{ margin: '0 0 0.2rem', letterSpacing: '0.5px', fontWeight: 700 }}>./CarCare Driver</p>
+                                <p style={{ margin: 0 }}>v1.0.0 · {new Date().getFullYear()}</p>
+                            </div>
                         </div>
                     )}
                 </div>
 
                 {/* BOTTOM NAVIGATION */}
                 <nav style={{
-                    position: 'fixed',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    background: 'rgba(6,6,12,0.96)',
-                    backdropFilter: 'blur(24px)',
+                    position: 'fixed', bottom: 0, left: 0, right: 0,
+                    background: 'rgba(6,6,12,0.97)', backdropFilter: 'blur(24px)',
                     borderTop: '1px solid rgba(255,255,255,0.05)',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    padding: '0.4rem 0 0.6rem',
+                    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+                    padding: '0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom, 0px))',
                     zIndex: 50
                 }}>
                     {[
-                        { id: 'inicio', label: 'Inicio', icon: (active: boolean) => (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? '#3bf63b' : 'none'} stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                            </svg>
+                        { id: 'inicio', label: 'Inicio', icon: (a: boolean) => (
+                            <svg width="21" height="21" viewBox="0 0 24 24" fill={a ? '#3bf63b' : 'none'} stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                         )},
-                        { id: 'historial', label: 'Historial', icon: (active: boolean) => (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-                            </svg>
+                        { id: 'historial', label: 'Historial', icon: (a: boolean) => (
+                            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                         )},
-                        { id: 'chat', label: 'Chat', icon: (active: boolean) => (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'rgba(59,246,59,0.15)' : 'none'} stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                            </svg>
+                        { id: 'chat', label: 'Chat', icon: (a: boolean) => (
+                            <svg width="21" height="21" viewBox="0 0 24 24" fill={a ? 'rgba(59,246,59,0.15)' : 'none'} stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                         )},
-                        { id: 'perfil', label: 'Perfil', icon: (active: boolean) => (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                            </svg>
+                        { id: 'perfil', label: 'Perfil', icon: (a: boolean) => (
+                            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         )},
-                    ].map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', padding: '0.4rem', background: 'none', border: 'none', cursor: 'pointer', color: activeTab === tab.id ? '#3bf63b' : '#4b5563', transition: 'color 0.2s', WebkitTapHighlightColor: 'transparent' }}
-                        >
-                            {tab.icon(activeTab === tab.id)}
-                            <span style={{ fontSize: '0.55rem', fontWeight: activeTab === tab.id ? '800' : '500', letterSpacing: '0.3px', transition: 'color 0.2s' }}>
-                                {tab.label}
-                            </span>
-                            {activeTab === tab.id && (
-                                <span style={{ width: '18px', height: '2px', background: '#3bf63b', borderRadius: '1px', marginTop: '1px' }} />
-                            )}
-                        </button>
-                    ))}
+                    ].map(tab => {
+                        const isActive = activeTab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as any)}
+                                style={{
+                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
+                                    padding: '0.35rem 0', background: 'none', border: 'none', cursor: 'pointer',
+                                    color: isActive ? '#3bf63b' : '#4b5563',
+                                    transition: 'all 0.2s ease',
+                                    WebkitTapHighlightColor: 'transparent',
+                                    position: 'relative',
+                                }}
+                            >
+                                <div style={{
+                                    padding: '0.3rem 0.9rem', borderRadius: '12px',
+                                    background: isActive ? 'rgba(59,246,59,0.08)' : 'transparent',
+                                    transition: 'background 0.25s ease',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    position: 'relative',
+                                }}>
+                                    {tab.icon(isActive)}
+                                    {tab.id === 'chat' && unreadMessages > 0 && !isActive && (
+                                        <span style={{
+                                            position: 'absolute', top: '-2px', right: '4px',
+                                            minWidth: '16px', height: '16px',
+                                            background: '#ef4444',
+                                            borderRadius: '99px',
+                                            fontSize: '0.5rem', fontWeight: 900, color: '#fff',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            padding: '0 4px',
+                                            border: '2px solid rgba(6,6,12,0.97)',
+                                            boxShadow: '0 0 8px rgba(239,68,68,0.5)',
+                                        }}>
+                                            {unreadMessages > 9 ? '9+' : unreadMessages}
+                                        </span>
+                                    )}
+                                </div>
+                                <span style={{
+                                    fontSize: '0.52rem', fontWeight: isActive ? '800' : '500',
+                                    letterSpacing: '0.2px', transition: 'all 0.2s',
+                                    color: isActive ? '#3bf63b' : '#6b7280',
+                                }}>
+                                    {tab.label}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </nav>
             </main>
 
@@ -776,6 +1265,8 @@ export default function ConductorDashboard() {
                     0%, 100% { transform: scale(0.95); opacity: 1; }
                     50% { transform: scale(1.1); opacity: 0.7; }
                 }
+                * { -webkit-tap-highlight-color: transparent; }
+                input, select { font-family: inherit; }
             `}</style>
         </BackgroundMeteors>
     );

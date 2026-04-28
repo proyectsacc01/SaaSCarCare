@@ -76,6 +76,16 @@ interface Conductor {
   email: string;
 }
 
+interface MantenimientoItem {
+  id: string;
+  vehiculoId: string;
+  tipo: string;
+  descripcion?: string;
+  fecha: string;
+  costo?: number;
+  kilometrajeRealizado?: number;
+}
+
 interface VehiculoKpi {
   vehiculoId: string;
   vehiculo: string;
@@ -131,7 +141,9 @@ const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"
   }
 });
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
+
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -142,8 +154,7 @@ export default function Dashboard() {
   const [rutas, setRutas] = useState<Ruta[]>([]);
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
-  const [flotaKpis, setFlotaKpis] = useState<FlotaKpis | null>(null);
-  const [loadingKpis, setLoadingKpis] = useState(false);
+  const [mantenimientos, setMantenimientos] = useState<MantenimientoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
 
@@ -343,11 +354,12 @@ export default function Dashboard() {
   const cargarDatos = useCallback(async () => {
     setLoading(true);
     try {
-      const [resVehiculos, resRutas, resRepostajes, resConductores] = await Promise.all([
+      const [resVehiculos, resRutas, resRepostajes, resConductores, resMantenimientos] = await Promise.all([
         fetch(`${API_URL}/api/vehiculos`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/rutas`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/repostajes`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/conductores`, { headers: getAuthHeaders() })
+        fetch(`${API_URL}/api/conductores`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/mantenimientos`, { headers: getAuthHeaders() })
       ]);
 
       if (resVehiculos.ok) {
@@ -373,23 +385,133 @@ export default function Dashboard() {
       } else if (resConductores.status === 403) {
         setConductores([]);
       }
+
+      if (resMantenimientos.ok) {
+        const dataM = await resMantenimientos.json();
+        setMantenimientos(dataM);
+      }
     } catch (err) {
       console.error("Error conectando con el Backend:", err);
     } finally {
       setLoading(false);
     }
-
-    // Cargar KPIs de costes en background (no bloquea el render principal)
-    try {
-      const resKpis = await fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() });
-      if (resKpis.ok) {
-        const dataKpis = await resKpis.json();
-        setFlotaKpis(dataKpis);
-      }
-    } catch {
-      // silencioso — no crítico para la vista principal
-    }
   }, [getAuthHeaders]);
+
+  // ═══ COSTES & ROI — KPIs calculados en el cliente (instantáneo, igual que Estadísticas) ═══
+  const flotaKpis = useMemo<FlotaKpis | null>(() => {
+    if (vehiculos.length === 0) return null;
+
+    const ahora = new Date();
+    // Generar los últimos 6 meses como {year, month}
+    const ultimos6Meses: { year: number; month: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1);
+      ultimos6Meses.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+
+    // Helper: extraer year+month de una fecha string
+    const getYM = (fecha: string | undefined | null) => {
+      if (!fecha) return null;
+      try {
+        const d = new Date(fecha);
+        if (isNaN(d.getTime())) return null;
+        return { year: d.getFullYear(), month: d.getMonth() + 1 };
+      } catch { return null; }
+    };
+
+    const matchYM = (ym: { year: number; month: number } | null, target: { year: number; month: number }) =>
+      ym !== null && ym.year === target.year && ym.month === target.month;
+
+    // ── KPIs por vehículo ──
+    const vehiculosKpis: VehiculoKpi[] = vehiculos.map(v => {
+      let totalComb = 0, totalMant = 0, totalLitros = 0, totalKm = 0;
+
+      for (const mes of ultimos6Meses) {
+        // Combustible
+        for (const r of repostajes) {
+          if (r.vehiculoId !== v.id) continue;
+          if (!matchYM(getYM(r.fecha), mes)) continue;
+          totalComb += r.costeTotal || 0;
+          totalLitros += r.litros || 0;
+        }
+        // Mantenimiento
+        for (const m of mantenimientos) {
+          if (m.vehiculoId !== v.id) continue;
+          if (!matchYM(getYM(m.fecha), mes)) continue;
+          totalMant += m.costo || 0;
+        }
+        // Km (rutas completadas)
+        for (const ruta of rutas) {
+          if (ruta.vehiculoId !== v.id) continue;
+          if (ruta.estado !== 'COMPLETADA') continue;
+          if (!matchYM(getYM(ruta.fecha), mes)) continue;
+          totalKm += ruta.distanciaEstimadaKm || 0;
+        }
+      }
+
+      const costeTotal = totalComb + totalMant;
+      return {
+        vehiculoId: v.id,
+        vehiculo: `${v.marca} ${v.modelo}`,
+        matricula: v.matricula,
+        activo: v.activo,
+        costeTotalSemestre: Math.round(costeTotal * 100) / 100,
+        costeCombustible: Math.round(totalComb * 100) / 100,
+        costeMantenimiento: Math.round(totalMant * 100) / 100,
+        costePorKm: totalKm > 0 ? Math.round((costeTotal / totalKm) * 100) / 100 : 0,
+        litrosPor100Km: totalKm > 0 ? Math.round((totalLitros / totalKm) * 100 * 100) / 100 : 0,
+        kmTotales: Math.round(totalKm * 100) / 100,
+        litrosTotales: Math.round(totalLitros * 100) / 100,
+      };
+    });
+
+    // Ordenar por coste total descendente
+    vehiculosKpis.sort((a, b) => b.costeTotalSemestre - a.costeTotalSemestre);
+
+    // ── Tendencia mensual global ──
+    const tendenciaMensual: TendenciaMes[] = ultimos6Meses.map(mes => {
+      let costeComb = 0, costeMant = 0, km = 0, litros = 0;
+
+      for (const r of repostajes) {
+        if (!matchYM(getYM(r.fecha), mes)) continue;
+        costeComb += r.costeTotal || 0;
+        litros += r.litros || 0;
+      }
+      for (const m of mantenimientos) {
+        if (!matchYM(getYM(m.fecha), mes)) continue;
+        costeMant += m.costo || 0;
+      }
+      for (const ruta of rutas) {
+        if (ruta.estado !== 'COMPLETADA') continue;
+        if (!matchYM(getYM(ruta.fecha), mes)) continue;
+        km += ruta.distanciaEstimadaKm || 0;
+      }
+
+      const costeTotal = costeComb + costeMant;
+      return {
+        mes: MESES_CORTOS[mes.month - 1],
+        periodo: `${mes.year}-${String(mes.month).padStart(2, '0')}`,
+        costeCombustible: Math.round(costeComb * 100) / 100,
+        costeMantenimiento: Math.round(costeMant * 100) / 100,
+        costeTotal: Math.round(costeTotal * 100) / 100,
+        kmRecorridos: Math.round(km * 100) / 100,
+        litros: Math.round(litros * 100) / 100,
+        costePorKm: km > 0 ? Math.round((costeTotal / km) * 100) / 100 : 0,
+      };
+    });
+
+    const totalCosteFlota = vehiculosKpis.reduce((a, k) => a + k.costeTotalSemestre, 0);
+    const totalKmFlota = vehiculosKpis.reduce((a, k) => a + k.kmTotales, 0);
+
+    return {
+      totalVehiculos: vehiculos.length,
+      costeTotalFlota: Math.round(totalCosteFlota * 100) / 100,
+      kmTotalesFlota: Math.round(totalKmFlota * 100) / 100,
+      costePorKmFlota: totalKmFlota > 0 ? Math.round((totalCosteFlota / totalKmFlota) * 100) / 100 : 0,
+      vehiculos: vehiculosKpis,
+      tendenciaMensual,
+    };
+  }, [vehiculos, repostajes, rutas, mantenimientos]);
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -615,17 +737,7 @@ export default function Dashboard() {
             </button>
             <button
               className={`${styles.navButton} ${activeTab === 'costes' ? styles.activeTab : ''}`}
-              onClick={() => {
-                setActiveTab('costes');
-                if (!flotaKpis && !loadingKpis) {
-                  setLoadingKpis(true);
-                  fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() })
-                    .then(res => res.ok ? res.json() : Promise.reject('Error'))
-                    .then(data => setFlotaKpis(data))
-                    .catch(() => toast.error('Error cargando KPIs de costes'))
-                    .finally(() => setLoadingKpis(false));
-                }
-              }}
+              onClick={() => setActiveTab('costes')}
             >
               {t.nav.costs}
             </button>
@@ -1284,14 +1396,7 @@ export default function Dashboard() {
           {/* ═══════════════════ TAB: COSTES & ROI ═══════════════════ */}
           {activeTab === 'costes' && (
             <div className={styles.rutasContainer} style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
-              {loadingKpis && (
-                <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
-                  <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>{t.dashboard.calcCosts}</div>
-                  <div style={{ width: '40px', height: '40px', border: '3px solid rgba(59,246,59,0.2)', borderTop: '3px solid #3bf63b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }} />
-                </div>
-              )}
-
-              {flotaKpis && !loadingKpis && (
+              {flotaKpis ? (
                 <>
                   {/* ── KPI Cards globales ── */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
@@ -1380,14 +1485,7 @@ export default function Dashboard() {
                         <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.15rem' }}>{t.dashboard.costRankDesc}</p>
                       </div>
                       <button
-                        onClick={() => {
-                          setLoadingKpis(true);
-                          fetch(`${API_URL}/api/reportes/flota/kpis`, { headers: getAuthHeaders() })
-                            .then(res => res.ok ? res.json() : Promise.reject('Error'))
-                            .then(data => { setFlotaKpis(data); toast.success(t.dashboard.costsUpdated || 'Costes actualizados'); })
-                            .catch(() => toast.error(t.dashboard.costsError || 'Error recargando costes'))
-                            .finally(() => setLoadingKpis(false));
-                        }}
+                        onClick={() => { cargarDatos(); toast.success(t.dashboard.costsUpdated || 'Datos actualizados'); }}
                         className={styles.submitButton}
                         style={{ width: 'auto', padding: '0.5rem 1.2rem', fontSize: '0.85rem' }}
                       >
@@ -1549,11 +1647,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </>
-              )}
-
-              {!flotaKpis && !loadingKpis && (
+              ) : (
                 <div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
-                  <p>{t.dashboard.clickTabCosts}</p>
+                  <p>{t.dashboard.noCostData || 'No hay datos de costes disponibles'}</p>
                 </div>
               )}
             </div>

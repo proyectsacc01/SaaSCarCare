@@ -9,7 +9,7 @@ import styles from "./login.module.css";
 import CloudflareTurnstile from "@/componentes/CloudflareTurnstile";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production-54f9.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 
 const EyeIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

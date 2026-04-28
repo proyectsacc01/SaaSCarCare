@@ -31,3 +31,11 @@ Thumbs.db
 
 # Railway env vars reference (contains real values)
 RAILWAY_ENV.md
+
+# Android signing — NUNCA subir keystores ni passwords
+android/keystore.properties
+android/keystore.jks
+android/app/keystore.jks
+android/app/release.keystore
+*.jks
+*.keystore

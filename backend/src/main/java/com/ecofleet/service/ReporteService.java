@@ -150,7 +150,6 @@ public class ReporteService {
         Vehiculo vehiculo = vehiculoRepository.findById(vehiculoId)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado"));
 
-        // Verificar que el vehículo pertenece a la empresa
         if (!empresaId.equals(vehiculo.getUsuarioId())) {
             throw new IllegalArgumentException("Vehículo no pertenece a esta empresa");
         }
@@ -159,13 +158,16 @@ public class ReporteService {
                 ? YearMonth.parse(periodoStr)
                 : YearMonth.now();
 
-        // Calcular costes para los últimos 6 meses hasta el periodo dado
+        // Una sola query por colección — luego procesamos en memoria
+        List<String> ids = List.of(vehiculoId);
+        DatosFlota datos = cargarDatosFlota(ids);
+
         List<Map<String, Object>> tendenciaMensual = new ArrayList<>();
         double totalCombustible = 0, totalMantenimiento = 0, totalLitros = 0, totalKm = 0;
 
         for (int i = 5; i >= 0; i--) {
             YearMonth mes = periodo.minusMonths(i);
-            Map<String, Object> datosMes = calcularCostesMesVehiculo(vehiculoId, mes);
+            Map<String, Object> datosMes = calcularCostesMesVehiculoEnMemoria(vehiculoId, mes, datos);
             tendenciaMensual.add(datosMes);
 
             totalCombustible += (double) datosMes.get("costeCombustible");
@@ -174,9 +176,8 @@ public class ReporteService {
             totalKm += (double) datosMes.get("kmRecorridos");
         }
 
-        // Estimación de amortización: valor medio vehículo comercial / 120 meses (10 años)
-        double amortizacionMensual = 2500.0; // €30,000 / 120 meses ≈ €250/mes, x6 = €1,500
-        double totalAmortizacion = amortizacionMensual; // 6 meses
+        double amortizacionMensual = 2500.0;
+        double totalAmortizacion = amortizacionMensual;
 
         double costeTotal = totalCombustible + totalMantenimiento + totalAmortizacion;
         double costePorKm = totalKm > 0 ? costeTotal / totalKm : 0;
@@ -203,32 +204,49 @@ public class ReporteService {
     /**
      * Calcula KPIs de la flota completa: coste/km por vehículo, tendencia mensual,
      * ranking de más costosos.
+     *
+     * Optimización: 4 queries totales a MongoDB (antes eran 12 × N × 4 ≈ 48N).
+     * Toda la agregación posterior se hace en memoria.
      */
     public Map<String, Object> calcularFlotaKpis(String empresaId) {
+        long t0 = System.currentTimeMillis();
         List<Vehiculo> vehiculos = vehiculoRepository.findByUsuarioId(empresaId);
         YearMonth ahora = YearMonth.now();
 
-        // ── KPIs por vehículo ──
+        if (vehiculos.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("totalVehiculos", 0);
+            empty.put("costeTotalFlota", 0.0);
+            empty.put("kmTotalesFlota", 0.0);
+            empty.put("costePorKmFlota", 0.0);
+            empty.put("vehiculos", new ArrayList<>());
+            empty.put("tendenciaMensual", new ArrayList<>());
+            return empty;
+        }
+
+        List<String> ids = vehiculos.stream().map(Vehiculo::getId).collect(Collectors.toList());
+        DatosFlota datos = cargarDatosFlota(ids);
+
+        // ── KPIs por vehículo (todo en memoria) ──
         List<Map<String, Object>> vehiculosKpis = new ArrayList<>();
         for (Vehiculo v : vehiculos) {
-            Map<String, Object> kpi = calcularKpiVehiculo(v, ahora);
+            Map<String, Object> kpi = calcularKpiVehiculoEnMemoria(v, ahora, datos);
             vehiculosKpis.add(kpi);
         }
 
-        // Ordenar por coste total DESC (ranking de más costosos)
         vehiculosKpis.sort((a, b) -> Double.compare(
                 (double) b.get("costeTotalSemestre"),
                 (double) a.get("costeTotalSemestre")
         ));
 
-        // ── Tendencia mensual global (últimos 6 meses) ──
+        // ── Tendencia mensual global ──
         List<Map<String, Object>> tendenciaGlobal = new ArrayList<>();
         for (int i = 5; i >= 0; i--) {
             YearMonth mes = ahora.minusMonths(i);
             double costeCombMes = 0, costeMantMes = 0, kmMes = 0, litrosMes = 0;
 
             for (Vehiculo v : vehiculos) {
-                Map<String, Object> datosMes = calcularCostesMesVehiculo(v.getId(), mes);
+                Map<String, Object> datosMes = calcularCostesMesVehiculoEnMemoria(v.getId(), mes, datos);
                 costeCombMes += (double) datosMes.get("costeCombustible");
                 costeMantMes += (double) datosMes.get("costeMantenimiento");
                 kmMes += (double) datosMes.get("kmRecorridos");
@@ -250,7 +268,6 @@ public class ReporteService {
             tendenciaGlobal.add(datoMes);
         }
 
-        // ── Totales globales ──
         double totalCosteFlota = vehiculosKpis.stream()
                 .mapToDouble(k -> (double) k.get("costeTotalSemestre")).sum();
         double totalKmFlota = vehiculosKpis.stream()
@@ -264,18 +281,39 @@ public class ReporteService {
         result.put("vehiculos", vehiculosKpis);
         result.put("tendenciaMensual", tendenciaGlobal);
 
+        log.info("calcularFlotaKpis empresa={} vehiculos={} en {}ms", empresaId, vehiculos.size(), System.currentTimeMillis() - t0);
         return result;
     }
 
-    // ── Helpers para Feature 2 ─────────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private Map<String, Object> calcularKpiVehiculo(Vehiculo v, YearMonth ahora) {
+    /**
+     * Carga TODA la información de costes (combustible, mantenimientos, rutas) para un set
+     * de vehículos en 4 queries totales y la indexa por vehiculoId para acceso O(1) en memoria.
+     */
+    private DatosFlota cargarDatosFlota(List<String> vehiculoIds) {
+        Map<String, List<Repostaje>> repostajesPorVeh = repostajeRepository.findByVehiculoIdIn(vehiculoIds)
+                .stream().collect(Collectors.groupingBy(Repostaje::getVehiculoId));
+
+        Map<String, List<MantenimientoPreventivo>> preventivosPorVeh = preventivosRepo.findByVehiculoIdIn(vehiculoIds)
+                .stream().collect(Collectors.groupingBy(MantenimientoPreventivo::getVehiculoId));
+
+        Map<String, List<MantenimientoCorrectivo>> correctivosPorVeh = correctivosRepo.findByVehiculoIdIn(vehiculoIds)
+                .stream().collect(Collectors.groupingBy(MantenimientoCorrectivo::getVehiculoId));
+
+        Map<String, List<Ruta>> rutasPorVeh = rutaRepository.findByVehiculoIdIn(vehiculoIds)
+                .stream().collect(Collectors.groupingBy(Ruta::getVehiculoId));
+
+        return new DatosFlota(repostajesPorVeh, preventivosPorVeh, correctivosPorVeh, rutasPorVeh);
+    }
+
+    private Map<String, Object> calcularKpiVehiculoEnMemoria(Vehiculo v, YearMonth ahora, DatosFlota datos) {
         String vehiculoId = v.getId();
         double totalComb = 0, totalMant = 0, totalLitros = 0, totalKm = 0;
 
         for (int i = 5; i >= 0; i--) {
             YearMonth mes = ahora.minusMonths(i);
-            Map<String, Object> datosMes = calcularCostesMesVehiculo(vehiculoId, mes);
+            Map<String, Object> datosMes = calcularCostesMesVehiculoEnMemoria(vehiculoId, mes, datos);
             totalComb += (double) datosMes.get("costeCombustible");
             totalMant += (double) datosMes.get("costeMantenimiento");
             totalLitros += (double) datosMes.get("litros");
@@ -300,35 +338,32 @@ public class ReporteService {
         return kpi;
     }
 
-    private Map<String, Object> calcularCostesMesVehiculo(String vehiculoId, YearMonth mes) {
+    private Map<String, Object> calcularCostesMesVehiculoEnMemoria(String vehiculoId, YearMonth mes, DatosFlota datos) {
         int year = mes.getYear();
         int month = mes.getMonthValue();
 
-        // Combustible
         double costeComb = 0, litros = 0;
-        for (Repostaje r : repostajeRepository.findByVehiculoId(vehiculoId)) {
+        for (Repostaje r : datos.repostajesPorVeh.getOrDefault(vehiculoId, Collections.emptyList())) {
             if (r.getFecha() != null && r.getFecha().getYear() == year && r.getFecha().getMonthValue() == month) {
                 costeComb += r.getCosteTotal() != null ? r.getCosteTotal() : 0;
                 litros += r.getLitros() != null ? r.getLitros() : 0;
             }
         }
 
-        // Mantenimiento
         double costeMant = 0;
-        for (MantenimientoPreventivo mp : preventivosRepo.findByVehiculoIdOrderByFechaDesc(vehiculoId)) {
+        for (MantenimientoPreventivo mp : datos.preventivosPorVeh.getOrDefault(vehiculoId, Collections.emptyList())) {
             if (mp.getFecha() != null && mp.getFecha().getYear() == year && mp.getFecha().getMonthValue() == month) {
                 costeMant += mp.getCosto() != null ? mp.getCosto() : 0;
             }
         }
-        for (MantenimientoCorrectivo mc : correctivosRepo.findByVehiculoIdOrderByFechaDesc(vehiculoId)) {
+        for (MantenimientoCorrectivo mc : datos.correctivosPorVeh.getOrDefault(vehiculoId, Collections.emptyList())) {
             if (mc.getFecha() != null && mc.getFecha().getYear() == year && mc.getFecha().getMonthValue() == month) {
                 costeMant += mc.getCosto() != null ? mc.getCosto() : 0;
             }
         }
 
-        // Km recorridos (rutas completadas del vehículo en ese mes)
         double kmMes = 0;
-        for (Ruta ruta : rutaRepository.findByVehiculoId(vehiculoId)) {
+        for (Ruta ruta : datos.rutasPorVeh.getOrDefault(vehiculoId, Collections.emptyList())) {
             if ("COMPLETADA".equals(normalizarEstado(ruta.getEstado()))
                     && perteneceAlPeriodo(ruta.getFecha(), mes)) {
                 kmMes += ruta.getDistanciaEstimadaKm() != null ? ruta.getDistanciaEstimadaKm() : 0;
@@ -349,6 +384,21 @@ public class ReporteService {
         data.put("costePorKm", kmMes > 0 ? round2((costeComb + costeMant) / kmMes) : 0);
 
         return data;
+    }
+
+    private static final class DatosFlota {
+        final Map<String, List<Repostaje>> repostajesPorVeh;
+        final Map<String, List<MantenimientoPreventivo>> preventivosPorVeh;
+        final Map<String, List<MantenimientoCorrectivo>> correctivosPorVeh;
+        final Map<String, List<Ruta>> rutasPorVeh;
+
+        DatosFlota(Map<String, List<Repostaje>> r, Map<String, List<MantenimientoPreventivo>> p,
+                   Map<String, List<MantenimientoCorrectivo>> c, Map<String, List<Ruta>> ru) {
+            this.repostajesPorVeh = r;
+            this.preventivosPorVeh = p;
+            this.correctivosPorVeh = c;
+            this.rutasPorVeh = ru;
+        }
     }
 
     private double round2(double value) {

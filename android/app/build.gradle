@@ -2,24 +2,58 @@ plugins {
     id 'com.android.application'
 }
 
+// ── Keystore properties (no se commitean — ver android/keystore.properties.example) ──
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace 'com.ecofleet.app'
+    namespace 'com.carcare.app'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.ecofleet.app"
+        applicationId "com.carcare.app"
         minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        // URL del frontend según build type. Sobrescribilas si desplegás en otro dominio.
+        buildConfigField "String", "WEB_URL", "\"https://saascarcare.up.railway.app\""
+        buildConfigField "String", "API_URL", "\"https://saascarcare-production.up.railway.app\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'] ?: 'keystore.jks')
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            // Para emulador Android Studio: 10.0.2.2 es localhost del host
+            buildConfigField "String", "WEB_URL", "\"http://10.0.2.2:3000\""
+            buildConfigField "String", "API_URL", "\"http://10.0.2.2:8080\""
+        }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8

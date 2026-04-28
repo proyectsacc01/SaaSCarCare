@@ -8,7 +8,7 @@ import Link from "next/link";
 import styles from "../../login/login.module.css";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saas-carcare-production.up.railway.app";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 
 const CarIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -94,6 +94,7 @@ function DriverLoginInner() {
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
                 if (data.token) localStorage.setItem("token", data.token);
+                if (data.picture) localStorage.setItem("profilePhoto", data.picture);
                 toast.success(`¡Bienvenido, ${data.nombre}!`);
                 window.dispatchEvent(new Event("storage"));
                 router.push("/conductor");
