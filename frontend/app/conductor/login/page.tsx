@@ -284,15 +284,19 @@ function DriverLoginInner() {
                     </div>
 
                     {/* Google OAuth */}
-                    <GoogleButton
-                        onSuccess={(t) => handleGoogleSuccess(t)}
-                        disabled={loading}
-                        label={isRegistering ? "Registrarse con Google" : "Continuar con Google"}
-                    />
+                    {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+                        <>
+                            <GoogleButton
+                                onSuccess={(t) => handleGoogleSuccess(t)}
+                                disabled={loading}
+                                label={isRegistering ? "Registrarse con Google" : "Continuar con Google"}
+                            />
 
-                    <div className={styles.oauthDivider}>
-                        <span>o continuar con email</span>
-                    </div>
+                            <div className={styles.oauthDivider}>
+                                <span>o continuar con email</span>
+                            </div>
+                        </>
+                    )}
 
                     {!isRegistering ? (
                         <form onSubmit={handleLogin} className={styles.form}>
@@ -394,9 +398,14 @@ export default function DriverLoginPage() {
   const t = useTranslation();
 
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-    return (
-        <GoogleOAuthProvider clientId={googleClientId}>
-            <DriverLoginInner />
-        </GoogleOAuthProvider>
-    );
+
+    if (googleClientId) {
+        return (
+            <GoogleOAuthProvider clientId={googleClientId}>
+                <DriverLoginInner />
+            </GoogleOAuthProvider>
+        );
+    }
+
+    return <DriverLoginInner />;
 }

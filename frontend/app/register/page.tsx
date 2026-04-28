@@ -160,14 +160,110 @@ export default function RegisterPage() {
         } catch (error) {
             toast.error("Error de conexión");
         } finally {
+
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [passwordStrength, setPasswordStrength] = useState(0);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+    const [formData, setFormData] = useState({
+        nombre: "",
+        nombreEmpresa: "",
+        email: "",
+        password: ""
+    });
+
+    const handleTurnstileVerify = useCallback((token: string) => {
+        setTurnstileToken(token);
+    }, []);
+
+    const handleTurnstileExpire = useCallback(() => {
+        setTurnstileToken(null);
+    }, []);
+
+    const calculatePasswordStrength = (password: string) => {
+        let strength = 0;
+        if (password.length >= 6) strength += 20;
+        if (password.length >= 10) strength += 20;
+        if (/[a-z]/.test(password)) strength += 20;
+        if (/[A-Z]/.test(password)) strength += 20;
+        if (/[0-9]/.test(password)) strength += 20;
+        return strength;
+    };
+
+    const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const password = e.target.value;
+        setFormData({ ...formData, password });
+        setPasswordStrength(calculatePasswordStrength(password));
+    };
+
+    const getPasswordStrengthColor = () => {
+        if (passwordStrength <= 40) return '#ef4444';
+        if (passwordStrength <= 60) return '#f59e0b';
+        if (passwordStrength <= 80) return '#eab308';
+        return '#22c55e';
+    };
+
+    const handleGoogleSuccess = async (tokenResponse: { access_token: string }) => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/auth/google`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ accessToken: tokenResponse.access_token })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem("user", JSON.stringify(data));
+                toast.success("¡Cuenta creada con Google!");
+                window.dispatchEvent(new Event("storage"));
+                router.push("/dashboard");
+            } else {
+                toast.error(data.error || "Error al registrarse con Google");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error de conexión con el servidor");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+
+        if (formData.password.length < 6) {
+            toast.error("La contraseña debe tener al menos 6 caracteres");
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/api/auth/register`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formData)
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                toast.success("¡Cuenta creada! Por favor inicia sesión.");
+                router.push("/login");
+            } else {
+                toast.error(data.error || "Error al registrarse");
+            }
+        } catch (error) {
+            toast.error("Error de conexión");
+        } finally {
             setLoading(false);
         }
     };
 
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
-    return (
-        <GoogleOAuthProvider clientId={googleClientId}>
+    const content = (
         <main className={styles.mainContainer}>
             {/* Visual Panel (Left) */}
             <div className={styles.visualPanel}>
@@ -303,14 +399,18 @@ export default function RegisterPage() {
                         </button>
                     </form>
 
-                    <div className={styles.oauthDivider}>
-                        <span>o continuar con</span>
-                    </div>
+                    {googleClientId && (
+                        <>
+                            <div className={styles.oauthDivider}>
+                                <span>o continuar con</span>
+                            </div>
 
-                    <GoogleButton
-                        onSuccess={handleGoogleSuccess}
-                        disabled={loading}
-                    />
+                            <GoogleButton
+                                onSuccess={handleGoogleSuccess}
+                                disabled={loading}
+                            />
+                        </>
+                    )}
 
                     <div className={styles.footerLink}>
                         <Link href="/">
@@ -320,6 +420,11 @@ export default function RegisterPage() {
                 </div>
             </div>
         </main>
-        </GoogleOAuthProvider>
     );
+
+    if (googleClientId) {
+        return <GoogleOAuthProvider clientId={googleClientId}>{content}</GoogleOAuthProvider>;
+    }
+
+    return content;
 }

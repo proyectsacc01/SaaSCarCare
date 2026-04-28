@@ -139,8 +139,7 @@ export default function LoginPage() {
 
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
-    return (
-        <GoogleOAuthProvider clientId={googleClientId}>
+    const content = (
         <main className={styles.mainContainer}>
             {/* Visual Panel (Left) */}
             <div className={styles.visualPanel}>
@@ -248,15 +247,19 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <div className={styles.oauthDivider}>
-                        <span>{t.auth.orContinueWith}</span>
-                    </div>
+                    {googleClientId && (
+                        <>
+                            <div className={styles.oauthDivider}>
+                                <span>{t.auth.orContinueWith}</span>
+                            </div>
 
-                    <GoogleButton
-                        onSuccess={handleGoogleSuccess}
-                        disabled={loading}
-                        label={t.auth.continueWithGoogle}
-                    />
+                            <GoogleButton
+                                onSuccess={handleGoogleSuccess}
+                                disabled={loading}
+                                label={t.auth.continueWithGoogle}
+                            />
+                        </>
+                    )}
 
                     <div className={styles.footerLink}>
                         <Link href="/">
@@ -266,6 +269,11 @@ export default function LoginPage() {
                 </div>
             </div>
         </main>
-        </GoogleOAuthProvider>
     );
+
+    if (googleClientId) {
+        return <GoogleOAuthProvider clientId={googleClientId}>{content}</GoogleOAuthProvider>;
+    }
+
+    return content;
 }
