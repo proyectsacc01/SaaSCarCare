@@ -25,27 +25,44 @@ const GoogleIcon = () => (
     </svg>
 );
 
+const GOOGLE_REDIRECT_URI = "https://saa-s-car-care-85l6.vercel.app/conductor/login";
+
 function GoogleButton({ onSuccess, disabled, label }: {
     onSuccess: (resp: { access_token: string }) => void;
     disabled: boolean;
     label: string;
 }) {
     const isAndroid = typeof window !== "undefined" && !!(window as any).AndroidTracker;
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
     const login = useGoogleLogin({
         onSuccess,
         onError: () => toast.error("Error al iniciar sesión con Google"),
-        // En WebView usamos redirect (navega la misma página a Google y vuelve con token en el hash).
-        // El user-agent ya no tiene ";wv" así que Google no bloquea el flujo.
-        // En browser normal usamos popup para mejor UX.
-        ux_mode: isAndroid ? "redirect" : "popup",
     });
+
+    const handleClick = () => {
+        if (isAndroid && clientId) {
+            // La librería GIS falla silenciosa en WebView — navegamos directamente
+            // a la URL de OAuth de Google y capturamos el token del hash al volver.
+            const params = new URLSearchParams({
+                client_id: clientId,
+                redirect_uri: GOOGLE_REDIRECT_URI,
+                response_type: "token",
+                scope: "openid email profile",
+                state: "conductor_oauth",
+                include_granted_scopes: "true",
+            });
+            window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+        } else {
+            login();
+        }
+    };
 
     return (
         <button
             type="button"
             className={styles.googleBtn}
-            onClick={() => login()}
+            onClick={handleClick}
             disabled={disabled}
         >
             <GoogleIcon />
@@ -130,18 +147,20 @@ function DriverLoginInner() {
         }
     };
 
-    // Siempre apunta al handler actualizado para el callback nativo de Android
+    // Siempre apunta al handler actualizado
     googleSuccessRef.current = handleGoogleSuccess;
 
+    // Captura el access_token del hash cuando Google redirige de vuelta (flujo Android WebView)
     useEffect(() => {
-        (window as any).__googleSignInCallback = (idToken: string | null, error: string | null) => {
-            if (error || !idToken) {
-                toast.error(error || "Error al iniciar sesión con Google");
-                return;
-            }
-            googleSuccessRef.current?.({ id_token: idToken });
-        };
-        return () => { delete (window as any).__googleSignInCallback; };
+        const hash = window.location.hash;
+        if (!hash) return;
+        const params = new URLSearchParams(hash.replace(/^#/, ""));
+        const accessToken = params.get("access_token");
+        const state = params.get("state");
+        if (accessToken && state === "conductor_oauth") {
+            window.history.replaceState(null, "", window.location.pathname);
+            googleSuccessRef.current?.({ access_token: accessToken });
+        }
     }, []);
 
     const handleConfirmEmpresaEmail = async (e: React.FormEvent) => {
