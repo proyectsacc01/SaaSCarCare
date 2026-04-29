@@ -390,9 +390,10 @@ export default function ConductorDashboard() {
         } catch { toast.error("Error al completar ruta"); }
     };
 
-    const getInitials = (name?: string) => {
-        if (!name) return 'DR';
-        return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const getInitials = (name?: string, email?: string) => {
+        if (name?.trim()) return name.trim().split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        if (email?.trim()) return email.trim()[0].toUpperCase();
+        return '?';
     };
 
     const rutaActiva = rutas.find(r => r.estado === 'EN_CURSO');
@@ -546,7 +547,7 @@ export default function ConductorDashboard() {
                         >
                             {profilePhoto ? (
                                 <img src={profilePhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : getInitials(driverUser?.nombre)}
+                            ) : getInitials(driverUser?.nombre, driverUser?.email)}
                         </div>
                     </div>
                 </header>
@@ -1075,7 +1076,7 @@ export default function ConductorDashboard() {
                                         <img src={profilePhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
                                         <span style={{ fontSize: '2rem', fontWeight: '900', color: '#3bf63b' }}>
-                                            {getInitials(driverUser?.nombre)}
+                                            {getInitials(driverUser?.nombre, driverUser?.email)}
                                         </span>
                                     )}
                                     {/* Camera overlay */}

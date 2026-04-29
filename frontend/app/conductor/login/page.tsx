@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
 import styles from "../../login/login.module.css";
@@ -60,7 +59,6 @@ function GoogleButton({ onSuccess, disabled, label }: {
 }
 
 function DriverLoginInner() {
-    const router = useRouter();
     const [isRegistering, setIsRegistering] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -119,7 +117,7 @@ function DriverLoginInner() {
                 if (data.picture) localStorage.setItem("profilePhoto", data.picture);
                 toast.success(`¡Bienvenido, ${data.nombre}!`);
                 window.dispatchEvent(new Event("storage"));
-                router.push("/conductor");
+                window.location.href = "/conductor";
             } else if (data.error === "NEEDS_EMPRESA_EMAIL") {
                 const token = tokenResponse.id_token || tokenResponse.access_token || "";
                 setPendingToken(token);
@@ -181,7 +179,7 @@ function DriverLoginInner() {
                 if (data.token) localStorage.setItem("token", data.token);
                 toast.success(`¡Bienvenido, ${data.nombre}!`);
                 window.dispatchEvent(new Event("storage"));
-                router.push("/conductor");
+                window.location.href = "/conductor";
             } else {
                 toast.error(data.error || "Error al iniciar sesión");
             }
