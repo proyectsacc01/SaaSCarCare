@@ -35,21 +35,17 @@ function GoogleButton({ onSuccess, disabled, label }: {
     const login = useGoogleLogin({
         onSuccess,
         onError: () => toast.error("Error al iniciar sesión con Google"),
+        // En WebView usamos redirect (navega la misma página a Google y vuelve con token en el hash).
+        // El user-agent ya no tiene ";wv" así que Google no bloquea el flujo.
+        // En browser normal usamos popup para mejor UX.
+        ux_mode: isAndroid ? "redirect" : "popup",
     });
-
-    const handleClick = () => {
-        if (isAndroid) {
-            (window as any).AndroidTracker.triggerGoogleSignIn();
-        } else {
-            login();
-        }
-    };
 
     return (
         <button
             type="button"
             className={styles.googleBtn}
-            onClick={handleClick}
+            onClick={() => login()}
             disabled={disabled}
         >
             <GoogleIcon />

@@ -17,22 +17,13 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 import android.Manifest;
 
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
-import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.tasks.Task;
-
 public class MainActivity extends Activity {
 
     private WebView mWebView;
-    private GoogleSignInClient mGoogleSignInClient;
 
     private static final String API_URL = BuildConfig.API_URL;
     private static final String WEB_URL = BuildConfig.WEB_URL;
     private static final String INITIAL_PATH = "/conductor/login";
-    private static final int RC_SIGN_IN = 9001;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -51,7 +42,7 @@ public class MainActivity extends Activity {
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setUseWideViewPort(true);
 
-        // Eliminar el marcador "wv" del user agent para que Google OAuth no lo bloquee
+        // Eliminar el marcador ";wv" del user agent para que Google OAuth no bloquee el flujo
         String ua = webSettings.getUserAgentString();
         webSettings.setUserAgentString(ua.replace("; wv", ""));
 
@@ -66,7 +57,6 @@ public class MainActivity extends Activity {
             }
         }
 
-        // Permisos de ubicación y notificaciones
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -77,13 +67,6 @@ public class MainActivity extends Activity {
                 requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
             }
         }
-
-        // Configurar Google Sign-In nativo
-        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(BuildConfig.GOOGLE_CLIENT_ID)
-            .requestEmail()
-            .build();
-        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
 
         mWebView.addJavascriptInterface(new WebAppInterface(this), "AndroidTracker");
 
@@ -115,49 +98,11 @@ public class MainActivity extends Activity {
         mWebView.loadUrl(WEB_URL + INITIAL_PATH);
     }
 
-    @Override
-    @SuppressWarnings("deprecation")
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == RC_SIGN_IN) {
-            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
-            try {
-                GoogleSignInAccount account = task.getResult(ApiException.class);
-                String idToken = account.getIdToken();
-                if (idToken != null) {
-                    String safe = idToken.replace("\\", "\\\\").replace("'", "\\'");
-                    mWebView.post(() -> mWebView.evaluateJavascript(
-                        "if(window.__googleSignInCallback) window.__googleSignInCallback('" + safe + "', null);", null
-                    ));
-                } else {
-                    mWebView.post(() -> mWebView.evaluateJavascript(
-                        "if(window.__googleSignInCallback) window.__googleSignInCallback(null, 'Token vacío');", null
-                    ));
-                }
-            } catch (ApiException e) {
-                String err = String.valueOf(e.getStatusCode());
-                mWebView.post(() -> mWebView.evaluateJavascript(
-                    "if(window.__googleSignInCallback) window.__googleSignInCallback(null, 'Error " + err + "');", null
-                ));
-            }
-        }
-    }
-
     public class WebAppInterface {
         Activity mContext;
 
         WebAppInterface(Activity c) {
             mContext = c;
-        }
-
-        @JavascriptInterface
-        public void triggerGoogleSignIn() {
-            mContext.runOnUiThread(() ->
-                mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                    Intent signInIntent = mGoogleSignInClient.getSignInIntent();
-                    mContext.startActivityForResult(signInIntent, RC_SIGN_IN);
-                })
-            );
         }
 
         @JavascriptInterface
