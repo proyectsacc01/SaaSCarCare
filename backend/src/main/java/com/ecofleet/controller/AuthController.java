@@ -325,31 +325,49 @@ public class AuthController {
         logger.info("═══ LOGIN GOOGLE CONDUCTOR ═══");
 
         String accessToken = payload.get("accessToken");
+        String idToken = payload.get("idToken");
         String empresaEmail = payload.get("empresaEmail");
 
-        if (accessToken == null || accessToken.trim().isEmpty()) {
+        if ((accessToken == null || accessToken.trim().isEmpty()) &&
+            (idToken == null || idToken.trim().isEmpty())) {
             return ResponseEntity.badRequest().body(Map.of("error", "Token de Google es obligatorio"));
         }
 
         try {
-            // Obtener info del usuario de Google
-            URL url = new URL("https://www.googleapis.com/oauth2/v3/userinfo");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
-
-            int responseCode = conn.getResponseCode();
-            if (responseCode != 200) {
-                return ResponseEntity.status(401).body(Map.of("error", "Token de Google inválido"));
+            String json;
+            // idToken (Google Sign-In nativo Android) → tokeninfo endpoint
+            // accessToken (flujo web) → userinfo endpoint
+            if (idToken != null && !idToken.trim().isEmpty()) {
+                URL url = new URL("https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken.trim());
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                int responseCode = conn.getResponseCode();
+                if (responseCode != 200) {
+                    return ResponseEntity.status(401).body(Map.of("error", "ID Token de Google inválido"));
+                }
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+                json = sb.toString();
+            } else {
+                URL url = new URL("https://www.googleapis.com/oauth2/v3/userinfo");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Authorization", "Bearer " + accessToken);
+                int responseCode = conn.getResponseCode();
+                if (responseCode != 200) {
+                    return ResponseEntity.status(401).body(Map.of("error", "Token de Google inválido"));
+                }
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+                json = sb.toString();
             }
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            reader.close();
-
-            String json = sb.toString();
             String email = extractJsonField(json, "email");
             String name = extractJsonField(json, "name");
             String googleId = extractJsonField(json, "sub");

@@ -1,7 +1,6 @@
 "use client";
 
-import { useTranslation } from "@/lib/i18n";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -27,17 +26,31 @@ const GoogleIcon = () => (
     </svg>
 );
 
-function GoogleButton({ onSuccess, disabled, label }: { onSuccess: (resp: { access_token: string }) => void; disabled: boolean; label: string }) {
+function GoogleButton({ onSuccess, disabled, label }: {
+    onSuccess: (resp: { access_token: string }) => void;
+    disabled: boolean;
+    label: string;
+}) {
+    const isAndroid = typeof window !== "undefined" && !!(window as any).AndroidTracker;
+
     const login = useGoogleLogin({
         onSuccess,
         onError: () => toast.error("Error al iniciar sesión con Google"),
     });
 
+    const handleClick = () => {
+        if (isAndroid) {
+            (window as any).AndroidTracker.triggerGoogleSignIn();
+        } else {
+            login();
+        }
+    };
+
     return (
         <button
             type="button"
             className={styles.googleBtn}
-            onClick={() => login()}
+            onClick={handleClick}
             disabled={disabled}
         >
             <GoogleIcon />
@@ -54,7 +67,11 @@ function DriverLoginInner() {
     // Estado extra para Google register: pedir empresaEmail si es cuenta nueva
     const [needsEmpresaEmail, setNeedsEmpresaEmail] = useState(false);
     const [pendingToken, setPendingToken] = useState<string | null>(null);
+    const [pendingTokenIsId, setPendingTokenIsId] = useState(false);
     const [empresaEmailGoogle, setEmpresaEmailGoogle] = useState("");
+
+    // Ref para que el callback nativo de Android siempre use el handler actualizado
+    const googleSuccessRef = useRef<((resp: { access_token?: string; id_token?: string }) => void) | null>(null);
 
     const [loginData, setLoginData] = useState({ email: "", password: "" });
     const [registerData, setRegisterData] = useState({
@@ -78,10 +95,15 @@ function DriverLoginInner() {
         }
     };
 
-    const handleGoogleSuccess = async (tokenResponse: { access_token: string }, empresaEmail?: string) => {
+    const handleGoogleSuccess = async (
+        tokenResponse: { access_token?: string; id_token?: string },
+        empresaEmail?: string
+    ) => {
         setLoading(true);
         try {
-            const body: Record<string, string> = { accessToken: tokenResponse.access_token };
+            const body: Record<string, string> = {};
+            if (tokenResponse.id_token) body.idToken = tokenResponse.id_token;
+            else if (tokenResponse.access_token) body.accessToken = tokenResponse.access_token;
             if (empresaEmail) body.empresaEmail = empresaEmail;
 
             const res = await fetch(`/api/auth/google/conductor`, {
@@ -99,8 +121,9 @@ function DriverLoginInner() {
                 window.dispatchEvent(new Event("storage"));
                 router.push("/conductor");
             } else if (data.error === "NEEDS_EMPRESA_EMAIL") {
-                // Primera vez con Google — pedir email de empresa
-                setPendingToken(tokenResponse.access_token);
+                const token = tokenResponse.id_token || tokenResponse.access_token || "";
+                setPendingToken(token);
+                setPendingTokenIsId(!!tokenResponse.id_token);
                 setNeedsEmpresaEmail(true);
                 toast.info("Introduce el email de tu empresa para vincularte a la flota.");
             } else {
@@ -113,12 +136,30 @@ function DriverLoginInner() {
         }
     };
 
+    // Siempre apunta al handler actualizado para el callback nativo de Android
+    googleSuccessRef.current = handleGoogleSuccess;
+
+    useEffect(() => {
+        (window as any).__googleSignInCallback = (idToken: string | null, error: string | null) => {
+            if (error || !idToken) {
+                toast.error(error || "Error al iniciar sesión con Google");
+                return;
+            }
+            googleSuccessRef.current?.({ id_token: idToken });
+        };
+        return () => { delete (window as any).__googleSignInCallback; };
+    }, []);
+
     const handleConfirmEmpresaEmail = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!pendingToken || !empresaEmailGoogle.trim()) return;
-        await handleGoogleSuccess({ access_token: pendingToken }, empresaEmailGoogle.trim().toLowerCase());
+        const tokenResponse = pendingTokenIsId
+            ? { id_token: pendingToken }
+            : { access_token: pendingToken };
+        await handleGoogleSuccess(tokenResponse, empresaEmailGoogle.trim().toLowerCase());
         setNeedsEmpresaEmail(false);
         setPendingToken(null);
+        setPendingTokenIsId(false);
         setEmpresaEmailGoogle("");
     };
 
@@ -395,8 +436,6 @@ function DriverLoginInner() {
 }
 
 export default function DriverLoginPage() {
-  const t = useTranslation();
-
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
     if (googleClientId) {

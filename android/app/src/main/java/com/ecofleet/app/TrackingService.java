@@ -1,4 +1,4 @@
-package com.carcare.app;
+package com.ecofleet.app;
 
 import android.app.Notification;
 import android.app.NotificationChannel;

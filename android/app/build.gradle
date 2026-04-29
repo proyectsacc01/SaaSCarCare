@@ -10,19 +10,20 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace 'com.carcare.app'
-    compileSdk 34
+    namespace 'com.ecofleet.app'
+    compileSdk 35
 
     defaultConfig {
-        applicationId "com.carcare.app"
+        applicationId "com.ecofleet.app"
         minSdk 24
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        targetSdk 35
+        versionCode 20
+        versionName "1.0.5"
 
         // URL del frontend según build type. Sobrescribilas si desplegás en otro dominio.
-        buildConfigField "String", "WEB_URL", "\"https://saascarcare.up.railway.app\""
+        buildConfigField "String", "WEB_URL", "\"https://saa-s-car-care-85l6.vercel.app\""
         buildConfigField "String", "API_URL", "\"https://saascarcare-production.up.railway.app\""
+        buildConfigField "String", "GOOGLE_CLIENT_ID", "\"458509785138-5prluvkgphtdv3dc5nji614d3aolj1ib.apps.googleusercontent.com\""
     }
 
     buildFeatures {
@@ -42,9 +43,8 @@ android {
 
     buildTypes {
         debug {
-            // Para emulador Android Studio: 10.0.2.2 es localhost del host
-            buildConfigField "String", "WEB_URL", "\"http://10.0.2.2:3000\""
-            buildConfigField "String", "API_URL", "\"http://10.0.2.2:8080\""
+            buildConfigField "String", "WEB_URL", "\"https://saa-s-car-care-85l6.vercel.app\""
+            buildConfigField "String", "API_URL", "\"https://saascarcare-production.up.railway.app\""
         }
         release {
             minifyEnabled true
@@ -64,4 +64,5 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'com.google.android.gms:play-services-location:21.0.1'
+    implementation 'com.google.android.gms:play-services-auth:21.0.0'
 }

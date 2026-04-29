@@ -32,6 +32,7 @@ interface DriverUser {
     nombre?: string;
     email?: string;
     rol?: string;
+    empresaId?: string;
     nombreEmpresa?: string;
 }
 
@@ -72,6 +73,9 @@ export default function ConductorDashboard() {
     // Filtro de historial
     const [historyFilter, setHistoryFilter] = useState<'hoy' | 'semana' | 'mes' | 'todo'>('todo');
     const [historySearch, setHistorySearch] = useState('');
+    const [showEmpresaForm, setShowEmpresaForm] = useState(false);
+    const [empresaEmailInput, setEmpresaEmailInput] = useState('');
+    const [empresaLoading, setEmpresaLoading] = useState(false);
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -341,6 +345,36 @@ export default function ConductorDashboard() {
                 console.error('Repostaje error:', res.status, body);
             }
         } catch { toast.error("Error de conexión — revisa tu conexión a internet"); }
+    };
+
+    const cambiarEmpresa = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!empresaEmailInput.trim() || !driverUser?.id) return;
+        setEmpresaLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/conductores/${driverUser.id}/empresa`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ empresaEmail: empresaEmailInput.trim().toLowerCase() }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                if (data.token) localStorage.setItem('token', data.token);
+                const updated = { ...driverUser, empresaId: data.empresaId, nombreEmpresa: data.nombreEmpresa };
+                setDriverUser(updated);
+                localStorage.setItem('user', JSON.stringify(updated));
+                toast.success(`Vinculado a ${data.nombreEmpresa}`);
+                setShowEmpresaForm(false);
+                setEmpresaEmailInput('');
+                cargarRutas();
+            } else {
+                toast.error(data.error || 'Error al cambiar empresa');
+            }
+        } catch {
+            toast.error('Error de conexión');
+        } finally {
+            setEmpresaLoading(false);
+        }
     };
 
     const completarRuta = async (ruta: Ruta) => {
@@ -1108,6 +1142,40 @@ export default function ConductorDashboard() {
                                         <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#e5e7eb', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{row.value}</span>
                                     </div>
                                 ))}
+                            </div>
+
+                            {/* Vincular a empresa */}
+                            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showEmpresaForm ? '0.75rem' : 0 }}>
+                                    <div>
+                                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>Empresa vinculada</div>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: driverUser?.nombreEmpresa ? '#e5e7eb' : '#4b5563', marginTop: '2px' }}>
+                                            {driverUser?.nombreEmpresa || 'Sin empresa'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowEmpresaForm(v => !v)}
+                                        style={{ padding: '0.35rem 0.75rem', background: 'rgba(59,246,59,0.08)', border: '1px solid rgba(59,246,59,0.2)', borderRadius: '8px', color: '#3bf63b', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}
+                                    >{showEmpresaForm ? 'Cancelar' : 'Cambiar'}</button>
+                                </div>
+                                {showEmpresaForm && (
+                                    <form onSubmit={cambiarEmpresa} style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <input
+                                            type="email"
+                                            required
+                                            placeholder="admin@empresa.com"
+                                            value={empresaEmailInput}
+                                            onChange={e => setEmpresaEmailInput(e.target.value)}
+                                            disabled={empresaLoading}
+                                            style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(59,246,59,0.3)', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#e5e7eb', fontSize: '0.8rem', outline: 'none' }}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={empresaLoading}
+                                            style={{ padding: '0.5rem 1rem', background: 'linear-gradient(135deg,#3bf63b,#22c55e)', border: 'none', borderRadius: '8px', color: '#000', fontWeight: '800', fontSize: '0.75rem', cursor: 'pointer' }}
+                                        >{empresaLoading ? '...' : 'Unirse'}</button>
+                                    </form>
+                                )}
                             </div>
 
                             {/* Configuración */}
