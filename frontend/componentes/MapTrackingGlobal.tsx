@@ -1,354 +1,632 @@
 "use client";
 
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 
-// Fix for default marker icons
-const DefaultIcon = L.icon({
-    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-// Custom car icon for online drivers (GPS activo en últimos 30 segundos)
-const OnlineIcon = L.divIcon({
-    html: `<div style="
-        background: linear-gradient(135deg, #3bf63b, #22c55e);
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        border: 3px solid white;
-        box-shadow: 0 0 20px rgba(59, 246, 59, 0.8), 0 0 40px rgba(59, 246, 59, 0.4);
-        animation: pulse 1.5s infinite;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    "><div style='color: white; font-size: 14px;'>🚗</div></div>`,
-    className: "custom-online-icon",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-});
-
-// Idle icon - sin señal reciente (más de 30 segundos)
-const IdleIcon = L.divIcon({
-    html: `<div style="
-        background: linear-gradient(135deg, #f59e0b, #d97706);
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        border: 2px solid white;
-        box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    "><div style='color: white; font-size: 12px;'>⏳</div></div>`,
-    className: "custom-idle-icon",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-});
-
-// Offline icon - sin señal hace más de 2 minutos
-const OfflineIcon = L.divIcon({
-    html: `<div style="
-        background: linear-gradient(135deg, #6b7280, #4b5563);
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        border: 2px solid white;
-        box-shadow: 0 0 5px rgba(107, 114, 128, 0.3);
-        opacity: 0.7;
-    "></div>`,
-    className: "custom-offline-icon",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-});
-
-interface RutaConConductor {
+interface RutaTracking {
     id?: string;
     origen: string;
     destino: string;
     estado: string;
     vehiculoId: string;
+    conductorNombre?: string;
     latitudActual?: number;
     longitudActual?: number;
     latitudOrigen?: number;
     longitudOrigen?: number;
-    fecha: string;
+    latitudDestino?: number;
+    longitudDestino?: number;
+    velocidadActualKmh?: number;
+    distanciaRestanteKm?: number;
+    desviado?: boolean;
     ultimaActualizacionGPS?: string;
 }
 
-interface MapTrackingGlobalProps {
-    rutasActivas: RutaConConductor[];
+export interface MapTrackingGlobalProps {
+    rutasActivas: RutaTracking[];
     onRutaClick?: (rutaId: string) => void;
 }
 
-// Helper function para calcular tiempo transcurrido
-// Si hay GPS activo pero no timestamp, significa que el conductor está online
-function getTimeAgo(isoTimestamp: string | undefined, hasActiveGPS: boolean = false): { text: string; seconds: number; status: 'online' | 'idle' | 'offline' } {
-    // Si hay GPS activo pero no hay timestamp, consideramos que está online
-    if (!isoTimestamp && hasActiveGPS) {
-        return { text: 'GPS Activo', seconds: 0, status: 'online' };
-    }
+// ─── GPS status ───────────────────────────────────────────────────────────────
 
-    if (!isoTimestamp) {
-        return { text: 'Sin señal', seconds: Infinity, status: 'offline' };
-    }
+type GPSStatus = "online" | "idle" | "offline";
 
-    const now = new Date();
-    const lastUpdate = new Date(isoTimestamp);
-    const diffMs = now.getTime() - lastUpdate.getTime();
-    const diffSeconds = Math.floor(diffMs / 1000);
-
-    let status: 'online' | 'idle' | 'offline';
-    if (diffSeconds <= 30) {
-        status = 'online';
-    } else if (diffSeconds <= 120) {
-        status = 'idle';
-    } else {
-        status = 'offline';
-    }
-
-    let text: string;
-    if (diffSeconds < 5) {
-        text = 'Ahora mismo';
-    } else if (diffSeconds < 60) {
-        text = `Hace ${diffSeconds}s`;
-    } else if (diffSeconds < 3600) {
-        const mins = Math.floor(diffSeconds / 60);
-        text = `Hace ${mins} min`;
-    } else if (diffSeconds < 86400) {
-        const hours = Math.floor(diffSeconds / 3600);
-        text = `Hace ${hours}h`;
-    } else {
-        const days = Math.floor(diffSeconds / 86400);
-        text = `Hace ${days}d`;
-    }
-
-    return { text, seconds: diffSeconds, status };
+function getGPSStatus(ts?: string, hasPos?: boolean): { text: string; status: GPSStatus } {
+    if (!ts && hasPos) return { text: "Ahora", status: "online" };
+    if (!ts) return { text: "Sin señal", status: "offline" };
+    const secs = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    const status: GPSStatus = secs <= 30 ? "online" : secs <= 120 ? "idle" : "offline";
+    let text = "Ahora";
+    if (secs >= 5 && secs < 60) text = `Hace ${secs}s`;
+    else if (secs >= 60 && secs < 3600) text = `Hace ${Math.floor(secs / 60)}m`;
+    else if (secs >= 3600) text = `Hace ${Math.floor(secs / 3600)}h`;
+    return { text, status };
 }
 
-// Formato de hora legible
-function formatTimestamp(isoTimestamp: string | undefined): string {
-    if (!isoTimestamp) return 'N/A';
-    const date = new Date(isoTimestamp);
-    return date.toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
+const STATUS_COLOR: Record<GPSStatus, string> = {
+    online: "#3bf63b",
+    idle: "#f59e0b",
+    offline: "#6b7280",
+};
+
+// ─── Distance (Haversine) ─────────────────────────────────────────────────────
+
+function distM(a: [number, number], b: [number, number]): number {
+    const R = 6371000;
+    const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+    const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+    const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((a[0] * Math.PI) / 180) *
+            Math.cos((b[0] * Math.PI) / 180) *
+            Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+// ─── OSRM road routing (free, no key needed) ──────────────────────────────────
+
+async function getRoadRoute(
+    from: [number, number],
+    to: [number, number]
+): Promise<[number, number][]> {
+    try {
+        const url =
+            `https://router.project-osrm.org/route/v1/driving/` +
+            `${from[1]},${from[0]};${to[1]},${to[0]}?geometries=geojson&overview=full`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
+        if (!res.ok) return [from, to];
+        const data = await res.json();
+        const coords: [number, number][] = data.routes?.[0]?.geometry?.coordinates;
+        if (!coords?.length) return [from, to];
+        return coords.map(([lng, lat]) => [lat, lng] as [number, number]);
+    } catch {
+        return [from, to];
+    }
+}
+
+// ─── Leaflet icons ────────────────────────────────────────────────────────────
+
+function makeTruckIcon(status: GPSStatus, label: string): L.DivIcon {
+    const c = STATUS_COLOR[status];
+    const anim =
+        status === "online"
+            ? `@keyframes gps-ping{0%,100%{box-shadow:0 0 0 0 ${c}70}50%{box-shadow:0 0 0 10px transparent}}`
+            : "";
+    const animStyle = status === "online" ? "animation:gps-ping 1.8s ease-in-out infinite;" : "";
+    return L.divIcon({
+        html: `<style>${anim}</style>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="background:${c};width:38px;height:38px;border-radius:50%;border:3px solid #fff;
+            display:flex;align-items:center;justify-content:center;font-size:18px;
+            box-shadow:0 4px 16px ${c}90;${animStyle}">🚛</div>
+          <div style="background:rgba(0,0,0,0.88);color:#fff;font-size:9px;font-weight:800;
+            padding:2px 6px;border-radius:4px;white-space:nowrap;
+            border:1px solid ${c}50;letter-spacing:0.3px;">${label}</div>
+        </div>`,
+        className: "",
+        iconSize: [48, 60],
+        iconAnchor: [24, 19],
+        popupAnchor: [0, -20],
     });
 }
 
-function FitBounds({ positions }: { positions: [number, number][] }) {
+const OriginIcon = L.divIcon({
+    html: `<div style="width:14px;height:14px;background:#3bf63b;border-radius:50%;
+        border:2.5px solid #fff;box-shadow:0 0 12px #3bf63b90;"></div>`,
+    className: "",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+});
+
+const DestIcon = L.divIcon({
+    html: `<div style="width:14px;height:14px;background:#ef4444;border-radius:3px;
+        border:2.5px solid #fff;box-shadow:0 0 12px #ef444490;"></div>`,
+    className: "",
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+});
+
+// ─── Map helpers ──────────────────────────────────────────────────────────────
+
+function FlyTo({ pos }: { pos: [number, number] | null }) {
     const map = useMap();
-
+    const prev = useRef<string>("");
     useEffect(() => {
-        if (positions.length > 0) {
-            const bounds = L.latLngBounds(positions);
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-        }
-    }, [positions, map]);
-
+        if (!pos) return;
+        const key = pos.join(",");
+        if (key === prev.current) return;
+        prev.current = key;
+        map.flyTo(pos, 15, { duration: 1.4, easeLinearity: 0.3 });
+    }, [pos, map]);
     return null;
 }
 
-export default function MapTrackingGlobal({ rutasActivas, onRutaClick }: MapTrackingGlobalProps) {
-    // Filtrar rutas con coordenadas válidas
-    const rutasConGPS = rutasActivas.filter(r =>
-        (r.latitudActual && r.longitudActual) || (r.latitudOrigen && r.longitudOrigen)
-    );
-
-    // Obtener todas las posiciones para ajustar el mapa
-    const allPositions: [number, number][] = rutasConGPS.map(r => {
-        if (r.latitudActual && r.longitudActual) {
-            return [r.latitudActual, r.longitudActual];
+function FitAll({ positions }: { positions: [number, number][] }) {
+    const map = useMap();
+    const done = useRef(false);
+    useEffect(() => {
+        if (done.current || positions.length === 0) return;
+        done.current = true;
+        if (positions.length === 1) {
+            map.setView(positions[0], 14);
+        } else {
+            map.fitBounds(L.latLngBounds(positions), { padding: [60, 60], maxZoom: 13 });
         }
-        return [r.latitudOrigen || 40.4168, r.longitudOrigen || -3.7038];
-    });
+    }, [positions.length > 0]);
+    return null;
+}
 
-    // Centro por defecto (España)
-    const defaultCenter: [number, number] = [40.4168, -3.7038];
-    const center = allPositions.length > 0
-        ? [
-            allPositions.reduce((sum, p) => sum + p[0], 0) / allPositions.length,
-            allPositions.reduce((sum, p) => sum + p[1], 0) / allPositions.length
-        ] as [number, number]
-        : defaultCenter;
+// ─── Per-route layer ──────────────────────────────────────────────────────────
+
+function RouteLayer({
+    ruta,
+    history,
+    selected,
+}: {
+    ruta: RutaTracking;
+    history: [number, number][];
+    selected: boolean;
+}) {
+    const [roadLine, setRoadLine] = useState<[number, number][]>([]);
+    const lastFetchPos = useRef<[number, number] | null>(null);
+
+    const cur: [number, number] | null =
+        ruta.latitudActual && ruta.longitudActual
+            ? [ruta.latitudActual, ruta.longitudActual]
+            : null;
+    const dest: [number, number] | null =
+        ruta.latitudDestino && ruta.longitudDestino
+            ? [ruta.latitudDestino, ruta.longitudDestino]
+            : null;
+    const orig: [number, number] | null =
+        ruta.latitudOrigen && ruta.longitudOrigen
+            ? [ruta.latitudOrigen, ruta.longitudOrigen]
+            : null;
+
+    // Re-fetch road route only when conductor moves >80m
+    useEffect(() => {
+        if (!cur || !dest) return;
+        if (lastFetchPos.current && distM(lastFetchPos.current, cur) < 80) return;
+        lastFetchPos.current = cur;
+        getRoadRoute(cur, dest).then(setRoadLine);
+    }, [cur?.[0], cur?.[1]]);
+
+    const gps = getGPSStatus(ruta.ultimaActualizacionGPS, !!cur);
+    const lineColor = STATUS_COLOR[gps.status];
+    const lineW = selected ? 5 : 3;
+    const truckLabel = ruta.conductorNombre?.split(" ")[0] ?? "Driver";
 
     return (
-        <MapContainer
-            center={center}
-            zoom={6}
-            style={{
-                height: "100%",
-                width: "100%",
-                borderRadius: "16px",
-                border: "2px solid rgba(255,255,255,0.1)"
-            }}
-            attributionControl={false}
-        >
-            <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            />
+        <>
+            {/* Origin */}
+            {orig && (
+                <Marker position={orig} icon={OriginIcon}>
+                    <Popup>
+                        <b>Inicio:</b> {ruta.origen}
+                    </Popup>
+                </Marker>
+            )}
 
-            {rutasConGPS.map(ruta => {
-                const hasRealGPS = !!(ruta.latitudActual && ruta.longitudActual);
-                const position: [number, number] = hasRealGPS
-                    ? [ruta.latitudActual!, ruta.longitudActual!]
-                    : [ruta.latitudOrigen || 40.4168, ruta.longitudOrigen || -3.7038];
+            {/* Destination */}
+            {dest && (
+                <Marker position={dest} icon={DestIcon}>
+                    <Popup>
+                        <b>Destino:</b> {ruta.destino}
+                    </Popup>
+                </Marker>
+            )}
 
-                const isEnCurso = ruta.estado === 'EN_CURSO';
-                const timeAgo = getTimeAgo(ruta.ultimaActualizacionGPS, hasRealGPS);
+            {/* Breadcrumb trail — where the driver has been */}
+            {history.length > 1 && (
+                <Polyline
+                    positions={history}
+                    pathOptions={{
+                        color: lineColor,
+                        weight: 2,
+                        opacity: 0.4,
+                        dashArray: "6 5",
+                    }}
+                />
+            )}
 
-                // Seleccionar icono según estado de conexión
-                let icon = OfflineIcon;
-                if (isEnCurso && hasRealGPS) {
-                    if (timeAgo.status === 'online') {
-                        icon = OnlineIcon;
-                    } else if (timeAgo.status === 'idle') {
-                        icon = IdleIcon;
-                    }
-                }
+            {/* Road route: current position → destination */}
+            {roadLine.length > 1 && (
+                <Polyline
+                    positions={roadLine}
+                    pathOptions={{
+                        color: lineColor,
+                        weight: lineW,
+                        opacity: selected ? 0.92 : 0.62,
+                    }}
+                />
+            )}
 
-                // Color del estado
-                const statusColors = {
-                    online: '#22c55e',
-                    idle: '#f59e0b',
-                    offline: '#6b7280'
-                };
-                const statusLabels = {
-                    online: '🟢 ONLINE',
-                    idle: '🟡 ESPERANDO',
-                    offline: '⚫ OFFLINE'
-                };
+            {/* Truck marker */}
+            {cur && (
+                <Marker
+                    position={cur}
+                    icon={makeTruckIcon(gps.status, truckLabel)}
+                >
+                    <Popup maxWidth={270} minWidth={240}>
+                        <div
+                            style={{
+                                fontFamily: "system-ui, sans-serif",
+                                fontSize: "0.8rem",
+                                color: "#111",
+                            }}
+                        >
+                            <div
+                                style={{
+                                    fontWeight: 800,
+                                    fontSize: "0.95rem",
+                                    marginBottom: 8,
+                                    paddingBottom: 8,
+                                    borderBottom: `2px solid ${lineColor}`,
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                }}
+                            >
+                                <span>🚛 {ruta.conductorNombre ?? "Conductor"}</span>
+                                <span
+                                    style={{
+                                        fontSize: "0.6rem",
+                                        background: lineColor,
+                                        color: "#000",
+                                        padding: "2px 6px",
+                                        borderRadius: 5,
+                                        fontWeight: 900,
+                                    }}
+                                >
+                                    {gps.status.toUpperCase()}
+                                </span>
+                            </div>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 5,
+                                }}
+                            >
+                                <div>
+                                    📍 <b>Ruta:</b> {ruta.origen} → {ruta.destino}
+                                </div>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        gap: 12,
+                                        background: "rgba(0,0,0,0.05)",
+                                        borderRadius: 6,
+                                        padding: "6px 8px",
+                                    }}
+                                >
+                                    <span>
+                                        ⚡{" "}
+                                        <b>
+                                            {ruta.velocidadActualKmh != null
+                                                ? ruta.velocidadActualKmh.toFixed(1)
+                                                : "—"}{" "}
+                                            km/h
+                                        </b>
+                                    </span>
+                                    <span>
+                                        📏{" "}
+                                        {ruta.distanciaRestanteKm != null
+                                            ? ruta.distanciaRestanteKm.toFixed(1)
+                                            : "—"}{" "}
+                                        km
+                                    </span>
+                                </div>
+                                <div>🕐 GPS: {gps.text}</div>
+                                <div
+                                    style={{
+                                        fontFamily: "monospace",
+                                        fontSize: "0.65rem",
+                                        color: "#888",
+                                    }}
+                                >
+                                    {cur[0].toFixed(5)}, {cur[1].toFixed(5)}
+                                </div>
+                                {ruta.desviado && (
+                                    <div
+                                        style={{
+                                            color: "#ef4444",
+                                            fontWeight: 700,
+                                            background: "#fef2f2",
+                                            padding: "4px 8px",
+                                            borderRadius: 6,
+                                        }}
+                                    >
+                                        ⚠️ DESVIADO DE LA RUTA
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </Popup>
+                </Marker>
+            )}
+        </>
+    );
+}
 
-                return (
-                    <Marker
-                        key={ruta.id}
-                        position={position}
-                        icon={icon}
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export default function MapTrackingGlobal({
+    rutasActivas,
+    onRutaClick,
+}: MapTrackingGlobalProps) {
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [flyPos, setFlyPos] = useState<[number, number] | null>(null);
+    // Breadcrumb history persists across re-renders
+    const histRef = useRef<Map<string, [number, number][]>>(new Map());
+
+    // Accumulate position history on each render (polling every 3s)
+    rutasActivas.forEach((r) => {
+        if (!r.latitudActual || !r.longitudActual || !r.id) return;
+        const p: [number, number] = [r.latitudActual, r.longitudActual];
+        const h = histRef.current.get(r.id ?? "") ?? [];
+        const last = h[h.length - 1];
+        if (!last || distM(last, p) > 5) {
+            histRef.current.set(r.id, [...h, p].slice(-300));
+        }
+    });
+
+    const active = rutasActivas.filter(
+        (r) =>
+            r.estado === "EN_CURSO" ||
+            r.estado === "DETENIDO" ||
+            (r.latitudActual && r.longitudActual)
+    );
+
+    const allPos: [number, number][] = active
+        .filter((r) => r.latitudActual && r.longitudActual)
+        .map((r) => [r.latitudActual!, r.longitudActual!]);
+
+    const center: [number, number] =
+        allPos.length > 0
+            ? [
+                  allPos.reduce((s, p) => s + p[0], 0) / allPos.length,
+                  allPos.reduce((s, p) => s + p[1], 0) / allPos.length,
+              ]
+            : [40.4168, -3.7038];
+
+    const handleSelect = (r: RutaTracking) => {
+        setSelectedId(r.id ?? null);
+        if (r.latitudActual && r.longitudActual) {
+            setFlyPos([r.latitudActual, r.longitudActual]);
+        }
+        if (r.id) onRutaClick?.(r.id);
+    };
+
+    return (
+        <div style={{ display: "flex", height: "100%", gap: 12 }}>
+            {/* ── Sidebar ────────────────────────────────────── */}
+            <div
+                style={{
+                    width: 230,
+                    flexShrink: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    background: "rgba(6,6,12,0.97)",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    overflow: "hidden",
+                }}
+            >
+                <div
+                    style={{
+                        padding: "12px 14px",
+                        borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    }}
+                >
+                    <div
+                        style={{
+                            fontSize: "0.58rem",
+                            color: "#4b5563",
+                            textTransform: "uppercase",
+                            letterSpacing: "1.5px",
+                            fontWeight: 700,
+                        }}
                     >
-                        {/* Popup con detalles al hacer click */}
-                        <Popup>
-                            <div style={{ color: '#000', minWidth: '220px' }}>
-                                {/* Header con estado */}
-                                <div style={{
-                                    fontWeight: 'bold',
-                                    fontSize: '1rem',
-                                    marginBottom: '0.6rem',
-                                    borderBottom: '2px solid',
-                                    borderColor: statusColors[timeAgo.status],
-                                    paddingBottom: '0.5rem',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center'
-                                }}>
-                                    <span>{isEnCurso ? '🚗 Conductor' : '📍 En Espera'}</span>
-                                    <span style={{
-                                        fontSize: '0.7rem',
-                                        padding: '2px 8px',
-                                        borderRadius: '10px',
-                                        background: statusColors[timeAgo.status],
-                                        color: 'white'
-                                    }}>
-                                        {timeAgo.status.toUpperCase()}
+                        Conductores activos
+                    </div>
+                    <div
+                        style={{
+                            fontSize: "1.5rem",
+                            fontWeight: 900,
+                            color: "#3bf63b",
+                            lineHeight: 1.1,
+                            marginTop: 2,
+                        }}
+                    >
+                        {allPos.length}{" "}
+                        <span
+                            style={{
+                                fontSize: "0.62rem",
+                                color: "#6b7280",
+                                fontWeight: 500,
+                            }}
+                        >
+                            en ruta
+                        </span>
+                    </div>
+                </div>
+
+                <div style={{ flex: 1, overflowY: "auto", padding: 6 }}>
+                    {active.length === 0 && (
+                        <div
+                            style={{
+                                padding: "2rem 1rem",
+                                textAlign: "center",
+                                color: "#374151",
+                                fontSize: "0.75rem",
+                            }}
+                        >
+                            Sin conductores en ruta
+                        </div>
+                    )}
+
+                    {active.map((r) => {
+                        const gps = getGPSStatus(
+                            r.ultimaActualizacionGPS,
+                            !!(r.latitudActual && r.longitudActual)
+                        );
+                        const c = STATUS_COLOR[gps.status];
+                        const isSel = r.id === selectedId;
+
+                        return (
+                            <div
+                                key={r.id}
+                                onClick={() => handleSelect(r)}
+                                style={{
+                                    padding: "10px 10px 8px",
+                                    borderRadius: 10,
+                                    marginBottom: 5,
+                                    cursor: "pointer",
+                                    transition: "all .2s",
+                                    background: isSel
+                                        ? `${c}14`
+                                        : "rgba(255,255,255,0.02)",
+                                    border: `1px solid ${
+                                        isSel
+                                            ? c + "45"
+                                            : "rgba(255,255,255,0.05)"
+                                    }`,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        marginBottom: 3,
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: "0.72rem",
+                                            fontWeight: 700,
+                                            color: "#e5e7eb",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap",
+                                            maxWidth: 120,
+                                        }}
+                                    >
+                                        {r.conductorNombre ?? "Conductor"}
+                                    </span>
+                                    <span
+                                        style={{
+                                            fontSize: "0.5rem",
+                                            fontWeight: 800,
+                                            color: c,
+                                            background: `${c}18`,
+                                            padding: "2px 5px",
+                                            borderRadius: 5,
+                                            letterSpacing: "0.3px",
+                                        }}
+                                    >
+                                        {gps.status === "online"
+                                            ? "● ON"
+                                            : gps.status === "idle"
+                                            ? "◐ IDLE"
+                                            : "○ OFF"}
                                     </span>
                                 </div>
 
-                                {/* Info de ruta */}
-                                <div style={{ fontSize: '0.85rem', color: '#333', marginBottom: '0.5rem' }}>
-                                    <div><strong>Ruta:</strong> {ruta.origen} → {ruta.destino}</div>
-                                    <div><strong>Vehículo:</strong> #{ruta.vehiculoId?.slice(-6) || 'N/A'}</div>
-                                    <div><strong>Estado:</strong>
-                                        <span style={{
-                                            color: isEnCurso ? '#22c55e' : '#f59e0b',
-                                            fontWeight: 'bold'
-                                        }}>
-                                            {' '}{ruta.estado}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Timestamp box */}
-                                <div style={{
-                                    marginTop: '0.6rem',
-                                    padding: '0.5rem',
-                                    background: 'linear-gradient(135deg, rgba(0,0,0,0.03), rgba(0,0,0,0.08))',
-                                    borderRadius: '8px',
-                                    border: `1px solid ${statusColors[timeAgo.status]}40`
-                                }}>
-                                    <div style={{
-                                        fontSize: '0.7rem',
-                                        color: '#666',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.05em',
-                                        marginBottom: '4px'
-                                    }}>
-                                        📡 Última Conexión Satelital
-                                    </div>
-                                    <div style={{
-                                        fontSize: '1.1rem',
-                                        fontWeight: 'bold',
-                                        color: statusColors[timeAgo.status]
-                                    }}>
-                                        {timeAgo.text}
-                                    </div>
-                                    <div style={{
-                                        fontSize: '0.75rem',
-                                        color: '#888',
-                                        marginTop: '2px'
-                                    }}>
-                                        {formatTimestamp(ruta.ultimaActualizacionGPS)}
-                                    </div>
-                                </div>
-
-                                {/* Coordenadas GPS */}
-                                {hasRealGPS && (
-                                    <div style={{
-                                        marginTop: '0.5rem',
-                                        fontSize: '0.7rem',
-                                        color: '#22c55e',
-                                        background: 'rgba(34, 197, 94, 0.1)',
-                                        padding: '0.4rem',
-                                        borderRadius: '4px',
-                                        textAlign: 'center',
-                                        fontFamily: 'monospace'
-                                    }}>
-                                        📍 {position[0].toFixed(6)}, {position[1].toFixed(6)}
-                                    </div>
-                                )}
-
-                                {/* Botón */}
-                                <button
-                                    onClick={() => ruta.id && onRutaClick && onRutaClick(ruta.id)}
+                                <div
                                     style={{
-                                        marginTop: '0.6rem',
-                                        width: '100%',
-                                        padding: '0.5rem',
-                                        background: 'linear-gradient(135deg, #3bf63b, #22c55e)',
-                                        color: '#000',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        fontWeight: 'bold',
-                                        cursor: 'pointer',
-                                        fontSize: '0.85rem',
-                                        boxShadow: '0 2px 8px rgba(59, 246, 59, 0.3)'
+                                        fontSize: "0.6rem",
+                                        color: "#6b7280",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        marginBottom: 5,
                                     }}
                                 >
-                                    Ver Detalles de la Ruta →
-                                </button>
-                            </div>
-                        </Popup>
-                    </Marker>
-                );
-            })}
+                                    {r.origen} → {r.destino}
+                                </div>
 
-            {allPositions.length > 1 && <FitBounds positions={allPositions} />}
-        </MapContainer>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        gap: 8,
+                                        fontSize: "0.6rem",
+                                        color: "#9ca3af",
+                                    }}
+                                >
+                                    {r.velocidadActualKmh != null && (
+                                        <span>
+                                            ⚡{r.velocidadActualKmh.toFixed(0)}{" "}
+                                            km/h
+                                        </span>
+                                    )}
+                                    {r.distanciaRestanteKm != null && (
+                                        <span>
+                                            📏{r.distanciaRestanteKm.toFixed(1)}{" "}
+                                            km
+                                        </span>
+                                    )}
+                                    {r.desviado && (
+                                        <span style={{ color: "#ef4444" }}>
+                                            ⚠️
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div
+                                    style={{
+                                        fontSize: "0.55rem",
+                                        color: "#374151",
+                                        marginTop: 3,
+                                    }}
+                                >
+                                    🕐 {gps.text}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ── Map ────────────────────────────────────────── */}
+            <div
+                style={{
+                    flex: 1,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    minWidth: 0,
+                }}
+            >
+                <MapContainer
+                    center={center}
+                    zoom={allPos.length > 0 ? 10 : 6}
+                    style={{ height: "100%", width: "100%" }}
+                    attributionControl={false}
+                >
+                    <TileLayer
+                        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                        attribution='© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+                    />
+                    <FlyTo pos={flyPos} />
+                    {allPos.length > 0 && !selectedId && (
+                        <FitAll positions={allPos} />
+                    )}
+                    {active.map((r) => (
+                        <RouteLayer
+                            key={r.id}
+                            ruta={r}
+                            history={histRef.current.get(r.id ?? "") ?? []}
+                            selected={r.id === selectedId}
+                        />
+                    ))}
+                </MapContainer>
+            </div>
+        </div>
     );
 }

@@ -12,6 +12,8 @@ import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
+import android.webkit.GeolocationPermissions;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
@@ -69,6 +71,15 @@ public class MainActivity extends Activity {
         }
 
         mWebView.addJavascriptInterface(new WebAppInterface(this), "AndroidTracker");
+
+        // Conceder permiso de geolocalización al WebView automáticamente
+        // (el usuario ya otorgó ACCESS_FINE_LOCATION a la app en el diálogo del sistema)
+        mWebView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                callback.invoke(origin, true, false);
+            }
+        });
 
         mWebView.setWebViewClient(new WebViewClient() {
             @Override

@@ -57,6 +57,9 @@ interface Ruta {
   longitudDestino?: number;
   latitudActual?: number;
   longitudActual?: number;
+  velocidadActualKmh?: number;
+  distanciaRestanteKm?: number;
+  desviado?: boolean;
   ultimaActualizacionGPS?: string;
 }
 
