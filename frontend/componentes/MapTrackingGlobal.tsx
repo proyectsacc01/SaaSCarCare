@@ -459,9 +459,14 @@ export default function MapTrackingGlobal({
             (r.latitudActual && r.longitudActual)
     );
 
-    // Conductores idle = los que tienen ubicación pero NO son el conductor de ninguna ruta activa
+    // Conductores idle = los que tienen ubicación pero NO son el conductor de ninguna
+    // ruta activa CON GPS REAL. Si una ruta está EN_CURSO pero todavía no llegó el
+    // primer GPS, el conductor sigue apareciendo en su ubicación de presencia.
     const activeConductorIds = new Set(
-        active.map((r) => r.conductorId).filter(Boolean) as string[]
+        active
+            .filter((r) => r.latitudActual && r.longitudActual)
+            .map((r) => r.conductorId)
+            .filter(Boolean) as string[]
     );
     const idleDrivers = conductoresUbicaciones.filter(
         (c) =>

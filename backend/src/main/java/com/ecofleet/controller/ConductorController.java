@@ -55,6 +55,43 @@ public class ConductorController {
     }
 
     /**
+     * El conductor reporta su ubicación actual (presencia GPS, independiente de rutas).
+     * Se llama cada ~30s mientras la app está abierta para que el admin pueda verlo
+     * en el mapa aunque no esté en ninguna ruta activa.
+     */
+    @PostMapping("/me/gps")
+    public ResponseEntity<?> actualizarMiUbicacion(
+            @RequestBody Map<String, Double> payload,
+            HttpServletRequest request) {
+
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+
+        if (!"CONDUCTOR".equals(role) || conductorId == null || conductorId.isBlank()) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        }
+
+        Double lat = payload.get("latitud");
+        Double lng = payload.get("longitud");
+        if (lat == null || lng == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "latitud y longitud son requeridos"));
+        }
+
+        Optional<Conductor> opt = conductorRepository.findById(conductorId);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
+        }
+
+        Conductor c = opt.get();
+        c.setLatitudActual(lat);
+        c.setLongitudActual(lng);
+        c.setUltimaActualizacionGPS(java.time.Instant.now().toString());
+        conductorRepository.save(c);
+
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    /**
      * Devuelve la última ubicación conocida de cada conductor de la empresa.
      * El admin lo usa para mostrar a TODOS los conductores en el mapa, incluso
      * aquellos que no tienen ruta activa en este momento.

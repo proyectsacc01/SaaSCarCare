@@ -163,8 +163,40 @@ export default function ConductorDashboard() {
         cargarRutas();
         cargarVehiculos();
         const interval = setInterval(cargarRutas, 10000);
+
+        // ─── Presence GPS ──────────────────────────────────────────────────
+        // El conductor reporta su ubicación REAL cada ~30s mientras la app
+        // esté abierta, así el admin lo ve en el mapa aunque no esté en ruta.
+        // Cuando arranca una ruta, el TrackingService nativo toma el control
+        // del envío frecuente; este watcher sigue corriendo pero solo manda
+        // si pasaron 30s desde el último envío.
+        let lastSent = 0;
+        let presenceWatchId: number | null = null;
+        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+            presenceWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const now = Date.now();
+                    if (now - lastSent < 30_000) return;
+                    lastSent = now;
+                    fetch(`${API_URL}/api/conductores/me/gps`, {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            latitud: pos.coords.latitude,
+                            longitud: pos.coords.longitude,
+                        }),
+                    }).catch(() => { /* silencioso */ });
+                },
+                () => { /* permiso denegado o error — silencioso */ },
+                { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
+            );
+        }
+
         return () => {
             clearInterval(interval);
+            if (presenceWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
+                navigator.geolocation.clearWatch(presenceWatchId);
+            }
             stopBrowserGPS();
         };
     }, []);

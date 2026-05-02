@@ -163,6 +163,17 @@ function DriverLoginInner() {
         }
     }, []);
 
+    // Si ya hay sesión válida en localStorage (caso de volver a la app después de
+    // ir a WhatsApp etc), saltar directo al panel sin pedir login otra vez.
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const token = localStorage.getItem("token");
+        const user = localStorage.getItem("user");
+        if (token && user) {
+            window.location.href = "/conductor";
+        }
+    }, []);
+
     const handleConfirmEmpresaEmail = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!pendingToken || !empresaEmailGoogle.trim()) return;
