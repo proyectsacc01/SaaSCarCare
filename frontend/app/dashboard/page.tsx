@@ -620,9 +620,10 @@ export default function Dashboard() {
             latitudOrigen: originCoords.lat,
             longitudOrigen: originCoords.lng,
             latitudDestino: destCoords.lat,
-            longitudDestino: destCoords.lng,
-            latitudActual: originCoords.lat,
-            longitudActual: originCoords.lng
+            longitudDestino: destCoords.lng
+            // No seteamos latitudActual/longitudActual al crear: el truck NO debe
+            // anclarse al origen. Solo se llena cuando el dispositivo del conductor
+            // emite GPS real vía POST /api/rutas/{id}/gps.
           })
         });
 
@@ -1701,7 +1702,8 @@ export default function Dashboard() {
                 <h3 style={{ marginBottom: '1rem', color: '#fff' }}>{t.dashboard.activeFleetState}</h3>
                 <div className={styles.grid}>
                   {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').map(r => {
-                    const status = getConnectionStatus(r.ultimaActualizacionGPS, !!(r.latitudActual && r.longitudActual));
+                    const hasRealGPS = !!(r.latitudActual && r.longitudActual && r.ultimaActualizacionGPS);
+                    const status = getConnectionStatus(r.ultimaActualizacionGPS, hasRealGPS);
 
                     return (
                       <div
@@ -1734,7 +1736,9 @@ export default function Dashboard() {
                         <div className={styles.statRow}>
                           <span className={styles.statLabel}>{t.dashboard.currLoc}</span>
                           <span className={styles.statValue} style={{ fontSize: '0.85rem' }}>
-                            {r.latitudActual?.toFixed(4)}, {r.longitudActual?.toFixed(4)}
+                            {hasRealGPS
+                              ? `${r.latitudActual!.toFixed(4)}, ${r.longitudActual!.toFixed(4)}`
+                              : 'Esperando GPS…'}
                           </span>
                         </div>
 

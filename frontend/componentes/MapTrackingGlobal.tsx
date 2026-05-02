@@ -245,8 +245,11 @@ function RouteLayer({
     const [roadLine, setRoadLine] = useState<[number, number][]>([]);
     const lastFetchPos = useRef<[number, number] | null>(null);
 
+    // Solo consideramos posición actual real si vino con timestamp de GPS.
+    // Rutas heredadas con latitudActual=origen pero sin ultimaActualizacionGPS
+    // se descartan: el truck NO se ancla al origen.
     const cur: [number, number] | null =
-        ruta.latitudActual && ruta.longitudActual
+        ruta.latitudActual && ruta.longitudActual && ruta.ultimaActualizacionGPS
             ? [ruta.latitudActual, ruta.longitudActual]
             : null;
     const dest: [number, number] | null =
@@ -438,9 +441,10 @@ export default function MapTrackingGlobal({
     if (histRef.current === null) histRef.current = loadBreadcrumbs();
     const saveTickRef = useRef(0);
 
-    // Accumulate position history on each render (polling every 3s)
+    // Accumulate position history on each render (polling every 3s).
+    // Solo añadimos al breadcrumb si la posición viene con timestamp de GPS real.
     rutasActivas.forEach((r) => {
-        if (!r.latitudActual || !r.longitudActual || !r.id) return;
+        if (!r.latitudActual || !r.longitudActual || !r.id || !r.ultimaActualizacionGPS) return;
         const p: [number, number] = [r.latitudActual, r.longitudActual];
         const h = histRef.current!.get(r.id) ?? [];
         const last = h[h.length - 1];
@@ -452,11 +456,19 @@ export default function MapTrackingGlobal({
     saveTickRef.current++;
     if (saveTickRef.current % 10 === 0) saveBreadcrumbs(histRef.current!);
 
+    // Una ruta tiene GPS REAL solo si llegó al menos un POST /{id}/gps,
+    // lo que se traduce en `ultimaActualizacionGPS` no-null. Si solo tiene
+    // latitudActual sin timestamp = dato heredado del origen → lo ignoramos.
+    const hasRealGPS = (r: RutaTracking) =>
+        r.latitudActual != null &&
+        r.longitudActual != null &&
+        !!r.ultimaActualizacionGPS;
+
     const active = rutasActivas.filter(
         (r) =>
             r.estado === "EN_CURSO" ||
             r.estado === "DETENIDO" ||
-            (r.latitudActual && r.longitudActual)
+            hasRealGPS(r)
     );
 
     // Conductores idle = los que tienen ubicación pero NO son el conductor de ninguna
@@ -464,7 +476,7 @@ export default function MapTrackingGlobal({
     // primer GPS, el conductor sigue apareciendo en su ubicación de presencia.
     const activeConductorIds = new Set(
         active
-            .filter((r) => r.latitudActual && r.longitudActual)
+            .filter(hasRealGPS)
             .map((r) => r.conductorId)
             .filter(Boolean) as string[]
     );
@@ -477,7 +489,7 @@ export default function MapTrackingGlobal({
 
     const allPos: [number, number][] = [
         ...active
-            .filter((r) => r.latitudActual && r.longitudActual)
+            .filter(hasRealGPS)
             .map((r) => [r.latitudActual!, r.longitudActual!] as [number, number]),
         ...idleDrivers.map((c) => [c.latitudActual!, c.longitudActual!] as [number, number]),
     ];
@@ -581,7 +593,7 @@ export default function MapTrackingGlobal({
                     {active.map((r) => {
                         const gps = getGPSStatus(
                             r.ultimaActualizacionGPS,
-                            !!(r.latitudActual && r.longitudActual)
+                            hasRealGPS(r)
                         );
                         const c = STATUS_COLOR[gps.status];
                         const isSel = r.id === selectedId;

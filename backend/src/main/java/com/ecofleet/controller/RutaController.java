@@ -53,6 +53,16 @@ public class RutaController {
         if (ruta.getEstado() == null) {
             ruta.setEstado("PLANIFICADA");
         }
+        // Defensa: latitudActual/longitudActual SOLO los puede setear el endpoint
+        // /{id}/gps cuando el dispositivo emite GPS real. Ignoramos lo que venga
+        // del body para evitar que el truck quede anclado al origen.
+        ruta.setLatitudActual(null);
+        ruta.setLongitudActual(null);
+        ruta.setUltimaActualizacionGPS(null);
+        ruta.setVelocidadActualKmh(null);
+        ruta.setDistanciaRestanteKm(null);
+        ruta.setDesviado(null);
+        ruta.setInicioDetencion(null);
         aplicarAsignacionConductor(ruta, ruta.getConductorId(), usuarioId);
         return rutaRepository.save(ruta);
     }
@@ -159,69 +169,11 @@ public class RutaController {
                         }
                     }
                     
-                    // Calcular velocidad y distancia si se reciben nuevas coordenadas GPS
-                    if (rutaActualizada.getLatitudActual() != null && rutaActualizada.getLongitudActual() != null) {
-                        Double latitudAnterior = ruta.getLatitudActual();
-                        Double longitudAnterior = ruta.getLongitudActual();
-                        String timestampAnterior = ruta.getUltimaActualizacionGPS();
-                        
-                        ruta.setLatitudActual(rutaActualizada.getLatitudActual());
-                        ruta.setLongitudActual(rutaActualizada.getLongitudActual());
-                        
-                        String timestampActual = Instant.now().toString();
-                        ruta.setUltimaActualizacionGPS(timestampActual);
-                        
-                        // Calcular velocidad si tenemos posición anterior
-                        if (latitudAnterior != null && longitudAnterior != null && timestampAnterior != null) {
-                            try {
-                                double distanciaRecorrida = calcularDistancia(
-                                    latitudAnterior, longitudAnterior,
-                                    rutaActualizada.getLatitudActual(), rutaActualizada.getLongitudActual()
-                                );
-                                
-                                Instant instanteAnterior = Instant.parse(timestampAnterior);
-                                Instant instanteActual = Instant.parse(timestampActual);
-                                double segundosTranscurridos = (instanteActual.toEpochMilli() - instanteAnterior.toEpochMilli()) / 1000.0;
-                                double horasTranscurridas = segundosTranscurridos / 3600.0;
-                                
-                                if (horasTranscurridas > 0 && distanciaRecorrida > 0.001) {
-                                    double velocidad = distanciaRecorrida / horasTranscurridas;
-                                    velocidad = Math.max(0, Math.min(200, velocidad));
-                                    ruta.setVelocidadActualKmh(velocidad);
-                                } else {
-                                    ruta.setVelocidadActualKmh(0.0);
-                                }
-                            } catch (Exception e) {
-                                System.err.println("[RutaController] Error calculando velocidad en PUT: " + e.getMessage());
-                                ruta.setVelocidadActualKmh(0.0);
-                            }
-                        } else {
-                            ruta.setVelocidadActualKmh(0.0);
-                        }
-                        
-                        // Calcular distancia restante al destino
-                        if (ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
-                            double distanciaRestante = calcularDistancia(
-                                rutaActualizada.getLatitudActual(), rutaActualizada.getLongitudActual(),
-                                ruta.getLatitudDestino(), ruta.getLongitudDestino()
-                            );
-                            ruta.setDistanciaRestanteKm(distanciaRestante);
-                        }
-                        
-                        // Calcular si está desviado
-                        if (ruta.getLatitudOrigen() != null && ruta.getLongitudOrigen() != null &&
-                            ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null &&
-                            ruta.getDistanciaRestanteKm() != null) {
-                            
-                            double distanciaTotal = calcularDistancia(
-                                ruta.getLatitudOrigen(), ruta.getLongitudOrigen(),
-                                ruta.getLatitudDestino(), ruta.getLongitudDestino()
-                            );
-                            ruta.setDesviado(ruta.getDistanciaRestanteKm() > (distanciaTotal * 1.2));
-                        }
-                    }
-                    
-                    if (rutaActualizada.getDesviado() != null) ruta.setDesviado(rutaActualizada.getDesviado());
+                    // NOTA: latitudActual/longitudActual NO se actualizan vía PUT.
+                    // El único camino válido para mover el truck es POST /{id}/gps,
+                    // que es el endpoint específico de telemetría del dispositivo.
+                    // Esto evita que un PUT con `{...ruta}` desde el frontend
+                    // re-ancle al origen accidentalmente.
                     
                     return rutaRepository.save(ruta);
                 })
