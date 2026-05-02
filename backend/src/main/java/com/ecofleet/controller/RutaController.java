@@ -346,6 +346,16 @@ public class RutaController {
                         ruta.setDesviado(distanciaActualADestino > (distanciaTotal * 1.2));
                     }
 
+                    // ─── Actualizar ubicación del conductor (para mostrarlo en mapa aunque no tenga ruta activa) ───
+                    if (ruta.getConductorId() != null && !ruta.getConductorId().isBlank()) {
+                        conductorRepository.findById(ruta.getConductorId()).ifPresent(c -> {
+                            c.setLatitudActual(gps.getLatitud());
+                            c.setLongitudActual(gps.getLongitud());
+                            c.setUltimaActualizacionGPS(timestampActual);
+                            conductorRepository.save(c);
+                        });
+                    }
+
                     return rutaRepository.save(ruta);
                 })
                 .orElse(null);

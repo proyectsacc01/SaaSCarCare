@@ -13,6 +13,7 @@ interface RutaTracking {
     destino: string;
     estado: string;
     vehiculoId: string;
+    conductorId?: string;
     conductorNombre?: string;
     latitudActual?: number;
     longitudActual?: number;
@@ -26,8 +27,18 @@ interface RutaTracking {
     ultimaActualizacionGPS?: string;
 }
 
+export interface ConductorUbicacion {
+    id: string;
+    nombre: string;
+    email?: string;
+    latitudActual?: number;
+    longitudActual?: number;
+    ultimaActualizacionGPS?: string;
+}
+
 export interface MapTrackingGlobalProps {
     rutasActivas: RutaTracking[];
+    conductoresUbicaciones?: ConductorUbicacion[];
     onRutaClick?: (rutaId: string) => void;
 }
 
@@ -68,11 +79,24 @@ function distM(a: [number, number], b: [number, number]): number {
 }
 
 // ─── OSRM road routing (free, no key needed) ──────────────────────────────────
+// Cache en memoria para no re-fetchear cuando el conductor está prácticamente quieto.
+// Key: lat/lng redondeados a 3 decimales (~110m) para que cambios diminutos
+// reusen la misma ruta. Se invalida al recargar la página.
+
+const osrmCache = new Map<string, [number, number][]>();
+
+function osrmKey(from: [number, number], to: [number, number]): string {
+    const r = (n: number) => n.toFixed(3);
+    return `${r(from[0])},${r(from[1])}->${r(to[0])},${r(to[1])}`;
+}
 
 async function getRoadRoute(
     from: [number, number],
     to: [number, number]
 ): Promise<[number, number][]> {
+    const key = osrmKey(from, to);
+    const cached = osrmCache.get(key);
+    if (cached) return cached;
     try {
         const url =
             `https://router.project-osrm.org/route/v1/driving/` +
@@ -82,10 +106,39 @@ async function getRoadRoute(
         const data = await res.json();
         const coords: [number, number][] = data.routes?.[0]?.geometry?.coordinates;
         if (!coords?.length) return [from, to];
-        return coords.map(([lng, lat]) => [lat, lng] as [number, number]);
+        const result = coords.map(([lng, lat]) => [lat, lng] as [number, number]);
+        osrmCache.set(key, result);
+        return result;
     } catch {
         return [from, to];
     }
+}
+
+// ─── Breadcrumb persistence (localStorage, max 24h) ───────────────────────────
+
+const BREADCRUMB_KEY = "ecofleet_breadcrumbs_v1";
+const BREADCRUMB_TTL_MS = 24 * 60 * 60 * 1000;
+
+function loadBreadcrumbs(): Map<string, [number, number][]> {
+    if (typeof window === "undefined") return new Map();
+    try {
+        const raw = localStorage.getItem(BREADCRUMB_KEY);
+        if (!raw) return new Map();
+        const obj = JSON.parse(raw) as { ts: number; data: Record<string, [number, number][]> };
+        if (!obj?.ts || Date.now() - obj.ts > BREADCRUMB_TTL_MS) return new Map();
+        return new Map(Object.entries(obj.data ?? {}));
+    } catch {
+        return new Map();
+    }
+}
+
+function saveBreadcrumbs(map: Map<string, [number, number][]>) {
+    if (typeof window === "undefined") return;
+    try {
+        const data: Record<string, [number, number][]> = {};
+        map.forEach((v, k) => { data[k] = v; });
+        localStorage.setItem(BREADCRUMB_KEY, JSON.stringify({ ts: Date.now(), data }));
+    } catch { /* quota or disabled */ }
 }
 
 // ─── Leaflet icons ────────────────────────────────────────────────────────────
@@ -129,6 +182,24 @@ const DestIcon = L.divIcon({
     iconSize: [14, 14],
     iconAnchor: [7, 7],
 });
+
+function makeIdleIcon(label: string, status: GPSStatus): L.DivIcon {
+    const c = STATUS_COLOR[status];
+    return L.divIcon({
+        html: `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+          <div style="background:rgba(20,20,28,0.9);width:32px;height:32px;border-radius:50%;
+            border:2.5px solid ${c};display:flex;align-items:center;justify-content:center;
+            font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.5);">👤</div>
+          <div style="background:rgba(0,0,0,0.85);color:#fff;font-size:9px;font-weight:700;
+            padding:2px 5px;border-radius:4px;white-space:nowrap;
+            border:1px solid ${c}40;letter-spacing:0.2px;opacity:0.85;">${label}</div>
+        </div>`,
+        className: "",
+        iconSize: [40, 50],
+        iconAnchor: [20, 16],
+        popupAnchor: [0, -16],
+    });
+}
 
 // ─── Map helpers ──────────────────────────────────────────────────────────────
 
@@ -357,23 +428,29 @@ function RouteLayer({
 
 export default function MapTrackingGlobal({
     rutasActivas,
+    conductoresUbicaciones = [],
     onRutaClick,
 }: MapTrackingGlobalProps) {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [flyPos, setFlyPos] = useState<[number, number] | null>(null);
-    // Breadcrumb history persists across re-renders
-    const histRef = useRef<Map<string, [number, number][]>>(new Map());
+    // Breadcrumb history persists across re-renders AND page reloads (localStorage)
+    const histRef = useRef<Map<string, [number, number][]> | null>(null);
+    if (histRef.current === null) histRef.current = loadBreadcrumbs();
+    const saveTickRef = useRef(0);
 
     // Accumulate position history on each render (polling every 3s)
     rutasActivas.forEach((r) => {
         if (!r.latitudActual || !r.longitudActual || !r.id) return;
         const p: [number, number] = [r.latitudActual, r.longitudActual];
-        const h = histRef.current.get(r.id ?? "") ?? [];
+        const h = histRef.current!.get(r.id) ?? [];
         const last = h[h.length - 1];
         if (!last || distM(last, p) > 5) {
-            histRef.current.set(r.id, [...h, p].slice(-300));
+            histRef.current!.set(r.id, [...h, p].slice(-300));
         }
     });
+    // Persistir breadcrumbs cada ~30s para no martillar localStorage
+    saveTickRef.current++;
+    if (saveTickRef.current % 10 === 0) saveBreadcrumbs(histRef.current!);
 
     const active = rutasActivas.filter(
         (r) =>
@@ -382,9 +459,23 @@ export default function MapTrackingGlobal({
             (r.latitudActual && r.longitudActual)
     );
 
-    const allPos: [number, number][] = active
-        .filter((r) => r.latitudActual && r.longitudActual)
-        .map((r) => [r.latitudActual!, r.longitudActual!]);
+    // Conductores idle = los que tienen ubicación pero NO son el conductor de ninguna ruta activa
+    const activeConductorIds = new Set(
+        active.map((r) => r.conductorId).filter(Boolean) as string[]
+    );
+    const idleDrivers = conductoresUbicaciones.filter(
+        (c) =>
+            c.latitudActual != null &&
+            c.longitudActual != null &&
+            !activeConductorIds.has(c.id)
+    );
+
+    const allPos: [number, number][] = [
+        ...active
+            .filter((r) => r.latitudActual && r.longitudActual)
+            .map((r) => [r.latitudActual!, r.longitudActual!] as [number, number]),
+        ...idleDrivers.map((c) => [c.latitudActual!, c.longitudActual!] as [number, number]),
+    ];
 
     const center: [number, number] =
         allPos.length > 0
@@ -443,7 +534,7 @@ export default function MapTrackingGlobal({
                             marginTop: 2,
                         }}
                     >
-                        {allPos.length}{" "}
+                        {active.length}{" "}
                         <span
                             style={{
                                 fontSize: "0.62rem",
@@ -453,6 +544,18 @@ export default function MapTrackingGlobal({
                         >
                             en ruta
                         </span>
+                        {idleDrivers.length > 0 && (
+                            <span
+                                style={{
+                                    fontSize: "0.62rem",
+                                    color: "#9ca3af",
+                                    fontWeight: 500,
+                                    marginLeft: 8,
+                                }}
+                            >
+                                · {idleDrivers.length} idle
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -590,6 +693,87 @@ export default function MapTrackingGlobal({
                             </div>
                         );
                     })}
+
+                    {idleDrivers.length > 0 && (
+                        <div
+                            style={{
+                                fontSize: "0.55rem",
+                                color: "#4b5563",
+                                textTransform: "uppercase",
+                                letterSpacing: "1.2px",
+                                fontWeight: 700,
+                                padding: "10px 6px 4px",
+                                borderTop: "1px solid rgba(255,255,255,0.05)",
+                                marginTop: 6,
+                            }}
+                        >
+                            Sin ruta activa
+                        </div>
+                    )}
+
+                    {idleDrivers.map((c) => {
+                        const gps = getGPSStatus(c.ultimaActualizacionGPS, true);
+                        const color = STATUS_COLOR[gps.status];
+                        return (
+                            <div
+                                key={`idle-${c.id}`}
+                                onClick={() => {
+                                    if (c.latitudActual && c.longitudActual) {
+                                        setFlyPos([c.latitudActual, c.longitudActual]);
+                                        setSelectedId(null);
+                                    }
+                                }}
+                                style={{
+                                    padding: "8px 10px",
+                                    borderRadius: 10,
+                                    marginBottom: 4,
+                                    cursor: "pointer",
+                                    background: "rgba(255,255,255,0.015)",
+                                    border: "1px solid rgba(255,255,255,0.04)",
+                                    opacity: 0.85,
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: "0.7rem",
+                                            fontWeight: 600,
+                                            color: "#cbd5e1",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap",
+                                            maxWidth: 130,
+                                        }}
+                                    >
+                                        👤 {c.nombre}
+                                    </span>
+                                    <span
+                                        style={{
+                                            width: 6,
+                                            height: 6,
+                                            borderRadius: "50%",
+                                            background: color,
+                                        }}
+                                    />
+                                </div>
+                                <div
+                                    style={{
+                                        fontSize: "0.55rem",
+                                        color: "#4b5563",
+                                        marginTop: 2,
+                                    }}
+                                >
+                                    🕐 {gps.text}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -621,10 +805,32 @@ export default function MapTrackingGlobal({
                         <RouteLayer
                             key={r.id}
                             ruta={r}
-                            history={histRef.current.get(r.id ?? "") ?? []}
+                            history={histRef.current!.get(r.id ?? "") ?? []}
                             selected={r.id === selectedId}
                         />
                     ))}
+                    {idleDrivers.map((c) => {
+                        const gps = getGPSStatus(c.ultimaActualizacionGPS, true);
+                        const label = c.nombre?.split(" ")[0] ?? "Driver";
+                        return (
+                            <Marker
+                                key={`idle-${c.id}`}
+                                position={[c.latitudActual!, c.longitudActual!]}
+                                icon={makeIdleIcon(label, gps.status)}
+                            >
+                                <Popup>
+                                    <div style={{ fontFamily: "system-ui, sans-serif", fontSize: "0.8rem", color: "#111" }}>
+                                        <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 {c.nombre}</div>
+                                        <div style={{ fontSize: "0.7rem", color: "#666" }}>Sin ruta activa</div>
+                                        <div style={{ fontSize: "0.7rem", marginTop: 4 }}>🕐 GPS: {gps.text}</div>
+                                        <div style={{ fontFamily: "monospace", fontSize: "0.62rem", color: "#888", marginTop: 2 }}>
+                                            {c.latitudActual!.toFixed(5)}, {c.longitudActual!.toFixed(5)}
+                                        </div>
+                                    </div>
+                                </Popup>
+                            </Marker>
+                        );
+                    })}
                 </MapContainer>
             </div>
         </div>

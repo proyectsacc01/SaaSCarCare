@@ -42,4 +42,11 @@ public class Conductor {
 
     // Google OAuth ID (opcional)
     private String googleId;
+
+    // ─── GPS de presencia (última ubicación conocida del conductor) ───
+    // Se actualiza cada vez que llega GPS de una de sus rutas, así el admin
+    // puede verlo en el mapa aunque no tenga ruta activa.
+    private Double latitudActual;
+    private Double longitudActual;
+    private String ultimaActualizacionGPS; // ISO-8601
 }

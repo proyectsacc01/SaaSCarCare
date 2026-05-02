@@ -79,6 +79,15 @@ interface Conductor {
   email: string;
 }
 
+interface ConductorUbicacion {
+  id: string;
+  nombre: string;
+  email: string;
+  latitudActual?: number;
+  longitudActual?: number;
+  ultimaActualizacionGPS?: string;
+}
+
 interface MantenimientoItem {
   id: string;
   vehiculoId: string;
@@ -156,6 +165,7 @@ export default function Dashboard() {
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [rutas, setRutas] = useState<Ruta[]>([]);
   const [conductores, setConductores] = useState<Conductor[]>([]);
+  const [conductoresUbicaciones, setConductoresUbicaciones] = useState<ConductorUbicacion[]>([]);
   const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
   const [mantenimientos, setMantenimientos] = useState<MantenimientoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -357,12 +367,13 @@ export default function Dashboard() {
   const cargarDatos = useCallback(async () => {
     setLoading(true);
     try {
-      const [resVehiculos, resRutas, resRepostajes, resConductores, resMantenimientos] = await Promise.all([
+      const [resVehiculos, resRutas, resRepostajes, resConductores, resMantenimientos, resUbicaciones] = await Promise.all([
         fetch(`${API_URL}/api/vehiculos`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/rutas`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/repostajes`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/conductores`, { headers: getAuthHeaders() }),
-        fetch(`${API_URL}/api/mantenimientos`, { headers: getAuthHeaders() })
+        fetch(`${API_URL}/api/mantenimientos`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/conductores/locations`, { headers: getAuthHeaders() })
       ]);
 
       if (resVehiculos.ok) {
@@ -392,6 +403,11 @@ export default function Dashboard() {
       if (resMantenimientos.ok) {
         const dataM = await resMantenimientos.json();
         setMantenimientos(dataM);
+      }
+
+      if (resUbicaciones.ok) {
+        const dataU = await resUbicaciones.json();
+        setConductoresUbicaciones(dataU);
       }
     } catch (err) {
       console.error("Error conectando con el Backend:", err);
@@ -1664,6 +1680,7 @@ export default function Dashboard() {
               <div className={styles.card} style={{ height: '600px', padding: 0, overflow: 'hidden', position: 'relative', border: '1px solid rgba(59, 246, 59, 0.3)', boxShadow: '0 0 50px rgba(59, 246, 59, 0.1)' }}>
                 <MapTrackingGlobal
                   rutasActivas={rutas}
+                  conductoresUbicaciones={conductoresUbicaciones}
                   onRutaClick={(rutaId) => router.push(`/ruta/${rutaId}`)}
                 />
 

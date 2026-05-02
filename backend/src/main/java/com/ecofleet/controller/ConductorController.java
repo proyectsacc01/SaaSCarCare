@@ -55,6 +55,38 @@ public class ConductorController {
     }
 
     /**
+     * Devuelve la última ubicación conocida de cada conductor de la empresa.
+     * El admin lo usa para mostrar a TODOS los conductores en el mapa, incluso
+     * aquellos que no tienen ruta activa en este momento.
+     */
+    @GetMapping("/locations")
+    public ResponseEntity<?> ubicacionesConductores(HttpServletRequest request) {
+        String role = (String) request.getAttribute("userRole");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo administradores"));
+        }
+
+        String empresaId = (String) request.getAttribute("userId");
+        List<Conductor> conductores = conductorRepository.findByEmpresaIdAndActivoTrue(empresaId);
+
+        List<Map<String, Object>> result = conductores.stream()
+                .filter(c -> c.getLatitudActual() != null && c.getLongitudActual() != null)
+                .map(c -> {
+                    Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id", c.getId());
+                    m.put("nombre", c.getNombre() != null ? c.getNombre() : "");
+                    m.put("email", c.getEmail() != null ? c.getEmail() : "");
+                    m.put("latitudActual", c.getLatitudActual());
+                    m.put("longitudActual", c.getLongitudActual());
+                    m.put("ultimaActualizacionGPS", c.getUltimaActualizacionGPS());
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
      * Permite a un conductor asociarse a una empresa distinta.
      * Devuelve un nuevo JWT con el empresaId actualizado.
      */
