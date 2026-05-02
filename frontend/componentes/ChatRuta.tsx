@@ -200,7 +200,13 @@ export default function ChatRuta({ rutaId, rol }: ChatProps) {
     return (
         <>
             <div style={{
-                display: 'flex', flexDirection: 'column', height: '420px',
+                display: 'flex', flexDirection: 'column',
+                // Altura responsive: nunca más alto que el 65% del viewport dinámico
+                // (que respeta el teclado en Android), con un tope razonable.
+                // Esto evita que el contenedor del chat empuje el input fuera de
+                // la pantalla cuando aparece el teclado.
+                height: 'min(420px, 65dvh)',
+                minHeight: '320px',
                 borderRadius: '20px', overflow: 'hidden',
                 background: 'linear-gradient(180deg, rgba(12,14,20,0.98) 0%, rgba(8,10,16,0.99) 100%)',
                 border: '1px solid rgba(255,255,255,0.06)',
@@ -482,11 +488,25 @@ export default function ChatRuta({ rutaId, rol }: ChatProps) {
                         value={nuevoMensaje}
                         onChange={(e) => setNuevoMensaje(e.target.value)}
                         placeholder="Escribe un mensaje..."
+                        // Cuando el teclado de Android aparece, el viewport se reduce y
+                        // el input puede quedar oculto detrás del bottom nav fixed.
+                        // Forzamos scrollIntoView con un pequeño delay para esperar
+                        // que el teclado termine la animación.
+                        onFocus={(e) => {
+                            const target = e.currentTarget;
+                            setTimeout(() => {
+                                try {
+                                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                                } catch { /* navegadores viejos */ }
+                            }, 350);
+                        }}
                         style={{
                             flex: 1, background: 'rgba(0,0,0,0.25)',
                             border: '1px solid rgba(255,255,255,0.08)',
                             borderRadius: '20px', padding: '0.6rem 1rem',
-                            color: '#fff', outline: 'none', fontSize: '0.88rem',
+                            color: '#fff', outline: 'none', fontSize: '16px',
+                            // 16px evita que iOS/Android haga zoom automático al focusear
+                            minWidth: 0,
                         }}
                     />
                     <button

@@ -15,6 +15,10 @@ interface Ruta {
     estado: string;
     vehiculoId: string;
     fecha: string;
+    latitudOrigen?: number;
+    longitudOrigen?: number;
+    latitudDestino?: number;
+    longitudDestino?: number;
 }
 
 interface Vehiculo {
@@ -39,6 +43,19 @@ interface DriverUser {
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
     : (process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app");
+
+// Abre una URL externa fuera del WebView. En Android, usa el bridge nativo
+// para lanzar un Intent.ACTION_VIEW (Google Maps app, navegador, etc).
+// En navegador web, abre en nueva pestaña.
+function openExternal(url: string) {
+    if (typeof window === 'undefined') return;
+    const bridge = (window as any).AndroidTracker;
+    if (bridge && typeof bridge.openExternalUrl === 'function') {
+        bridge.openExternalUrl(url);
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 export default function ConductorDashboard() {
   const t = useTranslation();
@@ -498,7 +515,19 @@ export default function ConductorDashboard() {
 
     return (
         <BackgroundMeteors>
-            <main style={{ minHeight: '100vh', width: '100%', display: 'flex', flexDirection: 'column', position: 'relative', paddingBottom: '72px' }}>
+            <main style={{
+                // Altura FIJA al viewport dinámico. Sin esto, cuando el contenido
+                // crece (form de repostaje, lista larga…), main crecía con él y el
+                // overflow:auto del scroll interno dejaba de actuar — el usuario
+                // no podía scrollear. Ahora main NUNCA crece: todo el scroll
+                // ocurre dentro del div flex:1.
+                height: '100dvh',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
 
                 {/* STATUS BAR */}
                 <div style={{ background: 'rgba(5,5,10,0.9)', padding: '0.35rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6rem', color: '#6b7280', backdropFilter: 'blur(8px)' }}>
@@ -517,12 +546,15 @@ export default function ConductorDashboard() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    background: 'rgba(8,8,14,0.88)',
+                    // Sólido para que el contenido del scroll NO se vea borroso
+                    // pasando por detrás (efecto "marco roto" que reportó el usuario).
+                    background: 'rgba(5,6,11,0.98)',
                     backdropFilter: 'blur(24px)',
-                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
                     position: 'sticky',
                     top: 0,
-                    zIndex: 20
+                    zIndex: 20,
+                    boxShadow: '0 4px 14px -8px rgba(0,0,0,0.6)'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
                         <div style={{
@@ -569,23 +601,52 @@ export default function ConductorDashboard() {
                         <div
                             onClick={() => setActiveTab('perfil')}
                             style={{
-                                width: '34px', height: '34px', borderRadius: '50%', overflow: 'hidden',
-                                border: `2px solid ${isOnline ? 'rgba(59,246,59,0.5)' : 'rgba(107,114,128,0.3)'}`,
+                                width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden',
+                                border: `2px solid ${isOnline ? 'rgba(59,246,59,0.55)' : 'rgba(107,114,128,0.3)'}`,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '0.65rem', fontWeight: '900', color: '#3bf63b', flexShrink: 0,
-                                transition: 'border-color 0.25s ease', cursor: 'pointer',
-                                background: profilePhoto ? 'transparent' : 'rgba(255,255,255,0.05)'
+                                fontSize: '0.7rem', fontWeight: '900', color: '#3bf63b', flexShrink: 0,
+                                transition: 'border-color 0.25s ease, transform 0.15s ease', cursor: 'pointer',
+                                background: profilePhoto
+                                    ? 'transparent'
+                                    : 'linear-gradient(135deg, rgba(59,246,59,0.18), rgba(34,197,94,0.06))',
+                                boxShadow: isOnline ? '0 0 0 3px rgba(59,246,59,0.08)' : 'none'
                             }}
                         >
                             {profilePhoto ? (
-                                <img src={profilePhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img
+                                    src={profilePhoto}
+                                    alt=""
+                                    referrerPolicy="no-referrer"
+                                    onError={() => {
+                                        // Google a veces invalida el URL de la foto de perfil
+                                        // (token caducado, hotlink bloqueado). Volvemos a iniciales.
+                                        setProfilePhoto(null);
+                                        if (typeof window !== 'undefined') {
+                                            localStorage.removeItem('profilePhoto');
+                                        }
+                                    }}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
                             ) : getInitials(driverUser?.nombre, driverUser?.email)}
                         </div>
                     </div>
                 </header>
 
                 {/* SCROLLABLE CONTENT */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1rem 1.5rem' }}>
+                <div style={{
+                    flex: 1,
+                    // Sin minHeight:0, los flex items por default tienen
+                    // min-height:auto y crecen al contenido en vez de scrollear.
+                    // Necesario para que overflowY:auto realmente actúe.
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overscrollBehavior: 'contain',
+                    WebkitOverflowScrolling: 'touch',
+                    // Padding-bottom = altura del nav fijo (~64px) + safe area + aire.
+                    // Garantiza que la última tarjeta de CUALQUIER tab pueda
+                    // scrollearse hasta arriba del nav y nunca quede tapada.
+                    padding: '1rem 1rem calc(110px + env(safe-area-inset-bottom, 0px))'
+                }}>
 
                     {/* ─── TAB: INICIO ─── */}
                     {activeTab === 'inicio' && (
@@ -697,8 +758,14 @@ export default function ConductorDashboard() {
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                                             <button
                                                 onClick={() => {
-                                                    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(rutaActiva.destino)}`;
-                                                    window.open(url, '_blank');
+                                                    // Si tenemos coords del destino, las usamos: más preciso y abre
+                                                    // Google Maps en modo navegación al toque. Si no, fallback a texto.
+                                                    const target =
+                                                        rutaActiva.latitudDestino && rutaActiva.longitudDestino
+                                                            ? `${rutaActiva.latitudDestino},${rutaActiva.longitudDestino}`
+                                                            : (rutaActiva.destino || '');
+                                                    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving`;
+                                                    openExternal(url);
                                                 }}
                                                 style={{ padding: '0.8rem 0.4rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
                                             >
@@ -1105,7 +1172,18 @@ export default function ConductorDashboard() {
                                     }}
                                 >
                                     {profilePhoto ? (
-                                        <img src={profilePhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <img
+                                            src={profilePhoto}
+                                            alt=""
+                                            referrerPolicy="no-referrer"
+                                            onError={() => {
+                                                setProfilePhoto(null);
+                                                if (typeof window !== 'undefined') {
+                                                    localStorage.removeItem('profilePhoto');
+                                                }
+                                            }}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
                                     ) : (
                                         <span style={{ fontSize: '2rem', fontWeight: '900', color: '#3bf63b' }}>
                                             {getInitials(driverUser?.nombre, driverUser?.email)}
@@ -1282,11 +1360,13 @@ export default function ConductorDashboard() {
                 {/* BOTTOM NAVIGATION */}
                 <nav style={{
                     position: 'fixed', bottom: 0, left: 0, right: 0,
-                    background: 'rgba(6,6,12,0.97)', backdropFilter: 'blur(24px)',
-                    borderTop: '1px solid rgba(255,255,255,0.05)',
+                    // Sólido para que ninguna tarjeta del scroll se confunda con el nav.
+                    background: 'rgba(4,5,10,0.99)', backdropFilter: 'blur(24px)',
+                    borderTop: '1px solid rgba(255,255,255,0.07)',
                     display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-                    padding: '0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom, 0px))',
-                    zIndex: 50
+                    padding: '0.55rem 0 calc(0.55rem + env(safe-area-inset-bottom, 0px))',
+                    zIndex: 50,
+                    boxShadow: '0 -4px 14px -8px rgba(0,0,0,0.6)'
                 }}>
                     {[
                         { id: 'inicio', label: 'Inicio', icon: (a: boolean) => (

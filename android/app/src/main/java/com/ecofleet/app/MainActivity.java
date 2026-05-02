@@ -2,13 +2,16 @@ package com.ecofleet.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
+import android.webkit.ValueCallback;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -22,6 +25,11 @@ import android.Manifest;
 public class MainActivity extends Activity {
 
     private WebView mWebView;
+
+    // Callback que el WebView nos da cuando un <input type="file"> es activado.
+    // Lo guardamos para entregarle el resultado del picker en onActivityResult.
+    private ValueCallback<Uri[]> mFilePathCallback;
+    private static final int FILECHOOSER_REQUEST = 1100;
 
     private static final String API_URL = BuildConfig.API_URL;
     private static final String WEB_URL = BuildConfig.WEB_URL;
@@ -79,6 +87,53 @@ public class MainActivity extends Activity {
             public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 callback.invoke(origin, true, false);
             }
+
+            // Habilita <input type="file"> dentro del WebView. Sin esto el botón
+            // de adjuntar imagen del chat no hace nada en Android.
+            @Override
+            public boolean onShowFileChooser(WebView webView,
+                                             ValueCallback<Uri[]> filePathCallback,
+                                             FileChooserParams fileChooserParams) {
+                // Si había un callback pendiente (usuario abrió y cerró sin elegir),
+                // lo cancelamos para no bloquear futuros pickers.
+                if (mFilePathCallback != null) {
+                    mFilePathCallback.onReceiveValue(null);
+                }
+                mFilePathCallback = filePathCallback;
+
+                Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+
+                // Respetar el atributo accept="..." del input. Si no, image/* por defecto.
+                String[] acceptTypes = fileChooserParams.getAcceptTypes();
+                String mime = "*/*";
+                if (acceptTypes != null && acceptTypes.length > 0 && acceptTypes[0] != null && !acceptTypes[0].isEmpty()) {
+                    if (acceptTypes.length == 1) {
+                        mime = acceptTypes[0];
+                    } else {
+                        contentIntent.putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes);
+                    }
+                } else {
+                    mime = "image/*";
+                }
+                contentIntent.setType(mime);
+
+                if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                    contentIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                }
+
+                Intent chooser = Intent.createChooser(contentIntent, "Elegir archivo");
+                try {
+                    startActivityForResult(chooser, FILECHOOSER_REQUEST);
+                    return true;
+                } catch (ActivityNotFoundException e) {
+                    mFilePathCallback = null;
+                    Toast.makeText(MainActivity.this,
+                            "No hay app para elegir archivos",
+                            Toast.LENGTH_SHORT).show();
+                    return false;
+                }
+            }
         });
 
         mWebView.setWebViewClient(new WebViewClient() {
@@ -103,6 +158,67 @@ public class MainActivity extends Activity {
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 android.util.Log.e("EcoFleet", "Error SSL bloqueado: " + error.getPrimaryError());
                 handler.cancel();
+            }
+
+            // Intercepta links externos: Google Maps, navegación, intents, tel, mailto, etc.
+            // Cualquier cosa que NO sea nuestro propio host se abre con un Intent externo
+            // (Maps app, navegador, dialer...) en lugar de tratar de cargarla en el WebView.
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return handleUrl(view, request.getUrl().toString());
+            }
+
+            @SuppressWarnings("deprecation")
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return handleUrl(view, url);
+            }
+
+            private boolean handleUrl(WebView view, String url) {
+                if (url == null) return false;
+
+                // intent:// → resolver al intent real y lanzar
+                if (url.startsWith("intent:")) {
+                    try {
+                        Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
+                        if (intent.resolveActivity(getPackageManager()) != null) {
+                            startActivity(intent);
+                            return true;
+                        }
+                        String fallback = intent.getStringExtra("browser_fallback_url");
+                        if (fallback != null) {
+                            view.loadUrl(fallback);
+                            return true;
+                        }
+                    } catch (Exception e) {
+                        android.util.Log.e("EcoFleet", "Error parseando intent URL: " + e.getMessage());
+                    }
+                    return true;
+                }
+
+                // Mapas, navegación, tel, mailto, sms, etc → siempre fuera del WebView
+                boolean externalScheme = url.startsWith("tel:") || url.startsWith("mailto:")
+                        || url.startsWith("sms:") || url.startsWith("geo:")
+                        || url.startsWith("whatsapp:") || url.startsWith("market:");
+                boolean isMaps = url.contains("maps.google.") || url.contains("google.com/maps")
+                        || url.contains("maps.app.goo.gl") || url.contains("goo.gl/maps");
+
+                if (externalScheme || isMaps) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        return true;
+                    } catch (ActivityNotFoundException e) {
+                        Toast.makeText(MainActivity.this,
+                                "No hay app para abrir esta URL",
+                                Toast.LENGTH_SHORT).show();
+                        return true;
+                    }
+                }
+
+                // El resto (mismo host) se carga en el WebView
+                return false;
             }
         });
 
@@ -135,6 +251,24 @@ public class MainActivity extends Activity {
             mContext.stopService(intent);
             mContext.runOnUiThread(() -> Toast.makeText(mContext, "GPS Nativo Detenido", Toast.LENGTH_SHORT).show());
         }
+
+        // Lanza una URL externa con la app correspondiente del sistema
+        // (Google Maps, dialer, navegador...). Llamado desde JS.
+        @JavascriptInterface
+        public void openExternalUrl(String url) {
+            if (url == null || url.isEmpty()) return;
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                mContext.startActivity(intent);
+            } catch (ActivityNotFoundException e) {
+                mContext.runOnUiThread(() -> Toast.makeText(mContext,
+                        "No hay app instalada para abrir esa URL",
+                        Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                android.util.Log.e("EcoFleet", "openExternalUrl falló: " + e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -144,5 +278,30 @@ public class MainActivity extends Activity {
         } else {
             super.onBackPressed();
         }
+    }
+
+    // Recibe el resultado del file picker (galería/archivos) y se lo entrega al
+    // WebView vía el callback que guardamos en onShowFileChooser. Sin esto el
+    // <input type="file"> queda colgado para siempre.
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != FILECHOOSER_REQUEST) return;
+        if (mFilePathCallback == null) return;
+
+        Uri[] results = null;
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                results = new Uri[count];
+                for (int i = 0; i < count; i++) {
+                    results[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                results = new Uri[]{ data.getData() };
+            }
+        }
+        mFilePathCallback.onReceiveValue(results);
+        mFilePathCallback = null;
     }
 }
