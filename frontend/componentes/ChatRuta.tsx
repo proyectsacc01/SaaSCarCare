@@ -26,6 +26,7 @@ interface ChatProps {
 
 type AndroidTrackerBridge = {
     pickChatAudio?: () => void;
+    startRecording?: () => void;
     requestMicPermission?: () => void;
 };
 
@@ -240,11 +241,11 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         if (typeof window === "undefined") return;
 
         const bridge = getAndroidTracker();
-        if (bridge?.pickChatAudio) {
+        if (bridge?.startRecording) {
             setIsRecording(true);
             setRecordingSeconds(0);
             setMediaPreview(null);
-            bridge.pickChatAudio();
+            bridge.startRecording();
             return;
         }
 

@@ -41,8 +41,10 @@ public class MainActivity extends Activity {
     private static final int PROFILE_IMAGE_REQUEST = 1101;
     private static final int CHAT_AUDIO_REQUEST = 1102;
     private static final int NATIVE_PERMISSION_REQUEST = 1103;
+    private static final int RECORD_AUDIO_REQUEST = 1104;
     private static final String ACTION_PROFILE_IMAGE = "profile_image";
     private static final String ACTION_CHAT_AUDIO = "chat_audio";
+    private static final String ACTION_RECORD_AUDIO = "record_audio";
 
     private String pendingNativeAction = null;
     // Guardamos la PermissionRequest pendiente del WebView para concederla
@@ -387,9 +389,17 @@ public class MainActivity extends Activity {
             });
         }
 
-        // Pide permiso de micrófono al sistema. Si ya está concedido,
-        // dispara inmediatamente el evento "mic-permission-granted" para que
-        // el JS pueda reintentar getUserMedia / MediaRecorder.
+        // Lanza DIRECTAMENTE la grabadora de audio del sistema sin abrir
+        // ningún chooser ni explorador de archivos.
+        @JavascriptInterface
+        public void startRecording() {
+            mContext.runOnUiThread(() -> {
+                if (!ensureNativePermissions(ACTION_RECORD_AUDIO)) {
+                    return;
+                }
+                openDirectRecorder();
+            });
+        }
         @JavascriptInterface
         public void requestMicPermission() {
             mContext.runOnUiThread(() -> {
@@ -406,7 +416,7 @@ public class MainActivity extends Activity {
     private boolean ensureNativePermissions(String action) {
         java.util.List<String> missing = new java.util.ArrayList<>();
 
-        if (ACTION_CHAT_AUDIO.equals(action)) {
+        if (ACTION_CHAT_AUDIO.equals(action) || ACTION_RECORD_AUDIO.equals(action)) {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 missing.add(Manifest.permission.RECORD_AUDIO);
             }
@@ -478,6 +488,17 @@ public class MainActivity extends Activity {
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "No hay app para grabar o elegir audio", Toast.LENGTH_SHORT).show();
             dispatchNativeError("native-chat-audio-error", "No hay app para grabar o elegir audio");
+        }
+    }
+
+    // Lanza DIRECTAMENTE la grabadora del sistema sin chooser ni explorador
+    private void openDirectRecorder() {
+        Intent recorderIntent = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
+        try {
+            startActivityForResult(recorderIntent, RECORD_AUDIO_REQUEST);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No hay grabadora de audio disponible", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-audio-error", "No hay grabadora de audio disponible");
         }
     }
 
@@ -642,6 +663,8 @@ public class MainActivity extends Activity {
             openNativeProfileImagePicker();
         } else if (ACTION_CHAT_AUDIO.equals(action)) {
             openNativeChatAudioPicker();
+        } else if (ACTION_RECORD_AUDIO.equals(action)) {
+            openDirectRecorder();
         } else if ("mic_permission".equals(action)) {
             dispatchNativeEvent("mic-permission-granted", "{}");
         }
@@ -658,6 +681,10 @@ public class MainActivity extends Activity {
             return;
         }
         if (requestCode == CHAT_AUDIO_REQUEST) {
+            handleChatAudioResult(resultCode, data);
+            return;
+        }
+        if (requestCode == RECORD_AUDIO_REQUEST) {
             handleChatAudioResult(resultCode, data);
             return;
         }
