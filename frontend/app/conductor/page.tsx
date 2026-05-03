@@ -66,7 +66,16 @@ export default function ConductorDashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'inicio' | 'historial' | 'chat' | 'perfil'>('inicio');
-    const [isOnline, setIsOnline] = useState(true);
+    // isOnline controla SI el dispositivo emite GPS al servidor.
+    // - true  → presence watcher activo + TrackingService nativo si hay ruta
+    // - false → no se manda ubicación, el admin lo ve como inactivo
+    // Persistimos en localStorage para que el cambio sobreviva al refresh y a
+    // salir/entrar de la app.
+    const [isOnline, setIsOnline] = useState(() => {
+        if (typeof window === 'undefined') return true;
+        const stored = localStorage.getItem('driverIsOnline');
+        return stored === null ? true : stored === '1';
+    });
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [routeStartTime, setRouteStartTime] = useState<Date | null>(null);
     const [driverUser, setDriverUser] = useState<DriverUser | null>(null);
@@ -181,42 +190,76 @@ export default function ConductorDashboard() {
         cargarVehiculos();
         const interval = setInterval(cargarRutas, 10000);
 
-        // ─── Presence GPS ──────────────────────────────────────────────────
-        // El conductor reporta su ubicación REAL cada ~30s mientras la app
-        // esté abierta, así el admin lo ve en el mapa aunque no esté en ruta.
-        // Cuando arranca una ruta, el TrackingService nativo toma el control
-        // del envío frecuente; este watcher sigue corriendo pero solo manda
-        // si pasaron 30s desde el último envío.
-        let lastSent = 0;
-        let presenceWatchId: number | null = null;
-        if (typeof navigator !== 'undefined' && navigator.geolocation) {
-            presenceWatchId = navigator.geolocation.watchPosition(
-                (pos) => {
-                    const now = Date.now();
-                    if (now - lastSent < 30_000) return;
-                    lastSent = now;
-                    fetch(`${API_URL}/api/conductores/me/gps`, {
-                        method: 'POST',
-                        headers: getAuthHeaders(),
-                        body: JSON.stringify({
-                            latitud: pos.coords.latitude,
-                            longitud: pos.coords.longitude,
-                        }),
-                    }).catch(() => { /* silencioso */ });
-                },
-                () => { /* permiso denegado o error — silencioso */ },
-                { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
-            );
-        }
-
         return () => {
             clearInterval(interval);
-            if (presenceWatchId !== null && typeof navigator !== 'undefined' && navigator.geolocation) {
-                navigator.geolocation.clearWatch(presenceWatchId);
-            }
             stopBrowserGPS();
         };
     }, []);
+
+    // ─── Presence GPS — solo activo cuando isOnline=true ─────────────────
+    // El conductor reporta su ubicación REAL cada ~30s mientras la app
+    // esté abierta Y esté marcado como ACTIVO. Si el conductor toca el
+    // botón ACTIVO/INACTIVO en el header, este watcher se monta/desmonta
+    // y deja de enviar GPS al servidor.
+    useEffect(() => {
+        if (!isOnline) return;
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+        let lastSent = 0;
+        const watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const now = Date.now();
+                if (now - lastSent < 30_000) return;
+                lastSent = now;
+                fetch(`${API_URL}/api/conductores/me/gps`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        latitud: pos.coords.latitude,
+                        longitud: pos.coords.longitude,
+                    }),
+                }).catch(() => { /* silencioso */ });
+            },
+            () => { /* permiso denegado o error — silencioso */ },
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
+        );
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+        };
+    }, [isOnline]);
+
+    // Toggle ACTIVO/INACTIVO con efectos reales:
+    //   - Persiste el estado en localStorage
+    //   - Detiene/reanuda el TrackingService nativo si hay ruta EN_CURSO
+    //   - El presence watcher se ata/desata vía el useEffect de arriba
+    const toggleOnline = () => {
+        const next = !isOnline;
+        setIsOnline(next);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('driverIsOnline', next ? '1' : '0');
+        }
+        const tracker = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
+        const rutaEnCurso = rutas.find(r => r.estado === 'EN_CURSO');
+        if (!next) {
+            // Pasamos a INACTIVO — paramos GPS browser y servicio nativo si hay
+            stopBrowserGPS();
+            if (tracker?.stopTracking) {
+                try { tracker.stopTracking(); } catch { /* noop */ }
+            }
+            toast.success("Estás INACTIVO — tu ubicación no se comparte");
+        } else {
+            // Pasamos a ACTIVO — si hay ruta en curso, re-arrancar tracking nativo
+            if (rutaEnCurso) {
+                if (tracker?.startTracking) {
+                    try { tracker.startTracking(rutaEnCurso.id); } catch { /* noop */ }
+                } else {
+                    startBrowserGPS(rutaEnCurso.id);
+                }
+            }
+            toast.success("Estás ACTIVO — tu ubicación se comparte con la central");
+        }
+    };
 
     const handleProfilePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -343,6 +386,12 @@ export default function ConductorDashboard() {
 
     const toggleRuta = async (ruta: Ruta) => {
         const nuevoEstado = ruta.estado === 'EN_CURSO' ? 'PLANIFICADA' : 'EN_CURSO';
+        // No se puede iniciar una ruta si el conductor está INACTIVO —
+        // sino el admin no recibiría telemetría y la ruta no tendría sentido.
+        if (nuevoEstado === 'EN_CURSO' && !isOnline) {
+            toast.error("Activá tu estado para iniciar la ruta");
+            return;
+        }
         if (typeof window !== 'undefined' && (window as any).AndroidTracker) {
             if (nuevoEstado === 'EN_CURSO') (window as any).AndroidTracker.startTracking(ruta.id);
             else (window as any).AndroidTracker.stopTracking();
@@ -580,7 +629,7 @@ export default function ConductorDashboard() {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <button
-                            onClick={() => setIsOnline(!isOnline)}
+                            onClick={toggleOnline}
                             style={{
                                 padding: '0.25rem 0.6rem',
                                 borderRadius: '99px',
@@ -1111,15 +1160,23 @@ export default function ConductorDashboard() {
 
                     {/* ─── TAB: CHAT ─── */}
                     {activeTab === 'chat' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                            {/* Connection info */}
+                        // En chat hacemos layout vertical full-height: la card de
+                        // connection info no crece, y el ChatRuta ocupa TODO el
+                        // espacio que sobre. Resultado: el chat se siente nativo
+                        // tanto en móvil como en tablet, sin caps artificiales.
+                        <div style={{
+                            display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                            height: '100%', minHeight: 0
+                        }}>
+                            {/* Connection info — altura fija */}
                             <div style={{
                                 display: 'flex', alignItems: 'center', gap: '0.6rem',
                                 padding: '0.7rem 0.9rem', borderRadius: '14px',
                                 background: 'rgba(59,246,59,0.04)', border: '1px solid rgba(59,246,59,0.12)',
+                                flexShrink: 0,
                             }}>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#000', flexShrink: 0 }}>🏢</div>
-                                <div style={{ flex: 1 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#e5e7eb' }}>Soporte Admin</div>
                                     <div style={{ fontSize: '0.6rem', color: '#4b5563' }}>
                                         {rutaActiva ? `Ruta #${rutaActiva.id?.slice(-6).toUpperCase()}` : 'Canal general'}
@@ -1130,11 +1187,14 @@ export default function ConductorDashboard() {
                                     <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: '700' }}>ACTIVO</span>
                                 </div>
                             </div>
-                            {/* Chat component */}
-                            <ChatRuta
-                                rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
-                                rol="CONDUCTOR"
-                            />
+                            {/* Chat component — toma toda la altura sobrante */}
+                            <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                                <ChatRuta
+                                    rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
+                                    rol="CONDUCTOR"
+                                    fillParent
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -1286,7 +1346,10 @@ export default function ConductorDashboard() {
                                     {
                                         icon: '🔒', label: 'Política de Privacidad',
                                         sub: 'Cómo tratamos tus datos',
-                                        action: () => window.open('/privacy', '_blank'),
+                                        action: () => {
+                                            const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/privacy`;
+                                            openExternal(url);
+                                        },
                                     },
                                     {
                                         icon: '✉️', label: 'Contactar soporte',
@@ -1294,7 +1357,9 @@ export default function ConductorDashboard() {
                                         action: () => {
                                             const subject = encodeURIComponent('CarCare Driver — Soporte');
                                             const body = encodeURIComponent(`Hola,\n\nID Conductor: ${driverUser?.id || '—'}\nEmail: ${driverUser?.email || '—'}\n\n[Describe tu consulta]\n`);
-                                            window.location.href = `mailto:elenarodriguez0097@gmail.com?subject=${subject}&body=${body}`;
+                                            // openExternal usa el bridge nativo en Android (intent ACTION_VIEW),
+                                            // que abre Gmail/cliente de correo. En web abre tab nueva con mailto.
+                                            openExternal(`mailto:elenarodriguez0097@gmail.com?subject=${subject}&body=${body}`);
                                         },
                                     },
                                     {

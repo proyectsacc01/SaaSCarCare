@@ -15,6 +15,12 @@ interface Mensaje {
 interface ChatProps {
     rutaId: string;
     rol: "ADMIN" | "CONDUCTOR";
+    /**
+     * Si true, el chat ocupa el 100% del padre (necesita un padre con altura
+     * conocida y display:flex). Útil para layouts full-screen del conductor.
+     * Si false (default), usa altura responsive con cap fijo.
+     */
+    fillParent?: boolean;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
@@ -35,7 +41,7 @@ const QUICK_REPLIES_ADMIN = [
     "Actualiza estado cuando puedas",
 ];
 
-export default function ChatRuta({ rutaId, rol }: ChatProps) {
+export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps) {
     const [mensajes, setMensajes] = useState<Mensaje[]>([]);
     const [nuevoMensaje, setNuevoMensaje] = useState("");
     const [mediaPreview, setMediaPreview] = useState<{ base64: string; type: string } | null>(null);
@@ -201,12 +207,13 @@ export default function ChatRuta({ rutaId, rol }: ChatProps) {
         <>
             <div style={{
                 display: 'flex', flexDirection: 'column',
-                // Chat más alto y responsive: ocupa hasta el 78% del viewport
-                // dinámico para que el conductor tenga espacio cómodo de lectura.
-                // El cap absoluto en 640px evita que en pantallas grandes (tablets)
-                // se haga ridículamente largo.
-                height: 'min(640px, 78dvh)',
-                minHeight: '420px',
+                // Si fillParent: ocupamos el 100% del contenedor padre (debe ser
+                // flex con altura conocida) — esto da chat full-screen en móvil
+                // y tablet, sin caps artificiales. Si no, height responsive con
+                // cap razonable para usos embebidos en cards.
+                ...(fillParent
+                    ? { height: '100%', width: '100%', flex: 1 }
+                    : { height: 'min(640px, 78dvh)', minHeight: '420px' }),
                 borderRadius: '20px', overflow: 'hidden',
                 background: 'linear-gradient(180deg, rgba(12,14,20,0.98) 0%, rgba(8,10,16,0.99) 100%)',
                 border: '1px solid rgba(255,255,255,0.06)',
