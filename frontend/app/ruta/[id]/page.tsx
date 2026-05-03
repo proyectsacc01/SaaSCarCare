@@ -115,6 +115,7 @@ export default function RutaTracking() {
     const isMountedRef = useRef(true);
     const abortControllerRef = useRef<AbortController | null>(null);
     const previousStateRef = useRef<string | undefined>(undefined);
+    const lastRouteFetchRef = useRef<{ from: [number, number]; to: [number, number] } | null>(null);
 
     // Helper to get auth headers
     const getAuthHeaders = useCallback((): Record<string, string> => {
@@ -128,6 +129,29 @@ export default function RutaTracking() {
 
     const calcularRutaDinamica = useCallback(async (currentLat: number, currentLng: number, destLat: number, destLng: number) => {
         try {
+            const from: [number, number] = [currentLat, currentLng];
+            const to: [number, number] = [destLat, destLng];
+
+            if (lastRouteFetchRef.current && routeCoordinates.length > 1) {
+                const prev = lastRouteFetchRef.current;
+                const sameDestination = Math.abs(prev.to[0] - to[0]) < 0.00001 && Math.abs(prev.to[1] - to[1]) < 0.00001;
+                const movedMeters = (() => {
+                    const R = 6371000;
+                    const dLat = ((from[0] - prev.from[0]) * Math.PI) / 180;
+                    const dLng = ((from[1] - prev.from[1]) * Math.PI) / 180;
+                    const x =
+                        Math.sin(dLat / 2) ** 2 +
+                        Math.cos((prev.from[0] * Math.PI) / 180) *
+                            Math.cos((from[0] * Math.PI) / 180) *
+                            Math.sin(dLng / 2) ** 2;
+                    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+                })();
+
+                if (sameDestination && movedMeters < 20) {
+                    return;
+                }
+            }
+
             setIsCalculatingRoute(true);
             console.log('[RutaTracking] Calculando ruta dinámica desde:', { currentLat, currentLng }, 'hasta:', { destLat, destLng });
 
@@ -140,17 +164,20 @@ export default function RutaTracking() {
                 const coordinates = data.routes[0].geometry.coordinates.map((coord: number[]) => [coord[1], coord[0]] as [number, number]);
                 console.log('[RutaTracking] Ruta calculada con', coordinates.length, 'puntos');
                 setRouteCoordinates(coordinates);
+                lastRouteFetchRef.current = { from, to };
             } else {
                 console.warn('[RutaTracking] No se pudo calcular la ruta, usando línea directa');
                 setRouteCoordinates([[currentLat, currentLng], [destLat, destLng]]);
+                lastRouteFetchRef.current = { from, to };
             }
         } catch (error) {
             console.error('[RutaTracking] Error calculando ruta:', error);
             setRouteCoordinates([[currentLat, currentLng], [destLat, destLng]]);
+            lastRouteFetchRef.current = { from: [currentLat, currentLng], to: [destLat, destLng] };
         } finally {
             setIsCalculatingRoute(false);
         }
-    }, []);
+    }, [routeCoordinates.length]);
 
     const cargarDatos = useCallback(async () => {
         if (!isMountedRef.current) return;
@@ -245,12 +272,12 @@ export default function RutaTracking() {
         // Cargar datos inmediatamente
         cargarDatos();
 
-        // Actualizar cada 2 segundos
+        // Seguimiento más reactivo para suavizar la experiencia visual.
         const intervalId = setInterval(() => {
             if (isMountedRef.current) {
                 cargarDatos();
             }
-        }, 2000);
+        }, 1200);
 
         return () => {
             isMountedRef.current = false;
@@ -524,9 +551,9 @@ export default function RutaTracking() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             <div className={`${styles.card} ruta-map-box`}>
                                 <MapTracking
-                                    origin={[ruta.latitudOrigen, ruta.longitudOrigen]}
-                                    destination={[ruta.latitudDestino, ruta.longitudDestino]}
-                                    current={[ruta.latitudActual, ruta.longitudActual]}
+                                    origin={ruta.latitudOrigen != null && ruta.longitudOrigen != null ? [ruta.latitudOrigen, ruta.longitudOrigen] : null}
+                                    destination={ruta.latitudDestino != null && ruta.longitudDestino != null ? [ruta.latitudDestino, ruta.longitudDestino] : null}
+                                    current={ruta.latitudActual != null && ruta.longitudActual != null ? [ruta.latitudActual, ruta.longitudActual] : null}
                                     isDeviated={ruta.desviado}
                                     routeCoordinates={routeCoordinates}
                                 />

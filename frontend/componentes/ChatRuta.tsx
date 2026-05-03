@@ -26,8 +26,7 @@ interface ChatProps {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 const MAX_MEDIA_SIZE = 2 * 1024 * 1024; // 2MB
-const MAX_IMAGE_SIDE = 1280;
-const IMAGE_JPEG_QUALITY = 0.78;
+const MAX_AUDIO_SECONDS = 90;
 
 // Mensajes rápidos preestablecidos según el rol — para que el conductor no tenga que tipear
 // mientras maneja, y la central tenga respuestas comunes a un toque
@@ -52,9 +51,15 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
     const [showScrollDown, setShowScrollDown] = useState(false);
     const [showQuickReplies, setShowQuickReplies] = useState(true);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingSeconds, setRecordingSeconds] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
     const lastSeenIdRef = useRef<string | null>(null);
+    const recorderRef = useRef<MediaRecorder | null>(null);
+    const recorderChunksRef = useRef<Blob[]>([]);
+    const recorderTimerRef = useRef<number | null>(null);
+    const recorderStreamRef = useRef<MediaStream | null>(null);
     const [newMsgPulse, setNewMsgPulse] = useState(0);
 
     const quickReplies = rol === 'CONDUCTOR' ? QUICK_REPLIES_CONDUCTOR : QUICK_REPLIES_ADMIN;
@@ -113,6 +118,15 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         return () => el.removeEventListener('scroll', onScroll);
     }, []);
 
+    useEffect(() => {
+        return () => {
+            stopRecorderResources();
+            if (recorderRef.current && recorderRef.current.state !== "inactive") {
+                recorderRef.current.stop();
+            }
+        };
+    }, []);
+
     const scrollToBottom = () => {
         const el = scrollRef.current;
         if (!el) return;
@@ -140,7 +154,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
     };
 
-    const fileToDataUrl = (file: File) =>
+    const fileToDataUrl = (file: Blob) =>
         new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result || ""));
@@ -148,33 +162,103 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             reader.readAsDataURL(file);
         });
 
-    const loadImage = (src: string) =>
-        new Promise<HTMLImageElement>((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => reject(new Error("No se pudo cargar la imagen"));
-            img.src = src;
-        });
+    const stopRecorderResources = () => {
+        if (recorderTimerRef.current !== null) {
+            window.clearInterval(recorderTimerRef.current);
+            recorderTimerRef.current = null;
+        }
+        recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+        recorderStreamRef.current = null;
+    };
 
-    const compressImage = async (file: File): Promise<{ base64: string; type: string }> => {
-        const dataUrl = await fileToDataUrl(file);
-        const img = await loadImage(dataUrl);
+    const formatRecordingTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    };
 
-        const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.width, img.height));
-        const width = Math.max(1, Math.round(img.width * scale));
-        const height = Math.max(1, Math.round(img.height * scale));
+    const pickRecorderMimeType = () => {
+        if (typeof MediaRecorder === "undefined") return "";
+        const candidates = [
+            "audio/webm;codecs=opus",
+            "audio/webm",
+            "audio/mp4",
+            "audio/ogg;codecs=opus",
+        ];
+        return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+    };
 
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("No se pudo procesar imagen");
+    const stopAudioRecording = () => {
+        if (!recorderRef.current) return;
+        if (recorderRef.current.state !== "inactive") {
+            recorderRef.current.stop();
+        }
+    };
 
-        ctx.drawImage(img, 0, 0, width, height);
-        const compressedUrl = canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
-        const base64 = compressedUrl.split(",")[1] || "";
+    const startAudioRecording = async () => {
+        if (sending) return;
+        if (typeof window === "undefined") return;
 
-        return { base64, type: "image/jpeg" };
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+            fileRef.current?.click();
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = pickRecorderMimeType();
+            const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+            recorderRef.current = recorder;
+            recorderStreamRef.current = stream;
+            recorderChunksRef.current = [];
+            setRecordingSeconds(0);
+            setIsRecording(true);
+            setMediaPreview(null);
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) recorderChunksRef.current.push(event.data);
+            };
+
+            recorder.onstop = async () => {
+                const blob = new Blob(recorderChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+                stopRecorderResources();
+                setIsRecording(false);
+                recorderRef.current = null;
+
+                if (blob.size <= 0) {
+                    toast.error("No se pudo generar el audio");
+                    return;
+                }
+
+                if (blob.size > MAX_MEDIA_SIZE) {
+                    toast.error("Audio demasiado grande (máx. 2MB)");
+                    return;
+                }
+
+                try {
+                    const dataUrl = await fileToDataUrl(blob);
+                    const base64 = dataUrl.split(",")[1] || "";
+                    setMediaPreview({ base64, type: blob.type || "audio/webm" });
+                } catch {
+                    toast.error("No se pudo preparar el audio");
+                }
+            };
+
+            recorder.start(250);
+            recorderTimerRef.current = window.setInterval(() => {
+                setRecordingSeconds((prev) => {
+                    const next = prev + 1;
+                    if (next >= MAX_AUDIO_SECONDS) {
+                        stopAudioRecording();
+                    }
+                    return next;
+                });
+            }, 1000);
+        } catch {
+            toast.error("No se pudo acceder al micrófono. Se abrirá el selector de audio.");
+            fileRef.current?.click();
+        }
     };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,25 +266,14 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         if (!file) return;
         e.target.value = "";
 
-        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-            toast.error("Solo imágenes y videos");
+        if (!file.type.startsWith("audio/")) {
+            toast.error("Solo audios");
             return;
         }
 
         try {
-            if (file.type.startsWith("image/")) {
-                const compressed = await compressImage(file);
-                const approxBytes = Math.ceil((compressed.base64.length * 3) / 4);
-                if (approxBytes > MAX_MEDIA_SIZE) {
-                    toast.error("Imagen demasiado grande incluso comprimida (máx. 2MB)");
-                    return;
-                }
-                setMediaPreview(compressed);
-                return;
-            }
-
             if (file.size > MAX_MEDIA_SIZE) {
-                toast.error("Video demasiado grande (máx. 2MB)");
+                toast.error("Audio demasiado grande (máx. 2MB)");
                 return;
             }
 
@@ -226,7 +299,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         } = {
             rutaId,
             remitente: rol,
-            contenido: nuevoMensaje.trim() || (mediaPreview ? "📎" : ""),
+            contenido: nuevoMensaje.trim() || (mediaPreview ? "🎤 Audio" : ""),
         };
         if (mediaPreview) {
             mensajeObj.mediaBase64 = mediaPreview.base64;
@@ -264,6 +337,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     };
 
     const isImage = (type?: string) => type?.startsWith("image/");
+    const isAudio = (type?: string) => type?.startsWith("audio/");
     const isVideo = (type?: string) => type?.startsWith("video/");
     const mediaUrl = (m: Mensaje) => m.mediaBase64 ? `data:${m.mediaType};base64,${m.mediaBase64}` : "";
 
@@ -393,6 +467,19 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                                             }}
                                         />
                                     )}
+                                    {hasMedia && isAudio(m.mediaType) && (
+                                        <audio
+                                            src={mediaUrl(m)}
+                                            controls
+                                            preload="metadata"
+                                            style={{
+                                                width: '100%',
+                                                minWidth: '240px',
+                                                display: 'block',
+                                                marginTop: m.contenido && m.contenido !== '📎' ? '0.35rem' : 0,
+                                            }}
+                                        />
+                                    )}
                                     {/* Text */}
                                     {m.contenido && m.contenido !== '📎' && (
                                         <div style={{
@@ -507,7 +594,16 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                         padding: '0.5rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.6rem',
                         background: 'rgba(59,246,59,0.05)', borderTop: '1px solid rgba(59,246,59,0.15)',
                     }}>
-                        {mediaPreview.type.startsWith("image/") ? (
+                        {mediaPreview.type.startsWith("audio/") ? (
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <audio
+                                    controls
+                                    preload="metadata"
+                                    src={`data:${mediaPreview.type};base64,${mediaPreview.base64}`}
+                                    style={{ width: '100%' }}
+                                />
+                            </div>
+                        ) : mediaPreview.type.startsWith("image/") ? (
                             <img
                                 src={`data:${mediaPreview.type};base64,${mediaPreview.base64}`}
                                 alt="preview"
@@ -518,13 +614,31 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                                 🎬
                             </div>
                         )}
-                        <span style={{ flex: 1, fontSize: '0.75rem', color: '#9ca3af' }}>
-                            {mediaPreview.type.startsWith("image/") ? "Imagen" : "Video"} adjunto
-                        </span>
+                        {!mediaPreview.type.startsWith("audio/") && (
+                            <span style={{ flex: 1, fontSize: '0.75rem', color: '#9ca3af' }}>
+                                {mediaPreview.type.startsWith("image/") ? "Imagen" : "Video"} adjunto
+                            </span>
+                        )}
                         <button
                             onClick={() => setMediaPreview(null)}
                             style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', width: '30px', height: '30px', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >✕</button>
+                    </div>
+                )}
+
+                {isRecording && (
+                    <div style={{
+                        padding: '0.55rem 0.9rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem',
+                        background: 'rgba(239,68,68,0.08)', borderTop: '1px solid rgba(239,68,68,0.18)',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: '#fca5a5', fontSize: '0.78rem', fontWeight: 700 }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 10px rgba(239,68,68,0.8)' }} />
+                            Grabando audio
+                        </div>
+                        <div style={{ color: '#fff', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 800 }}>
+                            {formatRecordingTime(recordingSeconds)}
+                        </div>
                     </div>
                 )}
 
@@ -538,27 +652,33 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     <input
                         ref={fileRef}
                         type="file"
-                        accept="image/*,video/*"
+                        accept="audio/*"
                         onChange={handleFileSelect}
                         style={{ display: 'none' }}
                     />
                     <button
                         type="button"
-                        onClick={() => fileRef.current?.click()}
+                        onClick={() => {
+                            if (isRecording) {
+                                stopAudioRecording();
+                            } else {
+                                void startAudioRecording();
+                            }
+                        }}
                         style={{
-                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                            background: isRecording ? 'rgba(239,68,68,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isRecording ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
                             borderRadius: '50%', width: '38px', height: '38px', minWidth: '38px',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', fontSize: '1rem', color: '#6b7280',
+                            cursor: 'pointer', fontSize: '1rem', color: isRecording ? '#ef4444' : '#6b7280',
                             transition: 'all 0.2s',
                         }}
-                        title="Adjuntar imagen o video"
-                    >📷</button>
+                        title={isRecording ? 'Detener grabación' : 'Grabar audio'}
+                    >{isRecording ? '⏹' : '🎙'}</button>
                     <input
                         type="text"
                         value={nuevoMensaje}
                         onChange={(e) => setNuevoMensaje(e.target.value)}
-                        placeholder="Escribe un mensaje..."
+                        placeholder={isRecording ? 'Pulsa detener para adjuntar el audio...' : 'Escribe un mensaje o graba un audio...'}
                         // Cuando el teclado de Android aparece, el viewport se reduce y
                         // el input puede quedar oculto detrás del bottom nav fixed.
                         // Forzamos scrollIntoView con un pequeño delay para esperar
@@ -582,7 +702,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     />
                     <button
                         type="submit"
-                        disabled={sending || (!nuevoMensaje.trim() && !mediaPreview)}
+                        disabled={sending || isRecording || (!nuevoMensaje.trim() && !mediaPreview)}
                         style={{
                             background: (nuevoMensaje.trim() || mediaPreview)
                                 ? 'linear-gradient(135deg, #3bf63b, #22c55e)'

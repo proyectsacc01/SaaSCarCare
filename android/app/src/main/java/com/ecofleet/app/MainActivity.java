@@ -16,11 +16,13 @@ import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.GeolocationPermissions;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 import android.Manifest;
+import android.provider.MediaStore;
 
 public class MainActivity extends Activity {
 
@@ -70,19 +72,26 @@ public class MainActivity extends Activity {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.POST_NOTIFICATIONS,
+                        Manifest.permission.RECORD_AUDIO,
+                        Manifest.permission.READ_MEDIA_AUDIO,
                         Manifest.permission.READ_MEDIA_IMAGES,
                         Manifest.permission.READ_MEDIA_VIDEO
                 }, 1);
             }
         } else {
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{
                         Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.RECORD_AUDIO,
                         Manifest.permission.READ_EXTERNAL_STORAGE
                 }, 1);
             }
@@ -96,6 +105,28 @@ public class MainActivity extends Activity {
             @Override
             public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 callback.invoke(origin, true, false);
+            }
+
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> {
+                    java.util.List<String> granted = new java.util.ArrayList<>();
+                    for (String resource : request.getResources()) {
+                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                granted.add(resource);
+                            }
+                        } else {
+                            granted.add(resource);
+                        }
+                    }
+
+                    if (!granted.isEmpty()) {
+                        request.grant(granted.toArray(new String[0]));
+                    } else {
+                        request.deny();
+                    }
+                });
             }
 
             // Habilita <input type="file"> dentro del WebView. Sin esto el botón
@@ -147,14 +178,20 @@ public class MainActivity extends Activity {
                 // alternativa visible en el chooser cuando el accept incluye imágenes.
                 java.util.List<Intent> extras = new java.util.ArrayList<>();
                 boolean wantsImages = false;
+                boolean wantsAudio = false;
                 for (String m : mimes) {
                     if (m.startsWith("image/")) { wantsImages = true; break; }
+                    if (m.startsWith("audio/")) wantsAudio = true;
                 }
                 if (wantsImages) {
                     Intent gallery = new Intent(Intent.ACTION_PICK,
                             android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
                     gallery.setType("image/*");
                     extras.add(gallery);
+                }
+                if (wantsAudio) {
+                    Intent audioRecorder = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
+                    extras.add(audioRecorder);
                 }
 
                 Intent chooser = Intent.createChooser(contentIntent, "Adjuntar archivo");
