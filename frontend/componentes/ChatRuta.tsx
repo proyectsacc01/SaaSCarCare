@@ -26,6 +26,7 @@ interface ChatProps {
 
 type AndroidTrackerBridge = {
     pickChatAudio?: () => void;
+    requestMicPermission?: () => void;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
@@ -234,40 +235,6 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
     };
 
-    const requestMicPermission = async (): Promise<boolean> => {
-        if (typeof window === "undefined") return false;
-
-        // Si el navegador soporta Permissions API, chequeamos el estado primero
-        if (navigator.permissions && navigator.permissions.query) {
-            try {
-                const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-                if (result.state === 'granted') return true;
-                if (result.state === 'denied') {
-                    toast.error("El micrófono está bloqueado. Ve a Configuración del navegador para habilitarlo.");
-                    return false;
-                }
-            } catch {
-                // Permissions API no soportado para mic — continuamos igual
-            }
-        }
-
-        // Mostramos un diálogo amigable antes de pedir el permiso
-        const grant = window.confirm(
-            "Se necesita acceso al micrófono para grabar audios.\n\n" +
-            "¿Deseas permitir el acceso al micrófono?"
-        );
-        if (!grant) return false;
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(track => track.stop());
-            return true;
-        } catch {
-            toast.error("No se pudo acceder al micrófono. Verifica los permisos en la configuración del navegador.");
-            return false;
-        }
-    };
-
     const startAudioRecording = async () => {
         if (sending) return;
         if (typeof window === "undefined") return;
@@ -282,8 +249,29 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
 
         if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-            const granted = await requestMicPermission();
-            if (!granted) fileRef.current?.click();
+            fileRef.current?.click();
+            return;
+        }
+
+        // En Android WebView, getUserMedia puede fallar porque la web no tiene
+        // el permiso RESOURCE_AUDIO_CAPTURE concedido aún. Si eso pasa, invocamos
+        // el puente nativo para que pida el permiso de micrófono al sistema.
+        // Cuando el usuario conceda, llega el evento "mic-permission-granted"
+        // y reintentamos la grabación automáticamente.
+        if (bridge?.requestMicPermission) {
+            const onGranted = () => {
+                window.removeEventListener("mic-permission-granted", onGranted);
+                window.removeEventListener("mic-permission-denied", onDenied);
+                void startAudioRecording();
+            };
+            const onDenied = () => {
+                window.removeEventListener("mic-permission-granted", onGranted);
+                window.removeEventListener("mic-permission-denied", onDenied);
+                toast.error("Permiso de micrófono denegado. Habilítalo en Ajustes de la app.");
+            };
+            window.addEventListener("mic-permission-granted", onGranted);
+            window.addEventListener("mic-permission-denied", onDenied);
+            bridge.requestMicPermission();
             return;
         }
 
@@ -338,13 +326,8 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     return next;
                 });
             }, 1000);
-        } catch (err) {
-            // Permission denied o fallo — preguntar explícitamente por permisos
-            const granted = await requestMicPermission();
-            if (!granted) {
-                setIsRecording(false);
-                setRecordingSeconds(0);
-            }
+        } catch {
+            fileRef.current?.click();
         }
     };
 

@@ -49,6 +49,7 @@ type AndroidTrackerBridge = {
     openExternalUrl?: (url: string) => void;
     pickProfileImage?: () => void;
     pickChatAudio?: () => void;
+    requestMicPermission?: () => void;
 };
 
 function getAndroidTracker(): AndroidTrackerBridge | null {
@@ -1248,7 +1249,7 @@ export default function ConductorDashboard() {
                                                 body.latitud = lat;
                                                 body.longitud = lng;
                                             }
-                                            const res = await fetch(`${API_URL}/api/conductores/me/sos`, {
+                                            const res = await fetch(`/api/conductores/me/sos`, {
                                                 method: 'POST',
                                                 headers: getAuthHeaders(),
                                                 body: JSON.stringify(body),

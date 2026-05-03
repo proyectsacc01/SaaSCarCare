@@ -45,6 +45,9 @@ public class MainActivity extends Activity {
     private static final String ACTION_CHAT_AUDIO = "chat_audio";
 
     private String pendingNativeAction = null;
+    // Guardamos la PermissionRequest pendiente del WebView para concederla
+    // después de que el usuario otorgue el permiso nativo de RECORD_AUDIO.
+    private PermissionRequest pendingWebPermissionRequest = null;
 
     private static final String API_URL = BuildConfig.API_URL;
     private static final String WEB_URL = BuildConfig.WEB_URL;
@@ -123,22 +126,27 @@ public class MainActivity extends Activity {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
                 runOnUiThread(() -> {
-                    java.util.List<String> granted = new java.util.ArrayList<>();
+                    boolean needsMic = false;
                     for (String resource : request.getResources()) {
                         if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
-                            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                                granted.add(resource);
-                            }
-                        } else {
-                            granted.add(resource);
+                            needsMic = true;
+                            break;
                         }
                     }
-
-                    if (!granted.isEmpty()) {
-                        request.grant(granted.toArray(new String[0]));
-                    } else {
+                    if (!needsMic) {
                         request.deny();
+                        return;
                     }
+
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                        return;
+                    }
+
+                    // Permiso nativo NO concedido — lo pedimos y guardamos la request
+                    // para concederla cuando el usuario responda el diálogo del sistema.
+                    pendingWebPermissionRequest = request;
+                    requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, NATIVE_PERMISSION_REQUEST);
                 });
             }
 
@@ -378,6 +386,21 @@ public class MainActivity extends Activity {
                 openNativeChatAudioPicker();
             });
         }
+
+        // Pide permiso de micrófono al sistema. Si ya está concedido,
+        // dispara inmediatamente el evento "mic-permission-granted" para que
+        // el JS pueda reintentar getUserMedia / MediaRecorder.
+        @JavascriptInterface
+        public void requestMicPermission() {
+            mContext.runOnUiThread(() -> {
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    dispatchNativeEvent("mic-permission-granted", "{}");
+                    return;
+                }
+                pendingNativeAction = "mic_permission";
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, NATIVE_PERMISSION_REQUEST);
+            });
+        }
     }
 
     private boolean ensureNativePermissions(String action) {
@@ -588,11 +611,26 @@ public class MainActivity extends Activity {
             }
         }
 
+        // Primero: si hay una web permission pendiente (getUserMedia), la resolvemos
+        if (pendingWebPermissionRequest != null) {
+            if (granted) {
+                pendingWebPermissionRequest.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            } else {
+                pendingWebPermissionRequest.deny();
+                dispatchNativeEvent("mic-permission-denied", "{}");
+            }
+            pendingWebPermissionRequest = null;
+            return;
+        }
+
+        // Segundo: flujo existente de acciones nativas (profile image / chat audio / mic)
         if (!granted) {
             if (ACTION_PROFILE_IMAGE.equals(pendingNativeAction)) {
                 dispatchNativeError("native-profile-image-error", "Permiso denegado para seleccionar imágenes");
             } else if (ACTION_CHAT_AUDIO.equals(pendingNativeAction)) {
                 dispatchNativeError("native-chat-audio-error", "Permiso denegado para grabar o seleccionar audio");
+            } else if ("mic_permission".equals(pendingNativeAction)) {
+                dispatchNativeEvent("mic-permission-denied", "{}");
             }
             pendingNativeAction = null;
             return;
@@ -604,6 +642,8 @@ public class MainActivity extends Activity {
             openNativeProfileImagePicker();
         } else if (ACTION_CHAT_AUDIO.equals(action)) {
             openNativeChatAudioPicker();
+        } else if ("mic_permission".equals(action)) {
+            dispatchNativeEvent("mic-permission-granted", "{}");
         }
     }
 
