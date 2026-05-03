@@ -249,7 +249,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
 
         if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-            fileRef.current?.click();
+            toast.error("Tu navegador no soporta grabación de audio");
             return;
         }
 
@@ -327,7 +327,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                 });
             }, 1000);
         } catch {
-            fileRef.current?.click();
+            toast.error("No se pudo acceder al micrófono");
         }
     };
 
