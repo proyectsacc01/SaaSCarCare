@@ -69,6 +69,7 @@ public class RutaController {
         ruta.setDistanciaRestanteKm(null);
         ruta.setDesviado(null);
         ruta.setInicioDetencion(null);
+        recalcularDistanciaEstimada(ruta);
         aplicarAsignacionConductor(ruta, ruta.getConductorId(), usuarioId);
         return rutaRepository.save(ruta);
     }
@@ -98,6 +99,7 @@ public class RutaController {
                         if (rutaActualizada.getLongitudOrigen() != null) ruta.setLongitudOrigen(rutaActualizada.getLongitudOrigen());
                         if (rutaActualizada.getLatitudDestino() != null) ruta.setLatitudDestino(rutaActualizada.getLatitudDestino());
                         if (rutaActualizada.getLongitudDestino() != null) ruta.setLongitudDestino(rutaActualizada.getLongitudDestino());
+                        recalcularDistanciaEstimada(ruta);
                         if (rutaActualizada.getConductorId() != null || rutaActualizada.getConductorNombre() != null) {
                             aplicarAsignacionConductor(ruta, rutaActualizada.getConductorId(), usuarioId);
                         }
@@ -426,6 +428,27 @@ public class RutaController {
             case "PLANEADA" -> "PLANIFICADA";
             default -> limpio;
         };
+    }
+
+    private void recalcularDistanciaEstimada(Ruta ruta) {
+        if (ruta == null) return;
+        if (ruta.getLatitudOrigen() == null || ruta.getLongitudOrigen() == null
+                || ruta.getLatitudDestino() == null || ruta.getLongitudDestino() == null) {
+            return;
+        }
+
+        double kmRecta = calcularDistancia(
+                ruta.getLatitudOrigen(),
+                ruta.getLongitudOrigen(),
+                ruta.getLatitudDestino(),
+                ruta.getLongitudDestino()
+        );
+
+        // Factor conservador para aproximar recorrido vial en caso de no usar
+        // proveedor de rutas en backend. El frontend intenta usar OSRM; backend
+        // garantiza que no quede 0 ni editable manualmente.
+        double kmEstimados = Math.round((kmRecta * 1.18) * 10.0) / 10.0;
+        ruta.setDistanciaEstimadaKm(Math.max(0.1, kmEstimados));
     }
 
     // Clase interna para recibir coordenadas GPS

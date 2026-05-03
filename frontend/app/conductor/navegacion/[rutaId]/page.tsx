@@ -355,13 +355,29 @@ export default function NavegacionPage() {
             return;
         }
         const target = `${ruta.latitudDestino},${ruta.longitudDestino}`;
-        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving`;
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving&dir_action=navigate`;
         const bridge = getAndroidTracker();
         if (bridge && typeof bridge.openExternalUrl === 'function') {
             bridge.openExternalUrl(url);
         } else {
             window.open(url, '_blank', 'noopener,noreferrer');
         }
+    };
+
+    const iniciarNavegacionNativa = () => {
+        if (!ruta?.latitudDestino || !ruta?.longitudDestino) {
+            toast.error("Destino sin coordenadas");
+            return;
+        }
+        const target = `${ruta.latitudDestino},${ruta.longitudDestino}`;
+        const bridge = getAndroidTracker();
+        if (bridge && typeof bridge.openExternalUrl === 'function') {
+            // En Android abre Google Maps directo en modo navegación guiada
+            bridge.openExternalUrl(`google.navigation:q=${encodeURIComponent(target)}&mode=d`);
+            return;
+        }
+        // Fallback web
+        abrirEnGoogleMaps();
     };
 
     if (!ruta) {
@@ -527,10 +543,25 @@ export default function NavegacionPage() {
                         </div>
                     </div>
                 ) : (
-                    <div style={{ textAlign: 'center', padding: '0.6rem', color: '#6b7280', fontSize: '0.75rem' }}>
-                        {loadingRoutes ? 'Calculando…' : 'Sin ruta calculable. Verificá tu conexión a internet.'}
+                    <div style={{ textAlign: 'center', padding: '0.6rem', color: '#9ca3af', fontSize: '0.75rem', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: '12px' }}>
+                        {loadingRoutes ? 'Calculando…' : 'Turn-by-turn interno no disponible ahora. Usá navegación nativa para guía real.'}
                     </div>
                 )}
+
+                <button
+                    onClick={iniciarNavegacionNativa}
+                    style={{
+                        width: '100%', padding: '0.9rem',
+                        background: 'linear-gradient(135deg, #3bf63b, #22c55e)',
+                        border: 'none', borderRadius: '14px',
+                        color: '#041107', fontWeight: '900', fontSize: '0.84rem',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                        boxShadow: '0 10px 25px -12px rgba(59,246,59,0.7)'
+                    }}
+                >
+                    <span style={{ fontSize: '1rem' }}>🧭</span>
+                    Navegación guiada (Google Maps)
+                </button>
 
                 {currentStep && (
                     <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '0.85rem' }}>

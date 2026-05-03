@@ -161,6 +161,35 @@ function isInProgressRoute(estado?: string) {
   return normalizado === 'EN_CURSO' || normalizado === 'DETENIDO';
 }
 
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) *
+      Math.cos((b.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+async function estimateRouteDistanceKm(origin: { lat: number; lng: number }, destination: { lat: number; lng: number }) {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=false`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const roadMeters = data?.routes?.[0]?.distance;
+      if (typeof roadMeters === 'number' && Number.isFinite(roadMeters) && roadMeters > 0) {
+        return roadMeters / 1000;
+      }
+    }
+  } catch {
+    // fallback a Haversine
+  }
+  return haversineKm(origin, destination);
+}
+
 // Dynamic import para el mapa de tracking global (evitar SSR)
 const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"), {
   ssr: false,
@@ -416,6 +445,7 @@ export default function Dashboard() {
   const [nuevaRuta, setNuevaRuta] = useState<Partial<Ruta>>({
     origen: '', destino: '', distanciaEstimadaKm: 0, vehiculoId: '', conductorId: '', conductorNombre: '', fecha: new Date().toISOString().split('T')[0]
   });
+  const [calculandoDistanciaRuta, setCalculandoDistanciaRuta] = useState(false);
 
   const cargarDatos = useCallback(async () => {
     setLoading(true);
@@ -605,6 +635,37 @@ export default function Dashboard() {
     };
   }, [activeTab, cargarDatos]);
 
+  useEffect(() => {
+    const latO = nuevaRuta.latitudOrigen;
+    const lngO = nuevaRuta.longitudOrigen;
+    const latD = nuevaRuta.latitudDestino;
+    const lngD = nuevaRuta.longitudDestino;
+
+    if (
+      latO == null || lngO == null || latD == null || lngD == null ||
+      !Number.isFinite(latO) || !Number.isFinite(lngO) || !Number.isFinite(latD) || !Number.isFinite(lngD)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setCalculandoDistanciaRuta(true);
+    void estimateRouteDistanceKm(
+      { lat: latO, lng: lngO },
+      { lat: latD, lng: lngD }
+    ).then((km) => {
+      if (cancelled) return;
+      const kmRedondeado = Math.max(0, Math.round(km * 10) / 10);
+      setNuevaRuta((prev) => ({ ...prev, distanciaEstimadaKm: kmRedondeado }));
+    }).finally(() => {
+      if (!cancelled) setCalculandoDistanciaRuta(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nuevaRuta.latitudOrigen, nuevaRuta.longitudOrigen, nuevaRuta.latitudDestino, nuevaRuta.longitudDestino]);
+
   const handleCrearVehiculo = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -662,11 +723,17 @@ export default function Dashboard() {
           throw new Error(t.dashboard.routeNoLoc);
         }
 
+        const distanciaCalculadaKm = await estimateRouteDistanceKm(
+          { lat: originCoords.lat as number, lng: originCoords.lng as number },
+          { lat: destCoords.lat as number, lng: destCoords.lng as number }
+        );
+
         const res = await fetch(`${API_URL}/api/rutas`, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({
             ...nuevaRuta,
+            distanciaEstimadaKm: Math.max(0, Math.round(distanciaCalculadaKm * 10) / 10),
             estado: 'PLANIFICADA',
             conductorId: conductorSeleccionado?.id || "",
             conductorNombre: conductorSeleccionado?.nombre || "",
@@ -1065,18 +1132,14 @@ export default function Dashboard() {
                   <div className={styles.formGroup}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <label className={styles.label} style={{ marginBottom: 0 }}>{t.dashboard.estDist}</label>
-                      <span style={{ fontWeight: 'bold', color: 'green' }}>{nuevaRuta.distanciaEstimadaKm?.toLocaleString() || 0} km</span>
+                      <span style={{ fontWeight: 'bold', color: '#16a34a' }}>
+                        {calculandoDistanciaRuta ? 'Calculando...' : `${nuevaRuta.distanciaEstimadaKm?.toLocaleString() || 0} km`}
+                      </span>
                     </div>
-                    <input
-                      className={styles.input}
-                      type="range"
-                      min="0"
-                      max="2000"
-                      step="1"
-                      style={{ padding: '0.5rem', cursor: 'pointer' }}
-                      value={nuevaRuta.distanciaEstimadaKm || 0}
-                      onChange={e => setNuevaRuta({ ...nuevaRuta, distanciaEstimadaKm: Number(e.target.value) })}
-                    />
+                    <div className={styles.input} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#9ca3af' }}>
+                      <span>Automática por mapa (inicio → destino)</span>
+                      <span style={{ color: '#16a34a', fontWeight: 700 }}>{(nuevaRuta.distanciaEstimadaKm || 0).toFixed(1)} km</span>
+                    </div>
                   </div>
                   <div className={styles.formGroup}>
                     <label className={styles.label}>{t.dashboard.departureDate}</label>

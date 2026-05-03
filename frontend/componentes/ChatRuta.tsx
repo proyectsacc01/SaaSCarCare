@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 
 interface Mensaje {
     id?: string;
@@ -25,6 +26,8 @@ interface ChatProps {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 const MAX_MEDIA_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_IMAGE_SIDE = 1280;
+const IMAGE_JPEG_QUALITY = 0.78;
 
 // Mensajes rápidos preestablecidos según el rol — para que el conductor no tenga que tipear
 // mientras maneja, y la central tenga respuestas comunes a un toque
@@ -137,24 +140,76 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileToDataUrl = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+            reader.readAsDataURL(file);
+        });
+
+    const loadImage = (src: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error("No se pudo cargar la imagen"));
+            img.src = src;
+        });
+
+    const compressImage = async (file: File): Promise<{ base64: string; type: string }> => {
+        const dataUrl = await fileToDataUrl(file);
+        const img = await loadImage(dataUrl);
+
+        const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("No se pudo procesar imagen");
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedUrl = canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
+        const base64 = compressedUrl.split(",")[1] || "";
+
+        return { base64, type: "image/jpeg" };
+    };
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        if (file.size > MAX_MEDIA_SIZE) {
-            alert("Archivo demasiado grande (máx. 2MB)");
-            return;
-        }
-        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-            alert("Solo imágenes y videos");
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64 = (reader.result as string).split(",")[1];
-            setMediaPreview({ base64, type: file.type });
-        };
-        reader.readAsDataURL(file);
         e.target.value = "";
+
+        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+            toast.error("Solo imágenes y videos");
+            return;
+        }
+
+        try {
+            if (file.type.startsWith("image/")) {
+                const compressed = await compressImage(file);
+                const approxBytes = Math.ceil((compressed.base64.length * 3) / 4);
+                if (approxBytes > MAX_MEDIA_SIZE) {
+                    toast.error("Imagen demasiado grande incluso comprimida (máx. 2MB)");
+                    return;
+                }
+                setMediaPreview(compressed);
+                return;
+            }
+
+            if (file.size > MAX_MEDIA_SIZE) {
+                toast.error("Video demasiado grande (máx. 2MB)");
+                return;
+            }
+
+            const dataUrl = await fileToDataUrl(file);
+            const base64 = dataUrl.split(",")[1] || "";
+            setMediaPreview({ base64, type: file.type });
+        } catch {
+            toast.error("No se pudo adjuntar el archivo");
+        }
     };
 
     const enviar = async (e?: React.FormEvent) => {
@@ -162,7 +217,13 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         if (!nuevoMensaje.trim() && !mediaPreview) return;
         setSending(true);
 
-        const mensajeObj: any = {
+        const mensajeObj: {
+            rutaId: string;
+            remitente: "ADMIN" | "CONDUCTOR";
+            contenido: string;
+            mediaBase64?: string;
+            mediaType?: string;
+        } = {
             rutaId,
             remitente: rol,
             contenido: nuevoMensaje.trim() || (mediaPreview ? "📎" : ""),
@@ -182,9 +243,12 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                 setNuevoMensaje("");
                 setMediaPreview(null);
                 cargarMensajes();
+            } else {
+                toast.error(`No se pudo enviar el mensaje (${res.status})`);
             }
         } catch (err) {
             console.error("Error enviando mensaje:", err);
+            toast.error("Error de red al enviar mensaje");
         } finally {
             setSending(false);
         }
