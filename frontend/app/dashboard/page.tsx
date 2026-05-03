@@ -11,6 +11,7 @@ import ConfiguracionPanel from "@/componentes/ConfiguracionPanel";
 import LanguageSwitcher from "@/componentes/LanguageSwitcher";
 import WavyButton from "@/components/ui/wavy-button";
 import { useI18n } from "@/lib/i18n";
+import { formatConnectionStateLabel, formatRouteStateLabel } from "@/lib/status-labels";
 import dynamic from "next/dynamic";
 import {
   XAxis,
@@ -269,10 +270,10 @@ export default function Dashboard() {
   // Helper para calcular estado de conexión del conductor
   const getConnectionStatus = (timestamp: string | undefined, hasActiveGPS: boolean = false) => {
     if (!timestamp && hasActiveGPS) {
-      return { status: 'online' as const, text: 'GPS Activo', color: '#22c55e' };
+      return { status: 'online' as const, text: 'GPS activo', label: formatConnectionStateLabel('online'), color: '#22c55e' };
     }
 
-    if (!timestamp) return { status: 'offline' as const, text: 'Sin señal', color: '#6b7280' };
+    if (!timestamp) return { status: 'offline' as const, text: 'Sin señal', label: formatConnectionStateLabel('offline'), color: '#6b7280' };
 
     const now = new Date();
     const lastUpdate = new Date(timestamp);
@@ -282,6 +283,7 @@ export default function Dashboard() {
       return {
         status: 'online' as const,
         text: diffSeconds < 5 ? 'Ahora' : `${t.dashboard.ago} ${diffSeconds}${t.dashboard.sec}`,
+        label: formatConnectionStateLabel('online'),
         color: '#22c55e'
       };
     } else if (diffSeconds <= 180) {
@@ -290,6 +292,7 @@ export default function Dashboard() {
       return {
         status: 'idle' as const,
         text: mins > 0 ? `${t.dashboard.ago} ${mins}${t.dashboard.min} ${diffSeconds % 60}${t.dashboard.sec}` : `${t.dashboard.ago} ${diffSeconds}${t.dashboard.sec}`,
+        label: formatConnectionStateLabel('idle'),
         color: '#f59e0b'
       };
     } else {
@@ -297,6 +300,7 @@ export default function Dashboard() {
       return {
         status: 'offline' as const,
         text: mins < 60 ? `${t.dashboard.ago} ${mins} ${t.dashboard.min}` : `${t.dashboard.ago} ${Math.floor(mins / 60)}${t.dashboard.h}`,
+        label: formatConnectionStateLabel('offline'),
         color: '#6b7280'
       };
     }
@@ -984,7 +988,7 @@ export default function Dashboard() {
                             boxShadow: !v.activo ? 'none' : (estaOcupado ? '0 0 10px rgba(234, 179, 8, 0.2)' : '0 0 10px rgba(34, 197, 94, 0.2)'),
                           }}
                         >
-                          {!v.activo ? "TALLER" : (estaOcupado ? "OCUPADO" : "ACTIVO")}
+                          {!v.activo ? "En taller" : (estaOcupado ? "Ocupado" : "Activo")}
                         </span>
                       );
                     })()}
@@ -1242,7 +1246,7 @@ export default function Dashboard() {
 
                         <div className={styles.statRow}>
                           <span className={styles.statLabel}>{t.dashboard.stateLbl}</span>
-                          <span className={styles.statValue}>{estadoRuta}</span>
+                          <span className={styles.statValue}>{formatRouteStateLabel(estadoRuta)}</span>
                         </div>
 
                         <div className={styles.fuelBarBg}>
@@ -1280,7 +1284,7 @@ export default function Dashboard() {
                               boxShadow: esCompletada ? '0 0 10px rgba(34, 197, 94, 0.2)' : ((esEnCurso || esDetenido) ? `0 0 10px ${esDetenido ? 'rgba(249, 115, 22, 0.2)' : 'rgba(6, 182, 212, 0.2)'}` : 'none'),
                             }}
                           >
-                            {esCompletada ? "COMPLETADA" : (esDetenido ? "DETENIDO" : (esEnCurso ? "EN CURSO" : "PLANIFICADA"))}
+                            {formatRouteStateLabel(estadoRuta)}
                           </span>
                         </div>
                       </div>
@@ -1845,7 +1849,7 @@ export default function Dashboard() {
                               fontWeight: '700',
                               border: `1px solid ${status.color}40`
                             }}>
-                              {status.text.toUpperCase()}
+                              {status.label}
                             </span>
                           </div>
                         </div>
@@ -1871,7 +1875,7 @@ export default function Dashboard() {
                             {normalizeRouteState(r.estado) === 'DETENIDO'
                               ? t.dashboard.vehStopped
                               : r.signalSource === 'presence'
-                                ? 'SEÑAL DE APP ACTIVA'
+                                ? 'Señal de la aplicación activa'
                                 : (status.status === 'online' ? t.dashboard.transmitting : (status.status === 'idle' ? t.dashboard.unstableConn : t.dashboard.noConn))}
                           </span>
                         </div>

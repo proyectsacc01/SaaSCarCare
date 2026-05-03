@@ -35,6 +35,8 @@ interface Props {
     onSelectRoute: (idx: number) => void;
     followMode: boolean;
     liveHeading?: number | null;
+    driverZoom?: number;
+    showAlternativeRoutes?: boolean;
 }
 
 // ─── Iconos Leaflet ───────────────────────────────────────────────────────────
@@ -134,17 +136,27 @@ function AutoFit({
 function FollowDriverCamera({
     enabled,
     driverPos,
+    driverZoom,
 }: {
     enabled: boolean;
     driverPos: [number, number] | null;
+    driverZoom: number;
 }) {
     const map = useMap();
     const driverLat = driverPos?.[0];
     const driverLng = driverPos?.[1];
     useEffect(() => {
         if (!enabled || !driverPos) return;
-        map.setView(driverPos, Math.max(map.getZoom(), 17), { animate: true });
-    }, [enabled, driverLat, driverLng, driverPos, map]);
+        map.setView(driverPos, Math.max(map.getZoom(), driverZoom), { animate: true });
+    }, [enabled, driverLat, driverLng, driverPos, driverZoom, map]);
+    return null;
+}
+
+function RemoveLeafletPrefix() {
+    const map = useMap();
+    useEffect(() => {
+        map.attributionControl?.setPrefix("");
+    }, [map]);
     return null;
 }
 
@@ -159,6 +171,8 @@ export default function NavegacionMapa({
     onSelectRoute,
     followMode,
     liveHeading,
+    driverZoom = 18,
+    showAlternativeRoutes = true,
 }: Props) {
 
     // Punto de partida visible: GPS si lo hay, sino origen de la ruta
@@ -175,10 +189,11 @@ export default function NavegacionMapa({
     return (
         <MapContainer
             center={initialCenter}
-            zoom={followMode && startPos ? 17 : 13}
+            zoom={followMode && startPos ? driverZoom : 13}
             zoomControl={false}
             style={{ width: '100%', height: '100%', background: '#050608' }}
         >
+            <RemoveLeafletPrefix />
             <TileLayer
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                 attribution='© <a href="https://www.openstreetmap.org/copyright">OSM</a> · CartoDB'
@@ -198,10 +213,10 @@ export default function NavegacionMapa({
                 ]}
             />
 
-            <FollowDriverCamera enabled={followMode} driverPos={startPos} />
+            <FollowDriverCamera enabled={followMode} driverPos={startPos} driverZoom={driverZoom} />
 
             {/* Rutas alternativas (apagadas) primero, para que la activa quede arriba */}
-            {routes.map((r, i) => i !== activeIdx && (
+            {showAlternativeRoutes && routes.map((r, i) => i !== activeIdx && (
                 <Polyline
                     key={`alt-${i}`}
                     positions={r.geometry}

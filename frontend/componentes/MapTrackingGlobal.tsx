@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { formatConnectionStateLabel } from "@/lib/status-labels";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -673,10 +674,10 @@ export default function MapTrackingGlobal({
                                         }}
                                     >
                                         {gps.status === "online"
-                                            ? "● ON"
+                                            ? `● ${formatConnectionStateLabel("online")}`
                                             : gps.status === "idle"
-                                            ? "◐ IDLE"
-                                            : "○ OFF"}
+                                            ? `◐ ${formatConnectionStateLabel("idle")}`
+                                            : `○ ${formatConnectionStateLabel("offline")}`}
                                     </span>
                                 </div>
 

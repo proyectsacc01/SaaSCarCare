@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslation } from "@/lib/i18n";
+import { formatDriverAvailabilityLabel } from "@/lib/status-labels";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -302,9 +303,9 @@ export default function ConductorDashboard() {
             localStorage.setItem('driverIsOnline', next ? '1' : '0');
         }
         if (!next) {
-            toast.success("Estás INACTIVO — tu ubicación no se comparte");
+            toast.success("Tu estado es Desconectado — tu ubicación no se comparte");
         } else {
-            toast.success("Estás ACTIVO — tu ubicación se comparte con la central");
+            toast.success("Tu estado es En línea — tu ubicación se comparte con la central");
         }
     };
 
@@ -491,7 +492,7 @@ export default function ConductorDashboard() {
         // No se puede iniciar una ruta si el conductor está INACTIVO —
         // sino el admin no recibiría telemetría y la ruta no tendría sentido.
         if (nuevoEstado === 'EN_CURSO' && !isOnline) {
-            toast.error("Activá tu estado para iniciar la ruta");
+            toast.error("Activa tu estado para iniciar la ruta");
             return;
         }
         try {
@@ -574,7 +575,7 @@ export default function ConductorDashboard() {
         e.preventDefault();
         const mensaje = supportMessage.trim();
         if (!mensaje) {
-            toast.error('Contame qué problema tuviste para poder enviarlo');
+            toast.error('Cuéntanos qué problema tuviste para poder enviarlo');
             return;
         }
 
@@ -708,11 +709,11 @@ export default function ConductorDashboard() {
                 {/* STATUS BAR */}
                 <div style={{ background: 'rgba(5,5,10,0.9)', padding: '0.35rem 1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.6rem', color: '#6b7280', backdropFilter: 'blur(8px)' }}>
                     <span style={{ fontFamily: 'monospace' }}>
-                        {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                        {new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <span style={{ color: isOnline ? '#3bf63b' : '#6b7280', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
-                        {isOnline ? 'EN LÍNEA' : 'INACTIVO'}
+                        {formatDriverAvailabilityLabel(isOnline).toUpperCase()}
                     </span>
                 </div>
 
@@ -772,7 +773,7 @@ export default function ConductorDashboard() {
                             }}
                         >
                             <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: isOnline ? '#3bf63b' : '#6b7280', boxShadow: isOnline ? '0 0 6px rgba(59,246,59,0.6)' : 'none' }} />
-                            {isOnline ? 'ACTIVO' : 'INACTIVO'}
+                            {formatDriverAvailabilityLabel(isOnline).toUpperCase()}
                         </button>
                         <div
                             onClick={() => setActiveTab('perfil')}
@@ -871,7 +872,7 @@ export default function ConductorDashboard() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: rutaActiva.estado === 'DETENIDO' ? 'rgba(249,115,22,0.1)' : 'rgba(59,246,59,0.1)', padding: '0.3rem 0.75rem', borderRadius: '99px', border: `1px solid ${rutaActiva.estado === 'DETENIDO' ? 'rgba(249,115,22,0.25)' : 'rgba(59,246,59,0.25)'}` }}>
                                                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: rutaActiva.estado === 'DETENIDO' ? '#f97316' : '#3bf63b', boxShadow: rutaActiva.estado === 'DETENIDO' ? '0 0 8px rgba(249,115,22,0.8)' : '0 0 8px rgba(59,246,59,0.8)', display: 'inline-block', animation: rutaActiva.estado === 'DETENIDO' ? 'none' : 'gps-pulse 1.5s infinite' }} />
                                                 <span style={{ fontSize: '0.58rem', color: rutaActiva.estado === 'DETENIDO' ? '#f97316' : '#3bf63b', fontWeight: '900', letterSpacing: '0.5px' }}>
-                                                    {rutaActiva.estado === 'DETENIDO' ? 'DETENIDO - SIGUE EN RUTA' : 'GPS ACTIVO'}
+                                                    {rutaActiva.estado === 'DETENIDO' ? 'DETENIDO · EN RUTA' : 'GPS ACTIVO'}
                                                 </span>
                                             </div>
                                             <span style={{ fontSize: '0.58rem', color: '#374151', fontFamily: 'monospace' }}>
@@ -937,11 +938,11 @@ export default function ConductorDashboard() {
                                         {/* Actions */}
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                                             <button
-                                                onClick={() => router.push(`/conductor/navegacion/${rutaActiva.id}`)}
+                                                onClick={() => router.push(`/conductor/iniciar/${rutaActiva.id}`)}
                                                 style={{ padding: '0.8rem 0.4rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
                                             >
                                                 <span style={{ fontSize: '0.95rem' }}>🧭</span>
-                                                Navegar
+                                                Iniciar
                                             </button>
                                             <button
                                                 onClick={() => setActiveTab('chat')}
@@ -968,7 +969,7 @@ export default function ConductorDashboard() {
                                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '2px dashed rgba(255,255,255,0.06)', borderRadius: '18px', padding: '2.5rem 2rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', filter: 'grayscale(1)', opacity: 0.35 }}>🛣️</div>
                                         <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: '0 0 0.3rem', fontWeight: '600' }}>Sin trayecto activo</p>
-                                        <p style={{ color: '#374151', fontSize: '0.75rem', margin: 0 }}>Iniciá un servicio desde Próximos</p>
+                                        <p style={{ color: '#374151', fontSize: '0.75rem', margin: 0 }}>Inicia un servicio desde Próximos</p>
                                     </div>
                                 )}
                             </div>
@@ -987,7 +988,7 @@ export default function ConductorDashboard() {
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.4rem' }}>
                                                             <span style={{ fontSize: '0.58rem', color: '#f59e0b', fontWeight: '800', textTransform: 'uppercase' }}>
                                                                 {r.fecha
-                                                                    ? new Date(r.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                                                    ? new Date(r.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                                                                     : 'Sin fecha'}
                                                             </span>
                                                             <span style={{ fontSize: '0.55rem', color: '#4b5563' }}>• {r.distanciaEstimadaKm} km</span>
@@ -1254,7 +1255,7 @@ export default function ConductorDashboard() {
                                             .slice()
                                             .sort((a, b) => (new Date(b.fecha || 0).getTime()) - (new Date(a.fecha || 0).getTime()))
                                             .reduce<Record<string, Ruta[]>>((acc, r) => {
-                                                const key = r.fecha ? new Date(r.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Sin fecha';
+                                                const key = r.fecha ? new Date(r.fecha).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Sin fecha';
                                                 (acc[key] = acc[key] || []).push(r);
                                                 return acc;
                                             }, {})
@@ -1277,7 +1278,7 @@ export default function ConductorDashboard() {
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
                                                             <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: 600 }}>{r.distanciaEstimadaKm} km</span>
-                                                            {r.fecha && <span style={{ fontSize: '0.6rem', color: '#4b5563' }}>{new Date(r.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                            {r.fecha && <span style={{ fontSize: '0.6rem', color: '#4b5563' }}>{new Date(r.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -1315,7 +1316,7 @@ export default function ConductorDashboard() {
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59,246,59,0.08)', padding: '0.2rem 0.5rem', borderRadius: '99px', border: '1px solid rgba(59,246,59,0.2)' }}>
                                     <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#3bf63b', boxShadow: '0 0 6px #3bf63b' }} />
-                                    <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: '700' }}>ACTIVO</span>
+                                    <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: '700' }}>CONECTADO</span>
                                 </div>
                             </div>
                             {/* Chat component — toma toda la altura sobrante */}
@@ -1388,7 +1389,7 @@ export default function ConductorDashboard() {
                                     {driverUser?.email || ''}
                                 </p>
                                 <span style={{ fontSize: '0.6rem', color: isOnline ? '#3bf63b' : '#6b7280', fontWeight: '700', background: isOnline ? 'rgba(59,246,59,0.1)' : 'rgba(255,255,255,0.03)', padding: '0.2rem 0.7rem', borderRadius: '99px', border: `1px solid ${isOnline ? 'rgba(59,246,59,0.2)' : 'rgba(107,114,128,0.2)'}` }}>
-                                    {isOnline ? '● EN LÍNEA' : '○ INACTIVO'}
+                                    {isOnline ? '● EN LÍNEA' : '○ DESCONECTADO'}
                                 </span>
                             </div>
 

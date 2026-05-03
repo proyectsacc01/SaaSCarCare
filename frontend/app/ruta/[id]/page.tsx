@@ -8,6 +8,7 @@ import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import styles from "../../dashboard/page.module.css";
 import dynamic from "next/dynamic";
 import ChatRuta from "@/componentes/ChatRuta";
+import { formatRouteStateLabel } from "@/lib/status-labels";
 
 const MapTracking = dynamic(() => import("@/componentes/MapTracking"), {
     ssr: false,
@@ -604,7 +605,7 @@ export default function RutaTracking() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                             <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: '600' }}>PROGRESS TRACKER</span>
                                             <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: '700' }}>
-                                                {ruta.estado === 'DETENIDO' ? `${progreso.toFixed(0)}% — DETENIDO`
+                                                {ruta.estado === 'DETENIDO' ? `${progreso.toFixed(0)}% — ${formatRouteStateLabel(ruta.estado)}`
                                                     : ruta.estado === 'EN_CURSO' && ruta.latitudActual ? `${progreso.toFixed(0)}%`
                                                     : ruta.estado === 'EN_CURSO' ? 'ESPERANDO GPS'
                                                     : 'SIN INICIAR'}
