@@ -3,7 +3,7 @@
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,6 +139,30 @@ function saveBreadcrumbs(map: Map<string, [number, number][]>) {
         map.forEach((v, k) => { data[k] = v; });
         localStorage.setItem(BREADCRUMB_KEY, JSON.stringify({ ts: Date.now(), data }));
     } catch { /* quota or disabled */ }
+}
+
+function mergeBreadcrumbHistory(
+    prev: Map<string, [number, number][]>,
+    rutasActivas: RutaTracking[]
+) {
+    let next = prev;
+    let changed = false;
+
+    rutasActivas.forEach((r) => {
+        if (!r.latitudActual || !r.longitudActual || !r.id || !r.ultimaActualizacionGPS) return;
+        const p: [number, number] = [r.latitudActual, r.longitudActual];
+        const h = next.get(r.id) ?? [];
+        const last = h[h.length - 1];
+        if (!last || distM(last, p) > 5) {
+            if (!changed) {
+                next = new Map(next);
+                changed = true;
+            }
+            next.set(r.id, [...h, p].slice(-300));
+        }
+    });
+
+    return changed ? next : prev;
 }
 
 // ─── Leaflet icons ────────────────────────────────────────────────────────────
@@ -437,24 +461,25 @@ export default function MapTrackingGlobal({
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [flyPos, setFlyPos] = useState<[number, number] | null>(null);
     // Breadcrumb history persists across re-renders AND page reloads (localStorage)
-    const histRef = useRef<Map<string, [number, number][]> | null>(null);
-    if (histRef.current === null) histRef.current = loadBreadcrumbs();
+    const [historyMap, mergeHistoryMapDispatch] = useReducer(
+        mergeBreadcrumbHistory,
+        [] as RutaTracking[],
+        () => loadBreadcrumbs()
+    );
     const saveTickRef = useRef(0);
 
-    // Accumulate position history on each render (polling every 3s).
     // Solo añadimos al breadcrumb si la posición viene con timestamp de GPS real.
-    rutasActivas.forEach((r) => {
-        if (!r.latitudActual || !r.longitudActual || !r.id || !r.ultimaActualizacionGPS) return;
-        const p: [number, number] = [r.latitudActual, r.longitudActual];
-        const h = histRef.current!.get(r.id) ?? [];
-        const last = h[h.length - 1];
-        if (!last || distM(last, p) > 5) {
-            histRef.current!.set(r.id, [...h, p].slice(-300));
+    useEffect(() => {
+        mergeHistoryMapDispatch(rutasActivas);
+    }, [rutasActivas]);
+
+    useEffect(() => {
+        if (historyMap.size === 0) return;
+        saveTickRef.current += 1;
+        if (saveTickRef.current % 10 === 0) {
+            saveBreadcrumbs(historyMap);
         }
-    });
-    // Persistir breadcrumbs cada ~30s para no martillar localStorage
-    saveTickRef.current++;
-    if (saveTickRef.current % 10 === 0) saveBreadcrumbs(histRef.current!);
+    }, [historyMap]);
 
     // Una ruta tiene GPS REAL solo si llegó al menos un POST /{id}/gps,
     // lo que se traduce en `ultimaActualizacionGPS` no-null. Si solo tiene
@@ -465,10 +490,7 @@ export default function MapTrackingGlobal({
         !!r.ultimaActualizacionGPS;
 
     const active = rutasActivas.filter(
-        (r) =>
-            r.estado === "EN_CURSO" ||
-            r.estado === "DETENIDO" ||
-            hasRealGPS(r)
+        (r) => r.estado === "EN_CURSO" || r.estado === "DETENIDO"
     );
 
     // Conductores idle = los que tienen ubicación pero NO son el conductor de ninguna
@@ -822,7 +844,7 @@ export default function MapTrackingGlobal({
                         <RouteLayer
                             key={r.id}
                             ruta={r}
-                            history={histRef.current!.get(r.id ?? "") ?? []}
+                            history={historyMap.get(r.id ?? "") ?? []}
                             selected={r.id === selectedId}
                         />
                     ))}

@@ -242,10 +242,22 @@ public class RutaController {
                         ruta.setVelocidadActualKmh(0.0);
                     }
 
+                    if (gps.getVelocidadKmh() != null && gps.getVelocidadKmh() >= 0) {
+                        double velocidadReportada = Math.max(0, Math.min(200, gps.getVelocidadKmh()));
+                        ruta.setVelocidadActualKmh(velocidadReportada);
+                    }
+
                     // ═══ DETECCIÓN DE INACTIVIDAD (5 min sin moverse) ═══
                     // Si la ruta está EN_CURSO o DETENIDO, evaluar movimiento
                     if ("EN_CURSO".equals(ruta.getEstado()) || "DETENIDO".equals(ruta.getEstado())) {
-                        if (distanciaRecorrida > 0.005) { // Más de 5 metros = movimiento real
+                        double precisionM = gps.getPrecision() != null && gps.getPrecision() > 0
+                                ? gps.getPrecision()
+                                : 15.0;
+                        double umbralMovimientoKm = Math.max(0.012, (precisionM * 1.25) / 1000.0);
+                        double velocidadActualKmh = ruta.getVelocidadActualKmh() != null ? ruta.getVelocidadActualKmh() : 0.0;
+                        boolean hayMovimientoReal = distanciaRecorrida >= umbralMovimientoKm || velocidadActualKmh >= 4.0;
+
+                        if (hayMovimientoReal) {
                             // Hay movimiento → si estaba DETENIDO, reactivar
                             if ("DETENIDO".equals(ruta.getEstado())) {
                                 ruta.setEstado("EN_CURSO");
@@ -389,15 +401,25 @@ public class RutaController {
     public static class GPSCoordinates {
         private Double latitud;
         private Double longitud;
+        private Double precision;
+        private Double velocidadKmh;
         
         public Double getLatitud() { return latitud; }
         public void setLatitud(Double latitud) { this.latitud = latitud; }
         public Double getLongitud() { return longitud; }
         public void setLongitud(Double longitud) { this.longitud = longitud; }
+        public Double getPrecision() { return precision; }
+        public void setPrecision(Double precision) { this.precision = precision; }
+        public Double getVelocidadKmh() { return velocidadKmh; }
+        public void setVelocidadKmh(Double velocidadKmh) { this.velocidadKmh = velocidadKmh; }
         
         @Override
         public String toString() {
-            return String.format("GPS[lat=%.6f, lng=%.6f]", latitud, longitud);
+            return String.format("GPS[lat=%.6f, lng=%.6f, acc=%s, speed=%s]",
+                    latitud,
+                    longitud,
+                    precision != null ? String.format("%.1fm", precision) : "-",
+                    velocidadKmh != null ? String.format("%.1fkm/h", velocidadKmh) : "-");
         }
     }
 

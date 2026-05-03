@@ -40,6 +40,23 @@ interface DriverUser {
     nombreEmpresa?: string;
 }
 
+type DriverTab = 'inicio' | 'historial' | 'chat' | 'perfil';
+
+type AndroidTrackerBridge = {
+    startTracking?: (rutaId: string) => void;
+    stopTracking?: () => void;
+    openExternalUrl?: (url: string) => void;
+};
+
+function getAndroidTracker(): AndroidTrackerBridge | null {
+    if (typeof window === 'undefined') return null;
+    return (window as Window & { AndroidTracker?: AndroidTrackerBridge }).AndroidTracker ?? null;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
+}
+
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
     : (process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app");
@@ -48,12 +65,12 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === '1
 // para lanzar un Intent.ACTION_VIEW (Google Maps app, navegador, etc).
 // En navegador web, abre en nueva pestaña.
 function openExternal(url: string) {
-    if (typeof window === 'undefined') return;
-    const bridge = (window as any).AndroidTracker;
+    const bridge = getAndroidTracker();
     if (bridge && typeof bridge.openExternalUrl === 'function') {
         bridge.openExternalUrl(url);
         return;
     }
+    if (typeof window === 'undefined') return;
     window.open(url, '_blank', 'noopener,noreferrer');
 }
 
@@ -65,7 +82,7 @@ export default function ConductorDashboard() {
     const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'inicio' | 'historial' | 'chat' | 'perfil'>('inicio');
+    const [activeTab, setActiveTab] = useState<DriverTab>('inicio');
     // isOnline controla SI el dispositivo emite GPS al servidor.
     // - true  → presence watcher activo + TrackingService nativo si hay ruta
     // - false → no se manda ubicación, el admin lo ve como inactivo
@@ -102,6 +119,11 @@ export default function ConductorDashboard() {
     const [showEmpresaForm, setShowEmpresaForm] = useState(false);
     const [empresaEmailInput, setEmpresaEmailInput] = useState('');
     const [empresaLoading, setEmpresaLoading] = useState(false);
+    const [showSupportForm, setShowSupportForm] = useState(false);
+    const [supportLoading, setSupportLoading] = useState(false);
+    const [supportSubject, setSupportSubject] = useState('');
+    const [supportMessage, setSupportMessage] = useState('');
+    const trackedRouteIdRef = useRef<string | null>(null);
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -154,10 +176,11 @@ export default function ConductorDashboard() {
                 }
                 throw new Error(`Error del servidor: ${res.status}`);
             }
-        } catch (err: any) {
-            const errorMsg = err.name === 'AbortError'
+        } catch (err: unknown) {
+            const isAbort = err instanceof Error && err.name === 'AbortError';
+            const errorMsg = isAbort
                 ? "Tiempo de espera agotado — el servidor no responde"
-                : `Error de conexión: ${err.message}`;
+                : `Error de conexión: ${getErrorMessage(err, 'Error desconocido')}`;
             setError(errorMsg);
             toast.error(errorMsg);
         } finally {
@@ -217,6 +240,8 @@ export default function ConductorDashboard() {
                     body: JSON.stringify({
                         latitud: pos.coords.latitude,
                         longitud: pos.coords.longitude,
+                        precision: pos.coords.accuracy,
+                        velocidadKmh: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed * 3.6 : undefined,
                     }),
                 }).catch(() => { /* silencioso */ });
             },
@@ -229,37 +254,26 @@ export default function ConductorDashboard() {
         };
     }, [isOnline]);
 
-    // Toggle ACTIVO/INACTIVO con efectos reales:
+    // Toggle ACTIVO/INACTIVO:
     //   - Persiste el estado en localStorage
-    //   - Detiene/reanuda el TrackingService nativo si hay ruta EN_CURSO
-    //   - El presence watcher se ata/desata vía el useEffect de arriba
+    //   - El watcher de presencia se ata/desata vía el useEffect de arriba
+    //   - El tracking de ruta se sincroniza aparte según el estado que llegue del servidor
     const toggleOnline = () => {
         const next = !isOnline;
         setIsOnline(next);
         if (typeof window !== 'undefined') {
             localStorage.setItem('driverIsOnline', next ? '1' : '0');
         }
-        const tracker = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
-        const rutaEnCurso = rutas.find(r => r.estado === 'EN_CURSO');
         if (!next) {
-            // Pasamos a INACTIVO — paramos GPS browser y servicio nativo si hay
-            stopBrowserGPS();
-            if (tracker?.stopTracking) {
-                try { tracker.stopTracking(); } catch { /* noop */ }
-            }
             toast.success("Estás INACTIVO — tu ubicación no se comparte");
         } else {
-            // Pasamos a ACTIVO — si hay ruta en curso, re-arrancar tracking nativo
-            if (rutaEnCurso) {
-                if (tracker?.startTracking) {
-                    try { tracker.startTracking(rutaEnCurso.id); } catch { /* noop */ }
-                } else {
-                    startBrowserGPS(rutaEnCurso.id);
-                }
-            }
             toast.success("Estás ACTIVO — tu ubicación se comparte con la central");
         }
     };
+
+    const rutaEnProgreso = rutas.find(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO');
+    const rutasPendientes = rutas.filter(r => r.estado === 'PLANIFICADA');
+    const rutasEnProgresoCount = rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length;
 
     const handleProfilePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -278,10 +292,19 @@ export default function ConductorDashboard() {
 
     // Timer para ruta activa
     useEffect(() => {
-        const activa = rutas.find(r => r.estado === 'EN_CURSO');
-        if (activa && !routeStartTime) setRouteStartTime(new Date());
-        else if (!activa) { setRouteStartTime(null); setElapsedSeconds(0); }
-    }, [rutas]);
+        if (rutaEnProgreso && !routeStartTime) setRouteStartTime(new Date());
+        else if (!rutaEnProgreso) { setRouteStartTime(null); setElapsedSeconds(0); }
+    }, [rutaEnProgreso, routeStartTime]);
+
+    // Sincroniza el tracking real con el estado que llega del panel/backend.
+    // Si la central inicia, pausa, reanuda o cierra una ruta, la app responde sola.
+    useEffect(() => {
+        if (!isOnline || !rutaEnProgreso) {
+            stopRouteTracking();
+            return;
+        }
+        startRouteTracking(rutaEnProgreso.id);
+    }, [isOnline, rutaEnProgreso?.id, rutaEnProgreso?.estado]);
 
     useEffect(() => {
         if (!routeStartTime) return;
@@ -293,7 +316,7 @@ export default function ConductorDashboard() {
 
     // Polling de mensajes ADMIN no leídos para badge en bottom nav
     useEffect(() => {
-        const rutaParaChat = rutas.find(r => r.estado === 'EN_CURSO') || rutas.find(r => r.estado === 'PLANIFICADA');
+        const rutaParaChat = rutaEnProgreso || rutas.find(r => r.estado === 'PLANIFICADA');
         if (!rutaParaChat) {
             setUnreadMessages(0);
             return;
@@ -324,7 +347,7 @@ export default function ConductorDashboard() {
         fetchMsgs();
         const interval = setInterval(fetchMsgs, 5000);
         return () => clearInterval(interval);
-    }, [rutas, activeTab]);
+    }, [rutas, activeTab, rutaEnProgreso?.id]);
 
     const formatElapsed = (s: number) => {
         const h = Math.floor(s / 3600);
@@ -345,14 +368,24 @@ export default function ConductorDashboard() {
 
     const startBrowserGPS = (rutaId: string) => {
         if (!navigator.geolocation) { toast.error("GPS no disponible"); return; }
+        if (gpsWatchIdRef.current !== null && trackedRouteIdRef.current === rutaId) return;
+        if (trackedRouteIdRef.current && trackedRouteIdRef.current !== rutaId) {
+            stopBrowserGPS();
+        }
         navigator.geolocation.getCurrentPosition(
             async (position) => {
                 toast.success("GPS activado");
                 updateLiveGps(position);
+                trackedRouteIdRef.current = rutaId;
                 try {
                     await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
                         method: 'POST', headers: getAuthHeaders(),
-                        body: JSON.stringify({ latitud: position.coords.latitude, longitud: position.coords.longitude })
+                        body: JSON.stringify({
+                            latitud: position.coords.latitude,
+                            longitud: position.coords.longitude,
+                            precision: position.coords.accuracy,
+                            velocidadKmh: position.coords.speed != null && position.coords.speed >= 0 ? position.coords.speed * 3.6 : undefined,
+                        })
                     });
                 } catch {}
                 const watchId = navigator.geolocation.watchPosition(
@@ -361,7 +394,12 @@ export default function ConductorDashboard() {
                         try {
                             await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
                                 method: 'POST', headers: getAuthHeaders(),
-                                body: JSON.stringify({ latitud: pos.coords.latitude, longitud: pos.coords.longitude })
+                                body: JSON.stringify({
+                                    latitud: pos.coords.latitude,
+                                    longitud: pos.coords.longitude,
+                                    precision: pos.coords.accuracy,
+                                    velocidadKmh: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed * 3.6 : undefined,
+                                })
                             });
                         } catch {}
                     },
@@ -381,7 +419,33 @@ export default function ConductorDashboard() {
             gpsWatchIdRef.current = null;
         }
         if (gpsInterval) { clearInterval(gpsInterval); setGpsInterval(null); }
+        trackedRouteIdRef.current = null;
         setLiveGps(null);
+    };
+
+    const startRouteTracking = (rutaId: string) => {
+        if (trackedRouteIdRef.current === rutaId) return;
+        const tracker = getAndroidTracker();
+        stopBrowserGPS();
+        if (tracker?.startTracking) {
+            try {
+                tracker.startTracking(rutaId);
+                trackedRouteIdRef.current = rutaId;
+                return;
+            } catch {
+                trackedRouteIdRef.current = null;
+            }
+        }
+        startBrowserGPS(rutaId);
+    };
+
+    const stopRouteTracking = () => {
+        stopBrowserGPS();
+        const tracker = getAndroidTracker();
+        if (tracker?.stopTracking) {
+            try { tracker.stopTracking(); } catch { /* noop */ }
+        }
+        trackedRouteIdRef.current = null;
     };
 
     const toggleRuta = async (ruta: Ruta) => {
@@ -391,13 +455,6 @@ export default function ConductorDashboard() {
         if (nuevoEstado === 'EN_CURSO' && !isOnline) {
             toast.error("Activá tu estado para iniciar la ruta");
             return;
-        }
-        if (typeof window !== 'undefined' && (window as any).AndroidTracker) {
-            if (nuevoEstado === 'EN_CURSO') (window as any).AndroidTracker.startTracking(ruta.id);
-            else (window as any).AndroidTracker.stopTracking();
-        } else {
-            if (nuevoEstado === 'EN_CURSO') startBrowserGPS(ruta.id);
-            else stopBrowserGPS();
         }
         try {
             await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
@@ -475,9 +532,42 @@ export default function ConductorDashboard() {
         }
     };
 
+    const enviarSoporte = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const mensaje = supportMessage.trim();
+        if (!mensaje) {
+            toast.error('Contame qué problema tuviste para poder enviarlo');
+            return;
+        }
+
+        const rutaContexto = rutaEnProgreso || rutasPendientes[0];
+        setSupportLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/conductores/me/support`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    asunto: supportSubject.trim() || 'Soporte desde CarCare Driver',
+                    mensaje,
+                    rutaId: rutaContexto?.id,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo enviar la solicitud');
+            }
+            setSupportSubject('');
+            setSupportMessage('');
+            setShowSupportForm(false);
+            toast.success(data.emailEnviado ? 'Soporte enviado al panel y por email' : 'Soporte enviado al panel de la central');
+        } catch (err: unknown) {
+            toast.error(getErrorMessage(err, 'Error enviando soporte'));
+        } finally {
+            setSupportLoading(false);
+        }
+    };
+
     const completarRuta = async (ruta: Ruta) => {
-        stopBrowserGPS();
-        if (typeof window !== 'undefined' && (window as any).AndroidTracker) (window as any).AndroidTracker.stopTracking();
         try {
             await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
                 method: 'PUT', headers: getAuthHeaders(),
@@ -494,8 +584,7 @@ export default function ConductorDashboard() {
         return '?';
     };
 
-    const rutaActiva = rutas.find(r => r.estado === 'EN_CURSO');
-    const rutasPendientes = rutas.filter(r => r.estado === 'PLANIFICADA');
+    const rutaActiva = rutaEnProgreso;
 
     // KM RECORRIDOS HOY: solo rutas completadas con fecha = hoy (zona horaria local)
     const hoyStr = new Date().toISOString().slice(0, 10);
@@ -731,17 +820,21 @@ export default function ConductorDashboard() {
                                 {rutaActiva ? (
                                     <div style={{
                                         background: 'linear-gradient(150deg, rgba(18,22,30,0.98) 0%, rgba(12,15,20,0.98) 100%)',
-                                        border: '1px solid rgba(59,246,59,0.15)',
-                                        borderLeft: '4px solid #3bf63b',
+                                        border: `1px solid ${rutaActiva.estado === 'DETENIDO' ? 'rgba(249,115,22,0.18)' : 'rgba(59,246,59,0.15)'}`,
+                                        borderLeft: `4px solid ${rutaActiva.estado === 'DETENIDO' ? '#f97316' : '#3bf63b'}`,
                                         borderRadius: '18px',
                                         padding: '1.2rem',
-                                        boxShadow: '0 12px 40px -12px rgba(59,246,59,0.12), inset 0 1px 0 rgba(255,255,255,0.04)'
+                                        boxShadow: rutaActiva.estado === 'DETENIDO'
+                                            ? '0 12px 40px -12px rgba(249,115,22,0.12), inset 0 1px 0 rgba(255,255,255,0.04)'
+                                            : '0 12px 40px -12px rgba(59,246,59,0.12), inset 0 1px 0 rgba(255,255,255,0.04)'
                                     }}>
                                         {/* Top badges */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(59,246,59,0.1)', padding: '0.3rem 0.75rem', borderRadius: '99px', border: '1px solid rgba(59,246,59,0.25)' }}>
-                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3bf63b', boxShadow: '0 0 8px rgba(59,246,59,0.8)', display: 'inline-block', animation: 'gps-pulse 1.5s infinite' }} />
-                                                <span style={{ fontSize: '0.58rem', color: '#3bf63b', fontWeight: '900', letterSpacing: '0.5px' }}>GPS ACTIVO</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: rutaActiva.estado === 'DETENIDO' ? 'rgba(249,115,22,0.1)' : 'rgba(59,246,59,0.1)', padding: '0.3rem 0.75rem', borderRadius: '99px', border: `1px solid ${rutaActiva.estado === 'DETENIDO' ? 'rgba(249,115,22,0.25)' : 'rgba(59,246,59,0.25)'}` }}>
+                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: rutaActiva.estado === 'DETENIDO' ? '#f97316' : '#3bf63b', boxShadow: rutaActiva.estado === 'DETENIDO' ? '0 0 8px rgba(249,115,22,0.8)' : '0 0 8px rgba(59,246,59,0.8)', display: 'inline-block', animation: rutaActiva.estado === 'DETENIDO' ? 'none' : 'gps-pulse 1.5s infinite' }} />
+                                                <span style={{ fontSize: '0.58rem', color: rutaActiva.estado === 'DETENIDO' ? '#f97316' : '#3bf63b', fontWeight: '900', letterSpacing: '0.5px' }}>
+                                                    {rutaActiva.estado === 'DETENIDO' ? 'DETENIDO - SIGUE EN RUTA' : 'GPS ACTIVO'}
+                                                </span>
                                             </div>
                                             <span style={{ fontSize: '0.58rem', color: '#374151', fontFamily: 'monospace' }}>
                                                 #{rutaActiva.id?.slice(-6).toUpperCase()}
@@ -837,7 +930,7 @@ export default function ConductorDashboard() {
                                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '2px dashed rgba(255,255,255,0.06)', borderRadius: '18px', padding: '2.5rem 2rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', filter: 'grayscale(1)', opacity: 0.35 }}>🛣️</div>
                                         <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: '0 0 0.3rem', fontWeight: '600' }}>Sin trayecto activo</p>
-                                        <p style={{ color: '#374151', fontSize: '0.75rem', margin: 0 }}>Iniciá un servicio desde "Próximos"</p>
+                                        <p style={{ color: '#374151', fontSize: '0.75rem', margin: 0 }}>Iniciá un servicio desde Próximos</p>
                                     </div>
                                 )}
                             </div>
@@ -1266,7 +1359,7 @@ export default function ConductorDashboard() {
                                 {[
                                     { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b', icon: '✓' },
                                     { label: 'KM Totales', value: `${rutasCompletadas.reduce((acc, r) => acc + r.distanciaEstimadaKm, 0).toFixed(0)}`, color: '#60a5fa', icon: '🛣' },
-                                    { label: 'En progreso', value: rutas.length, color: '#f59e0b', icon: '⚡' },
+                                    { label: 'En progreso', value: rutasEnProgresoCount, color: '#f59e0b', icon: '⚡' },
                                     { label: 'Tiempo activo', value: elapsedSeconds > 0 ? formatElapsed(elapsedSeconds) : '—', color: '#a78bfa', icon: '⏱' },
                                 ].map((s, i) => (
                                     <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '1rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
@@ -1355,11 +1448,8 @@ export default function ConductorDashboard() {
                                         icon: '✉️', label: 'Contactar soporte',
                                         sub: 'Reporta un problema o sugerencia',
                                         action: () => {
-                                            const subject = encodeURIComponent('CarCare Driver — Soporte');
-                                            const body = encodeURIComponent(`Hola,\n\nID Conductor: ${driverUser?.id || '—'}\nEmail: ${driverUser?.email || '—'}\n\n[Describe tu consulta]\n`);
-                                            // openExternal usa el bridge nativo en Android (intent ACTION_VIEW),
-                                            // que abre Gmail/cliente de correo. En web abre tab nueva con mailto.
-                                            openExternal(`mailto:elenarodriguez0097@gmail.com?subject=${subject}&body=${body}`);
+                                            setSupportSubject(v => v || 'Soporte desde CarCare Driver');
+                                            setShowSupportForm(v => !v);
                                         },
                                     },
                                     {
@@ -1388,13 +1478,55 @@ export default function ConductorDashboard() {
                                 ))}
                             </div>
 
+                            {showSupportForm && (
+                                <form onSubmit={enviarSoporte} style={{ background: 'rgba(59,246,59,0.04)', border: '1px solid rgba(59,246,59,0.14)', borderRadius: '16px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div>
+                                        <div style={{ fontSize: '0.72rem', color: '#3bf63b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Soporte directo</div>
+                                        <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '0.2rem' }}>
+                                            Esto le llega a la central dentro del panel. Si el email est\u00e1 configurado, tambi\u00e9n sale por correo.
+                                        </div>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={supportSubject}
+                                        onChange={e => setSupportSubject(e.target.value)}
+                                        placeholder="Asunto"
+                                        disabled={supportLoading}
+                                        style={{ width: '100%', padding: '0.7rem 0.8rem', background: '#0d1117', border: '1px solid rgba(59,246,59,0.18)', borderRadius: '10px', color: '#e5e7eb', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
+                                    />
+                                    <textarea
+                                        value={supportMessage}
+                                        onChange={e => setSupportMessage(e.target.value)}
+                                        placeholder="Describ\u00ed el fallo, qu\u00e9 estabas haciendo y si ten\u00e9s una ruta activa."
+                                        disabled={supportLoading}
+                                        rows={5}
+                                        style={{ width: '100%', resize: 'vertical', minHeight: '120px', padding: '0.8rem', background: '#0d1117', border: '1px solid rgba(59,246,59,0.18)', borderRadius: '12px', color: '#e5e7eb', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5 }}
+                                    />
+                                    <div style={{ fontSize: '0.62rem', color: '#4b5563' }}>
+                                        {rutaActiva ? `Se adjunta el contexto de la ruta #${rutaActiva.id?.slice(-6).toUpperCase()}.` : 'Se env\u00eda como soporte general si no ten\u00e9s una ruta en progreso.'}
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSupportForm(false)}
+                                            disabled={supportLoading}
+                                            style={{ padding: '0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: '#9ca3af', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
+                                        >Cancelar</button>
+                                        <button
+                                            type="submit"
+                                            disabled={supportLoading}
+                                            style={{ padding: '0.85rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', border: 'none', borderRadius: '12px', color: '#000', fontWeight: '900', fontSize: '0.78rem', cursor: 'pointer', boxShadow: '0 8px 22px -12px rgba(59,246,59,0.55)' }}
+                                        >{supportLoading ? 'Enviando...' : 'Enviar soporte'}</button>
+                                    </div>
+                                </form>
+                            )}
+
                             {/* Logout */}
                             <button
                                 onClick={() => {
                                     if (rutaActiva) {
                                         if (!confirm('Tenés una ruta activa. ¿Cerrar sesión igual?')) return;
-                                        stopBrowserGPS();
-                                        if (typeof window !== 'undefined' && (window as any).AndroidTracker) (window as any).AndroidTracker.stopTracking();
+                                        stopRouteTracking();
                                     }
                                     localStorage.removeItem("user");
                                     localStorage.removeItem("token");
@@ -1424,7 +1556,7 @@ export default function ConductorDashboard() {
                     zIndex: 50,
                     boxShadow: '0 -4px 14px -8px rgba(0,0,0,0.6)'
                 }}>
-                    {[
+                    {([
                         { id: 'inicio', label: 'Inicio', icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill={a ? '#3bf63b' : 'none'} stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                         )},
@@ -1437,12 +1569,12 @@ export default function ConductorDashboard() {
                         { id: 'perfil', label: 'Perfil', icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         )},
-                    ].map(tab => {
+                    ] satisfies Array<{ id: DriverTab; label: string; icon: (active: boolean) => JSX.Element }>).map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id as any)}
+                                onClick={() => setActiveTab(tab.id)}
                                 style={{
                                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
                                     padding: '0.35rem 0', background: 'none', border: 'none', cursor: 'pointer',

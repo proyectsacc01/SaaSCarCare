@@ -169,11 +169,9 @@ export default function PrivacyPolicyPage() {
 
         <Section title="12. Contacto">
           <p>
-            Para cualquier consulta sobre esta política o sobre el tratamiento de tus datos personales, puedes escribir a{" "}
-            <a href="mailto:elenarodriguez0097@gmail.com" style={{ color: "#3bf63b" }}>
-              elenarodriguez0097@gmail.com
-            </a>
-            .
+            Para cualquier consulta sobre esta política o sobre el tratamiento de tus datos personales, usá la opción
+            de soporte dentro de CarCare Driver. Si necesitás una referencia directa, el correo de contacto es{" "}
+            <span style={{ color: "#3bf63b", fontWeight: 700 }}>elenarodriguez0097@gmail.com</span>.
           </p>
         </Section>
       </article>

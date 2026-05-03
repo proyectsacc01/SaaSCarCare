@@ -10,7 +10,7 @@ import styles from "./AlertasPanel.module.css";
 export interface Alerta {
   id: string;
   grupoKey?: string;
-  tipo: "MANTENIMIENTO" | "RUTA_DETENIDA" | "RUTA_DESVIADA" | "GPS_PERDIDO" | "DOCUMENTO_VENCIDO" | "DOCUMENTO_POR_VENCER" | "MANTENIMIENTO_PROGRAMADO" | "COMBUSTIBLE_BAJO" | "MENSAJE_CONDUCTOR";
+  tipo: "MANTENIMIENTO" | "RUTA_DETENIDA" | "RUTA_DESVIADA" | "GPS_PERDIDO" | "DOCUMENTO_VENCIDO" | "DOCUMENTO_POR_VENCER" | "MANTENIMIENTO_PROGRAMADO" | "COMBUSTIBLE_BAJO" | "MENSAJE_CONDUCTOR" | "SOPORTE_CONDUCTOR";
   severidad: "CRITICAL" | "WARNING" | "INFO";
   titulo: string;
   descripcion: string;
@@ -42,7 +42,12 @@ const BG: Record<string, string> = {
   INFO:     "rgba(59,130,246,0.12)",
 };
 
-function tiempoAtras(timestamp: string, t: any): string {
+type AlertaTranslations = {
+  components: Record<string, string>;
+  alerts: Record<string, string>;
+};
+
+function tiempoAtras(timestamp: string, t: AlertaTranslations): string {
   const diff = Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000);
   if (diff < 60)   return t.components.justNow;
   if (diff < 3600) return t.components.agoMin.replace("{min}", Math.floor(diff / 60).toString());
@@ -50,7 +55,7 @@ function tiempoAtras(timestamp: string, t: any): string {
   return t.components.agoD.replace("{d}", Math.floor(diff / 86400).toString());
 }
 
-function traducirAlerta(alerta: Alerta, t: any): { titulo: string; descripcion: string } {
+function traducirAlerta(alerta: Alerta, t: AlertaTranslations): { titulo: string; descripcion: string } {
   const key = alerta.tipo as string;
   const titleKey = `${key}_title`;
   const descKey  = `${key}_desc`;
@@ -197,6 +202,7 @@ function getIcono(tipo: string) {
     case "RUTA_DESVIADA":              return <IconDesviada />;
     case "GPS_PERDIDO":                return <IconGPS />;
     case "MENSAJE_CONDUCTOR":          return <IconMensaje />;
+    case "SOPORTE_CONDUCTOR":          return <IconMensaje />;
     default: return <IconDesviada />;
   }
 }

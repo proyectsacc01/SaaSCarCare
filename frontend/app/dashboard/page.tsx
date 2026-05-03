@@ -61,6 +61,7 @@ interface Ruta {
   distanciaRestanteKm?: number;
   desviado?: boolean;
   ultimaActualizacionGPS?: string;
+  signalSource?: 'route' | 'presence';
 }
 
 interface Repostaje {
@@ -135,22 +136,19 @@ interface FlotaKpis {
 // Dynamic import para el mapa de tracking global (evitar SSR)
 const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"), {
   ssr: false,
-  loading: () => {
-    const { t, locale } = useI18n();
-    return (
-      <div style={{
-        height: "500px",
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: "16px",
-        color: "#888"
-      }}>
-        {t.dashboard.loadingMap}
-      </div>
-    );
-  }
+  loading: () => (
+    <div style={{
+      height: "500px",
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "16px",
+      color: "#888"
+    }}>
+      Cargando mapa...
+    </div>
+  )
 });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
@@ -223,13 +221,13 @@ export default function Dashboard() {
     const lastUpdate = new Date(timestamp);
     const diffSeconds = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
 
-    if (diffSeconds <= 30) {
+    if (diffSeconds <= 45) {
       return {
         status: 'online' as const,
         text: diffSeconds < 5 ? 'Ahora' : `${t.dashboard.ago} ${diffSeconds}${t.dashboard.sec}`,
         color: '#22c55e'
       };
-    } else if (diffSeconds <= 120) {
+    } else if (diffSeconds <= 180) {
 
       const mins = Math.floor(diffSeconds / 60);
       return {
@@ -246,6 +244,33 @@ export default function Dashboard() {
       };
     }
   };
+
+  const conductoresUbicacionMap = useMemo(() => {
+    return new Map(conductoresUbicaciones.map((c) => [c.id, c]));
+  }, [conductoresUbicaciones]);
+
+  const rutasTrackingActivas = useMemo(() => {
+    return rutas
+      .filter((r) => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO')
+      .map((ruta) => {
+        const presencia = ruta.conductorId ? conductoresUbicacionMap.get(ruta.conductorId) : undefined;
+        const routeTs = ruta.ultimaActualizacionGPS ? new Date(ruta.ultimaActualizacionGPS).getTime() : 0;
+        const presenceTs = presencia?.ultimaActualizacionGPS ? new Date(presencia.ultimaActualizacionGPS).getTime() : 0;
+        const usarPresencia = !!presencia && presenceTs > routeTs;
+
+        if (!usarPresencia) {
+          return { ...ruta, signalSource: 'route' as const };
+        }
+
+        return {
+          ...ruta,
+          latitudActual: presencia?.latitudActual ?? ruta.latitudActual,
+          longitudActual: presencia?.longitudActual ?? ruta.longitudActual,
+          ultimaActualizacionGPS: presencia?.ultimaActualizacionGPS ?? ruta.ultimaActualizacionGPS,
+          signalSource: 'presence' as const,
+        };
+      });
+  }, [rutas, conductoresUbicacionMap]);
 
   // ═══ DATOS PARA ESTADÍSTICAS ═══
   // Datos manuales persistidos en localStorage (el usuario puede editar desde la UI)
@@ -557,7 +582,7 @@ export default function Dashboard() {
     try {
       const res = await fetch(`${API_URL}/api/vehiculos`, {
         method: 'POST',
-        headers: getAuthHeaders() as any, // Cast to any to satisfy TS for now or define stricter HeadersInit
+        headers: getAuthHeaders(),
         body: JSON.stringify(nuevoVehiculo)
       });
       if (res.ok) {
@@ -611,7 +636,7 @@ export default function Dashboard() {
 
         const res = await fetch(`${API_URL}/api/rutas`, {
           method: 'POST',
-          headers: getAuthHeaders() as any,
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             ...nuevaRuta,
             estado: 'PLANIFICADA',
@@ -656,7 +681,7 @@ export default function Dashboard() {
     try {
       await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
         method: 'PUT',
-        headers: getAuthHeaders() as any,
+        headers: getAuthHeaders(),
         body: JSON.stringify({ ...ruta, estado: nuevoEstado })
       }).catch(e => console.warn("Backend no respondió, usando estado local"));
 
@@ -672,7 +697,7 @@ export default function Dashboard() {
     setRutas(prev => prev.filter(r => r.id !== ruta.id));
 
     try {
-      await fetch(`${API_URL}/api/rutas/${ruta.id}`, { method: 'DELETE', headers: getAuthHeaders() as any })
+      await fetch(`${API_URL}/api/rutas/${ruta.id}`, { method: 'DELETE', headers: getAuthHeaders() })
         .catch(e => console.warn("Backend no respondió, usando estado local"));
       toast.success("Ruta eliminada correctamente");
     } catch (error) {
@@ -688,7 +713,7 @@ export default function Dashboard() {
         label: "Eliminar",
         onClick: async () => {
           try {
-            const res = await fetch(`${API_URL}/api/vehiculos/${id}`, { method: 'DELETE', headers: getAuthHeaders() as any });
+            const res = await fetch(`${API_URL}/api/vehiculos/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
             if (res.ok) {
               toast.success("Vehículo eliminado correctamente");
               setVehiculos((prev) => prev.filter(v => v.id !== id));
@@ -1680,7 +1705,7 @@ export default function Dashboard() {
               {/* Mapa Tracking Global */}
               <div className={styles.card} style={{ height: '600px', padding: 0, overflow: 'hidden', position: 'relative', border: '1px solid rgba(59, 246, 59, 0.3)', boxShadow: '0 0 50px rgba(59, 246, 59, 0.1)' }}>
                 <MapTrackingGlobal
-                  rutasActivas={rutas}
+                  rutasActivas={rutasTrackingActivas}
                   conductoresUbicaciones={conductoresUbicaciones}
                   onRutaClick={(rutaId) => router.push(`/ruta/${rutaId}`)}
                 />
@@ -1691,7 +1716,7 @@ export default function Dashboard() {
                     {t.dashboard.live}
                   </h3>
                   <div style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--accent)' }}>
-                    {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length}
+                    {rutasTrackingActivas.length}
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#6b7280' }}>{t.dashboard.vehiclesOnRoute}</div>
                 </div>
@@ -1701,7 +1726,7 @@ export default function Dashboard() {
               <div>
                 <h3 style={{ marginBottom: '1rem', color: '#fff' }}>{t.dashboard.activeFleetState}</h3>
                 <div className={styles.grid}>
-                  {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').map(r => {
+                  {rutasTrackingActivas.map(r => {
                     const hasRealGPS = !!(r.latitudActual && r.longitudActual && r.ultimaActualizacionGPS);
                     const status = getConnectionStatus(r.ultimaActualizacionGPS, hasRealGPS);
 
@@ -1745,19 +1770,23 @@ export default function Dashboard() {
                         <div className={styles.statRow}>
                           <span className={styles.statLabel}>{t.dashboard.speed}</span>
                           <span className={styles.statValue} style={{ color: '#fff', fontWeight: 'bold' }}>
-                            0 km/h
+                            {r.velocidadActualKmh != null ? `${r.velocidadActualKmh.toFixed(0)} km/h` : '—'}
                           </span>
                         </div>
 
                         <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
                           <span>
-                            {r.estado === 'DETENIDO' ? t.dashboard.vehStopped : (status.status === 'online' ? t.dashboard.transmitting : (status.status === 'idle' ? t.dashboard.unstableConn : t.dashboard.noConn))}
+                            {r.estado === 'DETENIDO'
+                              ? t.dashboard.vehStopped
+                              : r.signalSource === 'presence'
+                                ? 'SEÑAL DE APP ACTIVA'
+                                : (status.status === 'online' ? t.dashboard.transmitting : (status.status === 'idle' ? t.dashboard.unstableConn : t.dashboard.noConn))}
                           </span>
                         </div>
                       </div>
                     )
                   })}
-                  {rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length === 0 && (
+                  {rutasTrackingActivas.length === 0 && (
                     <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
                       <p style={{ color: '#6b7280' }}>{t.dashboard.noVehiclesActiveRightNow}</p>
                       <button onClick={() => setActiveTab('rutas')} style={{ marginTop: '1rem', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}>

@@ -143,9 +143,10 @@ public class TrackingService extends Service {
 
                 // CRÍTICO: Locale.US garantiza punto decimal en dispositivos con locale español
                 // Sin esto, String.format usa coma y el JSON es inválido → coordenadas no se guardan
+                double velocidadKmh = loc.hasSpeed() ? Math.max(0, loc.getSpeed() * 3.6) : -1;
                 String json = String.format(Locale.US,
-                    "{\"latitud\":%.7f,\"longitud\":%.7f,\"precision\":%.1f}",
-                    loc.getLatitude(), loc.getLongitude(), loc.getAccuracy());
+                    "{\"latitud\":%.7f,\"longitud\":%.7f,\"precision\":%.1f,\"velocidadKmh\":%.1f}",
+                    loc.getLatitude(), loc.getLongitude(), loc.getAccuracy(), velocidadKmh);
 
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(json.getBytes(StandardCharsets.UTF_8));

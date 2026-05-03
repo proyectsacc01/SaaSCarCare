@@ -5,21 +5,36 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect } from "react";
 
+export interface OSRMStep {
+    distance: number;
+    duration: number;
+    name?: string;
+    instruction: string;
+    maneuver: {
+        type?: string;
+        modifier?: string;
+        location: [number, number];
+    };
+}
+
 export interface OSRMRoute {
     distance: number;
     duration: number;
     geometry: [number, number][];
-    legs: any[];
+    legs: unknown[];
     summary?: string;
+    steps: OSRMStep[];
 }
 
 interface Props {
     origen: [number, number] | null;
     destino: [number, number] | null;
-    livePos: [number, number] | null;
+    currentPos: [number, number] | null;
     routes: OSRMRoute[];
     activeIdx: number;
     onSelectRoute: (idx: number) => void;
+    followMode: boolean;
+    liveHeading?: number | null;
 }
 
 // ─── Iconos Leaflet ───────────────────────────────────────────────────────────
@@ -51,7 +66,9 @@ const iconDestino = L.divIcon({
     iconAnchor: [14, 14],
 });
 
-const iconConductor = L.divIcon({
+function createConductorIcon(heading?: number | null) {
+    const rotation = typeof heading === "number" && heading >= 0 ? heading : 0;
+    return L.divIcon({
     html: `<div style="position: relative;">
         <div style="
             position: absolute; top: -10px; left: -10px;
@@ -59,33 +76,47 @@ const iconConductor = L.divIcon({
             background: rgba(59,246,59,0.25);
             animation: nav-pulse 1.6s ease-out infinite;
         "></div>
-        <div style="
-            width: 20px; height: 20px; border-radius: 50%;
-            background: #3bf63b;
-            box-shadow: 0 0 0 3px #050608, 0 0 14px #3bf63b;
-            position: relative; z-index: 1;
-        "></div>
+        <div style="position: relative; width: 22px; height: 22px; z-index: 1; transform: rotate(${rotation}deg);">
+            <div style="
+                position: absolute; left: 50%; top: -2px; transform: translateX(-50%);
+                width: 0; height: 0;
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-bottom: 11px solid #3bf63b;
+                filter: drop-shadow(0 0 6px rgba(59,246,59,0.8));
+            "></div>
+            <div style="
+                position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+                width: 16px; height: 16px; border-radius: 50%;
+                background: #3bf63b;
+                box-shadow: 0 0 0 3px #050608, 0 0 14px #3bf63b;
+            "></div>
+        </div>
         <style>@keyframes nav-pulse {
             0% { transform: scale(0.5); opacity: 0.9; }
             100% { transform: scale(1.4); opacity: 0; }
         }</style>
     </div>`,
     className: "",
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-});
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    });
+}
 
 // ─── Auto-fit cuando cambia origen/destino o llega la primera ruta ───────────
 
 function AutoFit({
     points,
     deps,
+    enabled,
 }: {
     points: [number, number][];
-    deps: any[];
+    deps: unknown[];
+    enabled: boolean;
 }) {
     const map = useMap();
     useEffect(() => {
+        if (!enabled) return;
         if (points.length === 0) return;
         if (points.length === 1) {
             map.setView(points[0], 15, { animate: true });
@@ -100,19 +131,38 @@ function AutoFit({
     return null;
 }
 
+function FollowDriverCamera({
+    enabled,
+    driverPos,
+}: {
+    enabled: boolean;
+    driverPos: [number, number] | null;
+}) {
+    const map = useMap();
+    const driverLat = driverPos?.[0];
+    const driverLng = driverPos?.[1];
+    useEffect(() => {
+        if (!enabled || !driverPos) return;
+        map.setView(driverPos, Math.max(map.getZoom(), 17), { animate: true });
+    }, [enabled, driverLat, driverLng, driverPos, map]);
+    return null;
+}
+
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function NavegacionMapa({
     origen,
     destino,
-    livePos,
+    currentPos,
     routes,
     activeIdx,
     onSelectRoute,
+    followMode,
+    liveHeading,
 }: Props) {
 
     // Punto de partida visible: GPS si lo hay, sino origen de la ruta
-    const startPos = livePos ?? origen;
+    const startPos = currentPos ?? origen;
 
     // Center inicial fallback (Madrid). El AutoFit corrige al toque.
     const initialCenter: [number, number] = startPos ?? destino ?? [40.4168, -3.7035];
@@ -125,7 +175,7 @@ export default function NavegacionMapa({
     return (
         <MapContainer
             center={initialCenter}
-            zoom={13}
+            zoom={followMode && startPos ? 17 : 13}
             zoomControl={false}
             style={{ width: '100%', height: '100%', background: '#050608' }}
         >
@@ -138,6 +188,7 @@ export default function NavegacionMapa({
 
             <AutoFit
                 points={fitPoints}
+                enabled={!followMode || !startPos}
                 deps={[
                     routes.length,
                     activeIdx,
@@ -146,6 +197,8 @@ export default function NavegacionMapa({
                     // siga viendo la ruta sin que el mapa salte cada GPS update.
                 ]}
             />
+
+            <FollowDriverCamera enabled={followMode} driverPos={startPos} />
 
             {/* Rutas alternativas (apagadas) primero, para que la activa quede arriba */}
             {routes.map((r, i) => i !== activeIdx && (
@@ -202,13 +255,13 @@ export default function NavegacionMapa({
             )}
 
             {/* Marker origen — solo si NO tenemos GPS live (sino el truck va arriba) */}
-            {origen && !livePos && <Marker position={origen} icon={iconOrigen} />}
+            {origen && !currentPos && <Marker position={origen} icon={iconOrigen} />}
 
             {/* Marker destino */}
             {destino && <Marker position={destino} icon={iconDestino} />}
 
             {/* Marker conductor live */}
-            {livePos && <Marker position={livePos} icon={iconConductor} />}
+            {currentPos && <Marker position={currentPos} icon={createConductorIcon(liveHeading)} />}
         </MapContainer>
     );
 }
