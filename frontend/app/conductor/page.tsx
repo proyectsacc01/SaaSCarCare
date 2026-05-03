@@ -316,7 +316,7 @@ export default function ConductorDashboard() {
             body: JSON.stringify({ activo: next }),
         }).catch(() => { /* silencioso */ });
 
-        const tracker = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
+        const tracker = getAndroidTracker();
         const rutaEnCurso = rutas.find(r => isInProgressRoute(r.estado));
         if (!next) {
             // INACTIVO: paramos GPS del navegador y servicio nativo
@@ -608,10 +608,10 @@ export default function ConductorDashboard() {
             return;
         }
 
-        const rutaContexto = rutaEnProgreso || rutasPendientes[0];
+            const rutaContexto = rutaEnProgreso || rutasPendientes[0];
         setSupportLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/conductores/me/support`, {
+            const res = await fetch(`/api/conductores/me/support`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
@@ -627,7 +627,14 @@ export default function ConductorDashboard() {
             setSupportSubject('');
             setSupportMessage('');
             setShowSupportForm(false);
-            toast.success(data.emailEnviado ? 'Soporte enviado al panel y por email' : 'Soporte enviado al panel de la central');
+            if (data.emailEnviado) {
+                toast.success('Soporte enviado al panel y por correo');
+            } else if (data.emailError) {
+                toast.success('Soporte enviado al panel de la central');
+                toast.warning(`Correo pendiente: ${data.emailError}`);
+            } else {
+                toast.success('Soporte enviado al panel de la central');
+            }
         } catch (err: unknown) {
             toast.error(getErrorMessage(err, 'Error enviando soporte'));
         } finally {
@@ -1194,23 +1201,29 @@ export default function ConductorDashboard() {
                                     // vea EXACTAMENTE dónde estás cuando activaste el SOS.
                                     const sendSos = async (lat?: number, lng?: number) => {
                                         try {
-                                            const body: any = {};
+                                            const body: { latitud?: number; longitud?: number } = {};
                                             if (lat != null && lng != null) {
                                                 body.latitud = lat;
                                                 body.longitud = lng;
                                             }
-                                            const res = await fetch(`${API_URL}/api/conductores/me/sos`, {
+                                            const res = await fetch(`/api/conductores/me/sos`, {
                                                 method: 'POST',
                                                 headers: getAuthHeaders(),
                                                 body: JSON.stringify(body),
                                             });
+                                            const data = await res.json().catch(() => ({}));
                                             if (res.ok) {
-                                                toast.error("🆘 SOS enviado a la central — te contactarán de inmediato", { duration: 8000 });
+                                                toast.error(data.emailEnviado
+                                                    ? "🆘 SOS enviado a la central y por correo"
+                                                    : "🆘 SOS enviado a la central — te contactarán de inmediato", { duration: 8000 });
+                                                if (!data.emailEnviado && data.emailError) {
+                                                    toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
+                                                }
                                             } else {
-                                                toast.error("No se pudo notificar el SOS. Probá llamar directo.");
+                                                toast.error(data.error || "No se pudo notificar el SOS. Llama directamente a la central.");
                                             }
                                         } catch {
-                                            toast.error("Sin conexión. Llamá al teléfono de la central.");
+                                            toast.error("Sin conexión. Llama al teléfono de la central.");
                                         }
                                     };
                                     if (typeof navigator !== 'undefined' && navigator.geolocation) {

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "@/lib/i18n";
+import { toast } from "sonner";
 import styles from "./AlertasPanel.module.css";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -117,6 +118,23 @@ function deduplicarAlertas(alertas: Alerta[]): Alerta[] {
   return resultado;
 }
 
+function prioridadSeveridad(severidad: Alerta["severidad"]) {
+  if (severidad === "CRITICAL") return 0;
+  if (severidad === "WARNING") return 1;
+  return 2;
+}
+
+function ordenarAlertas(alertas: Alerta[]) {
+  return [...alertas].sort((a, b) => {
+    if (a.leida !== b.leida) {
+      return a.leida ? 1 : -1;
+    }
+    const sev = prioridadSeveridad(a.severidad) - prioridadSeveridad(b.severidad);
+    if (sev !== 0) return sev;
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+}
+
 // ─── Iconos SVG ──────────────────────────────────────────────────────────────
 
 const IconMantenimiento = () => (
@@ -223,8 +241,27 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
 
   const [open, setOpen] = useState(false);
   const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const knownAlertKeysRef = useRef<Set<string>>(new Set());
+  const initializedRef = useRef(false);
 
   const noLeidas = alertas.filter(a => !a.leida && !a.resuelta).length;
+
+  const mostrarToastAlerta = useCallback((alerta: Alerta) => {
+    const { titulo, descripcion } = traducirAlerta(alerta, t);
+    const mensaje = descripcion ? `${titulo} · ${descripcion}` : titulo;
+
+    if (alerta.tipo === "EMERGENCIA_SOS" || alerta.severidad === "CRITICAL") {
+      toast.error(mensaje, { duration: 10000 });
+      return;
+    }
+
+    if (alerta.tipo === "SOPORTE_CONDUCTOR") {
+      toast.warning(mensaje, { duration: 7000 });
+      return;
+    }
+
+    toast.info(mensaje, { duration: 5000 });
+  }, [t]);
 
   // Cargar alertas
   const cargar = useCallback(async () => {
@@ -232,19 +269,40 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
       const res = await fetch(`${apiUrl}/api/alertas`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data: Alerta[] = await res.json();
-        setAlertas(deduplicarAlertas(data));
+        const deduplicadas = ordenarAlertas(deduplicarAlertas(data));
+
+        const clavesActuales = new Set<string>();
+        for (const alerta of deduplicadas) {
+          const clave = alerta.grupoKey?.trim() || alerta.id;
+          clavesActuales.add(clave);
+        }
+
+        if (!initializedRef.current) {
+          knownAlertKeysRef.current = clavesActuales;
+          initializedRef.current = true;
+        } else {
+          for (const alerta of deduplicadas) {
+            const clave = alerta.grupoKey?.trim() || alerta.id;
+            if (!knownAlertKeysRef.current.has(clave) && !alerta.leida && !alerta.resuelta) {
+              mostrarToastAlerta(alerta);
+            }
+          }
+          knownAlertKeysRef.current = clavesActuales;
+        }
+
+        setAlertas(deduplicadas);
       }
     } catch { /* silent */ }
-  }, [apiUrl, getAuthHeaders]);
+  }, [apiUrl, getAuthHeaders, mostrarToastAlerta]);
 
-  // Poll cada 30s
+  // Poll más frecuente para que SOS y soporte aparezcan casi en tiempo real.
   useEffect(() => {
     const primerCargaId = window.setTimeout(() => {
       void cargar();
     }, 0);
     const id = window.setInterval(() => {
       void cargar();
-    }, 30000);
+    }, 10000);
     return () => {
       window.clearTimeout(primerCargaId);
       window.clearInterval(id);
@@ -282,7 +340,7 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
     setOpen(false);
   };
 
-  const activas = alertas.filter(a => !a.resuelta);
+  const activas = ordenarAlertas(alertas.filter(a => !a.resuelta));
 
   return (
     <div className={styles.bellWrapper}>

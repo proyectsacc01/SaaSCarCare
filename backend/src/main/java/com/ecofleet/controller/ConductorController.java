@@ -180,16 +180,19 @@ public class ConductorController {
 
         String rutaId = trimToNull(payload.get("rutaId"));
         Ruta ruta = null;
+        boolean rutaIgnorada = false;
         if (rutaId != null) {
             Optional<Ruta> rutaOpt = rutaRepository.findById(rutaId);
-            if (rutaOpt.isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "La ruta indicada no existe"));
+            if (rutaOpt.isPresent()) {
+                Ruta rutaEncontrada = rutaOpt.get();
+                if (empresaId.equals(rutaEncontrada.getUsuarioId()) && conductorId.equals(rutaEncontrada.getConductorId())) {
+                    ruta = rutaEncontrada;
+                } else {
+                    rutaIgnorada = true;
+                }
+            } else {
+                rutaIgnorada = true;
             }
-            Ruta rutaEncontrada = rutaOpt.get();
-            if (!empresaId.equals(rutaEncontrada.getUsuarioId()) || !conductorId.equals(rutaEncontrada.getConductorId())) {
-                return ResponseEntity.badRequest().body(Map.of("error", "La ruta indicada no pertenece a este conductor"));
-            }
-            ruta = rutaEncontrada;
         }
 
         String nombreConductor = conductor.getNombre() != null && !conductor.getNombre().isBlank()
@@ -209,6 +212,7 @@ public class ConductorController {
         alerta.setTitulo("Soporte solicitado por " + nombreConductor);
         alerta.setDescripcion(contextoRuta + " - " + resumir(mensaje, 220));
         alerta.setRutaId(ruta != null ? ruta.getId() : null);
+        alerta.setVehiculoId(ruta != null ? ruta.getVehiculoId() : null);
         alerta.setGrupoKey("SOPORTE_CONDUCTOR|" + conductorId + "|" + System.currentTimeMillis());
         alerta.setTimestamp(LocalDateTime.now());
         alerta.setLeida(false);
@@ -216,19 +220,29 @@ public class ConductorController {
         alertaRepository.save(alerta);
 
         boolean emailEnviado = false;
+        String emailError = "";
         String destinoEmail = resolverDestinoSoporte(empresaId);
-        if (!destinoEmail.isBlank() && emailService.isConfigured()) {
+        if (destinoEmail.isBlank()) {
+            emailError = "No hay un correo de destino configurado para notificaciones";
+        } else if (!emailService.isConfigured()) {
+            emailError = "El servicio de correo no está configurado en el servidor";
+        } else {
             try {
                 emailService.enviar(destinoEmail, asunto, buildSupportEmailHtml(conductor, ruta, mensaje));
                 emailEnviado = true;
             } catch (Exception e) {
+                emailError = e.getMessage() != null ? e.getMessage() : "No se pudo enviar el correo";
                 System.err.println("[ConductorController] Error enviando soporte por email: " + e.getMessage());
             }
         }
 
         return ResponseEntity.ok(Map.of(
                 "ok", true,
+                "alertaId", alerta.getId(),
                 "emailEnviado", emailEnviado,
+                "emailDestino", destinoEmail,
+                "emailError", emailError,
+                "rutaIgnorada", rutaIgnorada,
                 "canal", emailEnviado ? "panel_y_email" : "panel"
         ));
     }
@@ -271,11 +285,13 @@ public class ConductorController {
 
         // Buscar la ruta activa del conductor (si tiene una en curso, la asociamos)
         String rutaId = null;
+        Ruta rutaActiva = null;
         try {
             List<Ruta> rutas = rutaRepository.findByUsuarioIdAndConductorId(empresaId, conductorId);
             for (Ruta r : rutas) {
                 if ("EN_CURSO".equalsIgnoreCase(r.getEstado()) || "DETENIDO".equalsIgnoreCase(r.getEstado())) {
                     rutaId = r.getId();
+                    rutaActiva = r;
                     break;
                 }
             }
@@ -296,8 +312,13 @@ public class ConductorController {
         alerta.setTipo("EMERGENCIA_SOS");
         alerta.setSeveridad("CRITICAL");
         alerta.setTitulo("🆘 Emergencia SOS — " + nombre);
-        alerta.setDescripcion("El conductor activó la emergencia. " + ubicacionTxt);
+        alerta.setDescripcion("El conductor activó la emergencia. "
+                + (rutaActiva != null ? String.format("Ruta: %s -> %s. ",
+                    rutaActiva.getOrigen() != null ? rutaActiva.getOrigen() : "Origen no disponible",
+                    rutaActiva.getDestino() != null ? rutaActiva.getDestino() : "Destino no disponible") : "")
+                + ubicacionTxt);
         alerta.setRutaId(rutaId);
+        alerta.setVehiculoId(rutaActiva != null ? rutaActiva.getVehiculoId() : null);
         // Cada SOS es un evento ÚNICO — usamos timestamp en el grupoKey para no
         // deduplicarlo nunca. El admin tiene que ver cada SOS individual.
         alerta.setGrupoKey("EMERGENCIA_SOS|" + conductorId + "|" + System.currentTimeMillis());
@@ -308,17 +329,32 @@ public class ConductorController {
 
         // Email también si está configurado — el SOS es crítico
         String destinoEmail = resolverDestinoSoporte(empresaId);
-        if (!destinoEmail.isBlank() && emailService.isConfigured()) {
+        boolean emailEnviado = false;
+        String emailError = "";
+        if (destinoEmail.isBlank()) {
+            emailError = "No hay un correo de destino configurado para notificaciones";
+        } else if (!emailService.isConfigured()) {
+            emailError = "El servicio de correo no está configurado en el servidor";
+        } else {
             try {
                 emailService.enviar(destinoEmail,
                         "🆘 EMERGENCIA SOS — " + nombre,
                         buildSosEmailHtml(conductor, ubicacionTxt));
+                emailEnviado = true;
             } catch (Exception e) {
+                emailError = e.getMessage() != null ? e.getMessage() : "No se pudo enviar el correo";
                 System.err.println("[ConductorController] Error enviando SOS por email: " + e.getMessage());
             }
         }
 
-        return ResponseEntity.ok(Map.of("ok", true));
+        return ResponseEntity.ok(Map.of(
+                "ok", true,
+                "alertaId", alerta.getId(),
+                "rutaId", rutaId != null ? rutaId : "",
+                "emailEnviado", emailEnviado,
+                "emailDestino", destinoEmail,
+                "emailError", emailError
+        ));
     }
 
     /**
