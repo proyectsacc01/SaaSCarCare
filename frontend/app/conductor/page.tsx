@@ -57,6 +57,42 @@ function getErrorMessage(error: unknown, fallback: string) {
     return error instanceof Error ? error.message : fallback;
 }
 
+function normalizeRouteState(estado?: string) {
+    const limpio = (estado ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+    switch (limpio) {
+        case 'ENCURSO':
+        case 'EN_CURSO':
+            return 'EN_CURSO';
+        case 'DETENIDA':
+        case 'DETENIDO':
+        case 'PAUSADA':
+        case 'PAUSADO':
+        case 'STOPPED':
+            return 'DETENIDO';
+        case 'COMPLETADO':
+        case 'COMPLETADA':
+            return 'COMPLETADA';
+        case 'PLANEADA':
+        case 'PLANIFICADA':
+            return 'PLANIFICADA';
+        default:
+            return limpio || 'PLANIFICADA';
+    }
+}
+
+function isInProgressRoute(estado?: string) {
+    const normalizado = normalizeRouteState(estado);
+    return normalizado === 'EN_CURSO' || normalizado === 'DETENIDO';
+}
+
+function isCompletedRoute(estado?: string) {
+    return normalizeRouteState(estado) === 'COMPLETADA';
+}
+
+function isPlannedRoute(estado?: string) {
+    return normalizeRouteState(estado) === 'PLANIFICADA';
+}
+
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
     : (process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app");
@@ -146,13 +182,14 @@ export default function ConductorDashboard() {
             clearTimeout(timeoutId);
             if (res.ok) {
                 const data: Ruta[] = await res.json();
-                const activas = data.filter(r => r.estado !== 'COMPLETADA');
-                const completadas = data.filter(r => r.estado === 'COMPLETADA');
+                const normalizadas = data.map(r => ({ ...r, estado: normalizeRouteState(r.estado) }));
+                const activas = normalizadas.filter(r => !isCompletedRoute(r.estado));
+                const completadas = normalizadas.filter(r => isCompletedRoute(r.estado));
 
                 // Detectar nuevas rutas planificadas para notificar al conductor
                 const seen = seenRouteIdsRef.current;
                 if (seen.size > 0) {
-                    const nuevas = activas.filter(r => r.estado === 'PLANIFICADA' && !seen.has(r.id));
+                    const nuevas = activas.filter(r => isPlannedRoute(r.estado) && !seen.has(r.id));
                     if (nuevas.length > 0) {
                         const ultima = nuevas[nuevas.length - 1];
                         setNewRouteToast(ultima);
@@ -271,9 +308,9 @@ export default function ConductorDashboard() {
         }
     };
 
-    const rutaEnProgreso = rutas.find(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO');
-    const rutasPendientes = rutas.filter(r => r.estado === 'PLANIFICADA');
-    const rutasEnProgresoCount = rutas.filter(r => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO').length;
+    const rutaEnProgreso = rutas.find(r => isInProgressRoute(r.estado));
+    const rutasPendientes = rutas.filter(r => isPlannedRoute(r.estado));
+    const rutasEnProgresoCount = rutas.filter(r => isInProgressRoute(r.estado)).length;
 
     const handleProfilePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -316,7 +353,7 @@ export default function ConductorDashboard() {
 
     // Polling de mensajes ADMIN no leídos para badge en bottom nav
     useEffect(() => {
-        const rutaParaChat = rutaEnProgreso || rutas.find(r => r.estado === 'PLANIFICADA');
+        const rutaParaChat = rutaEnProgreso || rutas.find(r => isPlannedRoute(r.estado));
         if (!rutaParaChat) {
             setUnreadMessages(0);
             return;
@@ -449,7 +486,8 @@ export default function ConductorDashboard() {
     };
 
     const toggleRuta = async (ruta: Ruta) => {
-        const nuevoEstado = ruta.estado === 'EN_CURSO' ? 'PLANIFICADA' : 'EN_CURSO';
+        const estadoActual = normalizeRouteState(ruta.estado);
+        const nuevoEstado = estadoActual === 'EN_CURSO' ? 'PLANIFICADA' : 'EN_CURSO';
         // No se puede iniciar una ruta si el conductor está INACTIVO —
         // sino el admin no recibiría telemetría y la ruta no tendría sentido.
         if (nuevoEstado === 'EN_CURSO' && !isOnline) {

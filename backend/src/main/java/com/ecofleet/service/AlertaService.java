@@ -124,9 +124,10 @@ public class AlertaService {
 
         for (Ruta r : rutas) {
             if (r.getEstado() == null) continue;
+            String estadoRuta = normalizarEstado(r.getEstado());
             String label = r.getOrigen() + " → " + r.getDestino();
 
-            if ("DETENIDO".equals(r.getEstado())) {
+            if ("DETENIDO".equals(estadoRuta)) {
                 String key = "detenida_" + r.getId();
                 grupoKeysActivos.add(key);
                 String duracion = "";
@@ -144,7 +145,7 @@ public class AlertaService {
                 resolverSiExiste("detenida_" + r.getId());
             }
 
-            if (Boolean.TRUE.equals(r.getDesviado()) && "EN_CURSO".equals(r.getEstado())) {
+            if (Boolean.TRUE.equals(r.getDesviado()) && "EN_CURSO".equals(estadoRuta)) {
                 String key = "desviada_" + r.getId();
                 grupoKeysActivos.add(key);
                 crearSiNoExiste(key, empresaId, "RUTA_DESVIADA", "WARNING",
@@ -155,7 +156,7 @@ public class AlertaService {
                 resolverSiExiste("desviada_" + r.getId());
             }
 
-            if ("EN_CURSO".equals(r.getEstado()) && r.getUltimaActualizacionGPS() != null) {
+            if ("EN_CURSO".equals(estadoRuta) && r.getUltimaActualizacionGPS() != null) {
                 try {
                     long secsDesdeGPS = (Instant.now().toEpochMilli() -
                             Instant.parse(r.getUltimaActualizacionGPS()).toEpochMilli()) / 1000;
@@ -170,7 +171,7 @@ public class AlertaService {
                         resolverSiExiste("gps_" + r.getId());
                     }
                 } catch (Exception ignored) {}
-            } else if ("COMPLETADA".equals(r.getEstado())) {
+            } else if ("COMPLETADA".equals(estadoRuta)) {
                 resolverSiExiste("gps_" + r.getId());
                 resolverSiExiste("detenida_" + r.getId());
                 resolverSiExiste("desviada_" + r.getId());
@@ -514,5 +515,19 @@ public class AlertaService {
         }
 
         return visibles;
+    }
+
+    private String normalizarEstado(String estado) {
+        if (estado == null || estado.isBlank()) {
+            return "PLANIFICADA";
+        }
+        String limpio = estado.trim().toUpperCase().replace(' ', '_');
+        return switch (limpio) {
+            case "ENCURSO" -> "EN_CURSO";
+            case "DETENIDA", "PAUSADA", "PAUSADO", "STOPPED" -> "DETENIDO";
+            case "COMPLETADO" -> "COMPLETADA";
+            case "PLANEADA" -> "PLANIFICADA";
+            default -> limpio;
+        };
     }
 }

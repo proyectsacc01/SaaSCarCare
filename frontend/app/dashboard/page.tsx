@@ -133,6 +133,34 @@ interface FlotaKpis {
   tendenciaMensual: TendenciaMes[];
 }
 
+function normalizeRouteState(estado?: string) {
+  const limpio = (estado ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+  switch (limpio) {
+    case 'ENCURSO':
+    case 'EN_CURSO':
+      return 'EN_CURSO';
+    case 'DETENIDA':
+    case 'DETENIDO':
+    case 'PAUSADA':
+    case 'PAUSADO':
+    case 'STOPPED':
+      return 'DETENIDO';
+    case 'COMPLETADO':
+    case 'COMPLETADA':
+      return 'COMPLETADA';
+    case 'PLANEADA':
+    case 'PLANIFICADA':
+      return 'PLANIFICADA';
+    default:
+      return limpio || 'PLANIFICADA';
+  }
+}
+
+function isInProgressRoute(estado?: string) {
+  const normalizado = normalizeRouteState(estado);
+  return normalizado === 'EN_CURSO' || normalizado === 'DETENIDO';
+}
+
 // Dynamic import para el mapa de tracking global (evitar SSR)
 const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"), {
   ssr: false,
@@ -251,7 +279,7 @@ export default function Dashboard() {
 
   const rutasTrackingActivas = useMemo(() => {
     return rutas
-      .filter((r) => r.estado === 'EN_CURSO' || r.estado === 'DETENIDO')
+      .filter((r) => isInProgressRoute(r.estado))
       .map((ruta) => {
         const presencia = ruta.conductorId ? conductoresUbicacionMap.get(ruta.conductorId) : undefined;
         const routeTs = ruta.ultimaActualizacionGPS ? new Date(ruta.ultimaActualizacionGPS).getTime() : 0;
@@ -313,7 +341,7 @@ export default function Dashboard() {
 
     // 2. Datos estimados desde rutas completadas (si no hay repostajes ese mes)
     rutas.forEach(r => {
-      if (!r.fecha || r.estado !== 'COMPLETADA') return;
+      if (!r.fecha || normalizeRouteState(r.estado) !== 'COMPLETADA') return;
       const d = new Date(r.fecha);
       if (d.getFullYear() === añoActual) {
         // Solo estimar si no hay repostajes reales ese mes
@@ -410,7 +438,7 @@ export default function Dashboard() {
 
       if (resRutas.ok) {
         const dataR = await resRutas.json();
-        setRutas(dataR);
+        setRutas(dataR.map((r: Ruta) => ({ ...r, estado: normalizeRouteState(r.estado) })));
       }
 
       if (resRepostajes.ok) {
@@ -487,7 +515,7 @@ export default function Dashboard() {
         // Km (rutas completadas)
         for (const ruta of rutas) {
           if (ruta.vehiculoId !== v.id) continue;
-          if (ruta.estado !== 'COMPLETADA') continue;
+          if (normalizeRouteState(ruta.estado) !== 'COMPLETADA') continue;
           if (!matchYM(getYM(ruta.fecha), mes)) continue;
           totalKm += ruta.distanciaEstimadaKm || 0;
         }
@@ -526,7 +554,7 @@ export default function Dashboard() {
         costeMant += m.costo || 0;
       }
       for (const ruta of rutas) {
-        if (ruta.estado !== 'COMPLETADA') continue;
+        if (normalizeRouteState(ruta.estado) !== 'COMPLETADA') continue;
         if (!matchYM(getYM(ruta.fecha), mes)) continue;
         km += ruta.distanciaEstimadaKm || 0;
       }
@@ -879,7 +907,7 @@ export default function Dashboard() {
                   </div>
                   <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {(() => {
-                      const estaOcupado = rutas.some(r => r.vehiculoId === v.id && (r.estado === 'EN_CURSO' || r.estado === 'DETENIDO'));
+                      const estaOcupado = rutas.some(r => r.vehiculoId === v.id && isInProgressRoute(r.estado));
                       return (
                         <span
                           className={styles.badge}
@@ -1103,9 +1131,10 @@ export default function Dashboard() {
                 </div>
                 <div className={styles.grid}>
                   {rutas.map(r => {
-                    const esEnCurso = r.estado === 'EN_CURSO';
-                    const esDetenido = r.estado === 'DETENIDO';
-                    const esCompletada = r.estado === 'COMPLETADA';
+                    const estadoRuta = normalizeRouteState(r.estado);
+                    const esEnCurso = estadoRuta === 'EN_CURSO';
+                    const esDetenido = estadoRuta === 'DETENIDO';
+                    const esCompletada = estadoRuta === 'COMPLETADA';
 
                     return (
                       <div
@@ -1150,7 +1179,7 @@ export default function Dashboard() {
 
                         <div className={styles.statRow}>
                           <span className={styles.statLabel}>{t.dashboard.stateLbl}</span>
-                          <span className={styles.statValue}>{r.estado}</span>
+                          <span className={styles.statValue}>{estadoRuta}</span>
                         </div>
 
                         <div className={styles.fuelBarBg}>
@@ -1776,7 +1805,7 @@ export default function Dashboard() {
 
                         <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
                           <span>
-                            {r.estado === 'DETENIDO'
+                            {normalizeRouteState(r.estado) === 'DETENIDO'
                               ? t.dashboard.vehStopped
                               : r.signalSource === 'presence'
                                 ? 'SEÑAL DE APP ACTIVA'

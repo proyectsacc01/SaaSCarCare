@@ -33,6 +33,29 @@ interface Ruta {
     longitudActual?: number;
 }
 
+function normalizeRouteState(estado?: string) {
+    const limpio = (estado ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+    switch (limpio) {
+        case 'ENCURSO':
+        case 'EN_CURSO':
+            return 'EN_CURSO';
+        case 'DETENIDA':
+        case 'DETENIDO':
+        case 'PAUSADA':
+        case 'PAUSADO':
+        case 'STOPPED':
+            return 'DETENIDO';
+        case 'COMPLETADO':
+        case 'COMPLETADA':
+            return 'COMPLETADA';
+        case 'PLANEADA':
+        case 'PLANIFICADA':
+            return 'PLANIFICADA';
+        default:
+            return limpio || 'PLANIFICADA';
+    }
+}
+
 interface OSRMManeuverResponse {
     type?: string;
     modifier?: string;
@@ -173,6 +196,7 @@ export default function NavegacionPage() {
                     return;
                 }
                 const data: Ruta = await res.json();
+                data.estado = normalizeRouteState(data.estado);
                 if (!cancelled) setRuta(data);
             } catch {
                 if (!silent) {

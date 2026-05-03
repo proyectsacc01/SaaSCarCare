@@ -37,6 +37,29 @@ interface Ruta {
     inicioDetencion?: string;
 }
 
+function normalizeRouteState(estado?: string) {
+    const limpio = (estado ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+    switch (limpio) {
+        case 'ENCURSO':
+        case 'EN_CURSO':
+            return 'EN_CURSO';
+        case 'DETENIDA':
+        case 'DETENIDO':
+        case 'PAUSADA':
+        case 'PAUSADO':
+        case 'STOPPED':
+            return 'DETENIDO';
+        case 'COMPLETADO':
+        case 'COMPLETADA':
+            return 'COMPLETADA';
+        case 'PLANEADA':
+        case 'PLANIFICADA':
+            return 'PLANIFICADA';
+        default:
+            return limpio || 'PLANIFICADA';
+    }
+}
+
 // Helper: calcular tiempo desde última actualización GPS
 function getGPSConnectionStatus(timestamp?: string): { label: string; color: string; isConnected: boolean; secondsAgo: number } {
     if (!timestamp) return { label: 'Sin señal', color: '#6b7280', isConnected: false, secondsAgo: Infinity };
@@ -151,6 +174,7 @@ export default function RutaTracking() {
             }
 
             const data = await res.json();
+            data.estado = normalizeRouteState(data.estado);
 
             // Si no hay datos, no es una ruta válida
             if (!data || !data.id) {

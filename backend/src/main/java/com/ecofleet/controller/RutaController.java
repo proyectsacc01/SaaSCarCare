@@ -36,10 +36,14 @@ public class RutaController {
         String conductorId = (String) request.getAttribute("conductorId");
 
         if ("CONDUCTOR".equals(role) && conductorId != null && !conductorId.isBlank()) {
-            return rutaRepository.findByUsuarioIdAndConductorId(usuarioId, conductorId);
+            return rutaRepository.findByUsuarioIdAndConductorId(usuarioId, conductorId).stream()
+                    .map(this::normalizarEstadoRuta)
+                    .toList();
         }
 
-        return rutaRepository.findByUsuarioId(usuarioId);
+        return rutaRepository.findByUsuarioId(usuarioId).stream()
+                .map(this::normalizarEstadoRuta)
+                .toList();
     }
 
     @PostMapping
@@ -52,6 +56,8 @@ public class RutaController {
         ruta.setUsuarioId(usuarioId);
         if (ruta.getEstado() == null) {
             ruta.setEstado("PLANIFICADA");
+        } else {
+            ruta.setEstado(normalizarEstado(ruta.getEstado()));
         }
         // Defensa: latitudActual/longitudActual SOLO los puede setear el endpoint
         // /{id}/gps cuando el dispositivo emite GPS real. Ignoramos lo que venga
@@ -110,10 +116,10 @@ public class RutaController {
                     
                     if (rutaActualizada.getEstado() != null) {
                         String estadoAnterior = ruta.getEstado();
-                        ruta.setEstado(rutaActualizada.getEstado());
+                        ruta.setEstado(normalizarEstado(rutaActualizada.getEstado()));
 
                         // Resetear detención al reanudar manualmente
-                        if ("EN_CURSO".equals(rutaActualizada.getEstado())) {
+                        if ("EN_CURSO".equals(normalizarEstado(rutaActualizada.getEstado()))) {
                             ruta.setInicioDetencion(null);
                         }
 
@@ -175,7 +181,7 @@ public class RutaController {
                     // Esto evita que un PUT con `{...ruta}` desde el frontend
                     // re-ancle al origen accidentalmente.
                     
-                    return rutaRepository.save(ruta);
+                    return normalizarEstadoRuta(rutaRepository.save(ruta));
                 })
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ruta no encontrada"));
     }
@@ -189,7 +195,7 @@ public class RutaController {
         Ruta ruta = rutaRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ruta no encontrada"));
         validarAccesoRuta(ruta, usuarioId, role, conductorId);
-        return ruta;
+        return normalizarEstadoRuta(ruta);
     }
 
     // Endpoint específico para que Android envíe actualizaciones de GPS en tiempo real
@@ -249,7 +255,8 @@ public class RutaController {
 
                     // ═══ DETECCIÓN DE INACTIVIDAD (5 min sin moverse) ═══
                     // Si la ruta está EN_CURSO o DETENIDO, evaluar movimiento
-                    if ("EN_CURSO".equals(ruta.getEstado()) || "DETENIDO".equals(ruta.getEstado())) {
+                    String estadoActual = normalizarEstado(ruta.getEstado());
+                    if ("EN_CURSO".equals(estadoActual) || "DETENIDO".equals(estadoActual)) {
                         double precisionM = gps.getPrecision() != null && gps.getPrecision() > 0
                                 ? gps.getPrecision()
                                 : 15.0;
@@ -259,7 +266,7 @@ public class RutaController {
 
                         if (hayMovimientoReal) {
                             // Hay movimiento → si estaba DETENIDO, reactivar
-                            if ("DETENIDO".equals(ruta.getEstado())) {
+                            if ("DETENIDO".equals(estadoActual)) {
                                 ruta.setEstado("EN_CURSO");
                                 System.out.println("[RutaController] ▶ Ruta REACTIVADA - movimiento detectado");
                             }
@@ -277,7 +284,7 @@ public class RutaController {
                                     Instant ahora = Instant.parse(timestampActual);
                                     long segundosDetenido = (ahora.toEpochMilli() - inicioParada.toEpochMilli()) / 1000;
 
-                                    if (segundosDetenido >= 300 && "EN_CURSO".equals(ruta.getEstado())) {
+                                    if (segundosDetenido >= 300 && "EN_CURSO".equals(estadoActual)) {
                                         ruta.setEstado("DETENIDO");
                                         System.out.println("[RutaController] ⏸ Ruta DETENIDA - " + segundosDetenido + "s sin movimiento");
                                     }
@@ -320,7 +327,7 @@ public class RutaController {
                         });
                     }
 
-                    return rutaRepository.save(ruta);
+                    return normalizarEstadoRuta(rutaRepository.save(ruta));
                 })
                 .orElse(null);
     }
@@ -395,6 +402,30 @@ public class RutaController {
 
         ruta.setConductorId(conductor.getId());
         ruta.setConductorNombre(conductor.getNombre());
+    }
+
+    private Ruta normalizarEstadoRuta(Ruta ruta) {
+        if (ruta == null) {
+            return null;
+        }
+        ruta.setEstado(normalizarEstado(ruta.getEstado()));
+        return ruta;
+    }
+
+    private String normalizarEstado(String estado) {
+        if (estado == null || estado.isBlank()) {
+            return "PLANIFICADA";
+        }
+
+        String limpio = estado.trim().toUpperCase().replace(' ', '_');
+        return switch (limpio) {
+            case "ENCURSO" -> "EN_CURSO";
+            case "EN_CURSO" -> "EN_CURSO";
+            case "DETENIDA", "PAUSADA", "PAUSADO", "STOPPED" -> "DETENIDO";
+            case "COMPLETADO" -> "COMPLETADA";
+            case "PLANEADA" -> "PLANIFICADA";
+            default -> limpio;
+        };
     }
 
     // Clase interna para recibir coordenadas GPS

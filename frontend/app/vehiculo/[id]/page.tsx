@@ -95,6 +95,29 @@ interface ProgramacionMantenimiento {
   vehiculoInfo?: string;
 }
 
+function normalizeRouteState(estado?: string) {
+  const limpio = (estado ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+  switch (limpio) {
+    case 'ENCURSO':
+    case 'EN_CURSO':
+      return 'EN_CURSO';
+    case 'DETENIDA':
+    case 'DETENIDO':
+    case 'PAUSADA':
+    case 'PAUSADO':
+    case 'STOPPED':
+      return 'DETENIDO';
+    case 'COMPLETADO':
+    case 'COMPLETADA':
+      return 'COMPLETADA';
+    case 'PLANEADA':
+    case 'PLANIFICADA':
+      return 'PLANIFICADA';
+    default:
+      return limpio || 'PLANIFICADA';
+  }
+}
+
 const TIPOS_DOCUMENTO = (t: any) => [
   { value: "ITV", label: t.vehicle.itv },
   { value: "SEGURO", label: t.vehicle.insurance },
@@ -206,7 +229,10 @@ export default function VehiculoDetalle() {
       if (resVehiculo.ok) setVehiculo(await resVehiculo.json());
       if (resMantenimientos.ok) setMantenimientos(await resMantenimientos.json());
       if (resRepostajes.ok) setRepostajes(await resRepostajes.json());
-      if (resRutas.ok) setRutas(await resRutas.json());
+      if (resRutas.ok) {
+        const dataRutas = await resRutas.json();
+        setRutas(dataRutas.map((r: Ruta) => ({ ...r, estado: normalizeRouteState(r.estado) })));
+      }
       if (resDocumentos.ok) setDocumentos(await resDocumentos.json());
       if (resProgramaciones.ok) setProgramaciones(await resProgramaciones.json());
     } catch (err) {
@@ -538,8 +564,8 @@ export default function VehiculoDetalle() {
     : null;
 
   // Estado real del vehículo cruzando datos de rutas activas
-  const enCurso = rutas.some(r => r.estado === 'EN_CURSO');
-  const detenido = rutas.some(r => r.estado === 'DETENIDO');
+  const enCurso = rutas.some(r => normalizeRouteState(r.estado) === 'EN_CURSO');
+  const detenido = rutas.some(r => normalizeRouteState(r.estado) === 'DETENIDO');
   const estadoVehiculo = enCurso ? 'EN_RUTA' : detenido ? 'DETENIDO' : vehiculo?.activo ? 'ACTIVO' : 'EN_TALLER';
   const estadoColor = { EN_RUTA: '#3bf63b', DETENIDO: '#facc15', ACTIVO: '#3bf63b', EN_TALLER: '#f87171' }[estadoVehiculo];
   const estadoLabel = { 
