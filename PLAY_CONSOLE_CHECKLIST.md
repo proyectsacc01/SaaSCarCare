@@ -7,7 +7,7 @@ Documento de trabajo. Marcá `[x]` cuando completes cada paso.
 ## 1. Cosas que YA dejé arregladas en el código
 
 - [x] **SSL handler** → ya no acepta certificados inválidos (`MainActivity.java`).
-- [x] **Package unificado** a `com.carcare.app` en manifest, gradle y código.
+- [x] **Package unificado** a `com.ecofleet.app` en manifest, gradle y código.
 - [x] **`WEB_URL` y `API_URL` configurables** desde `build.gradle` (debug = `10.0.2.2`, release = Railway).
 - [x] **`usesCleartextTraffic="false"`** en producción + `network_security_config.xml`.
 - [x] **`minifyEnabled true` + ProGuard rules** que preservan el bridge `AndroidTracker`.

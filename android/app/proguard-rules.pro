@@ -2,7 +2,7 @@
 
 # Mantener la clase del bridge JS↔Java. Sin esto, R8 renombra los métodos
 # `startTracking` / `stopTracking` y el frontend (window.AndroidTracker) deja de funcionar.
--keepclassmembers class com.carcare.app.MainActivity$WebAppInterface {
+-keepclassmembers class com.ecofleet.app.MainActivity$WebAppInterface {
     @android.webkit.JavascriptInterface <methods>;
 }
 -keepclassmembers class * {
@@ -23,8 +23,8 @@
 }
 
 # Service y Activity
--keep class com.carcare.app.MainActivity { *; }
--keep class com.carcare.app.TrackingService { *; }
+-keep class com.ecofleet.app.MainActivity { *; }
+-keep class com.ecofleet.app.TrackingService { *; }
 
 # AndroidX y Material
 -keep class androidx.** { *; }
