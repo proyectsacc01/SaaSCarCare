@@ -1536,13 +1536,13 @@ export default function ConductorDashboard() {
                                     <textarea
                                         value={supportMessage}
                                         onChange={e => setSupportMessage(e.target.value)}
-                                        placeholder="Describ\u00ed el fallo, qu\u00e9 estabas haciendo y si ten\u00e9s una ruta activa."
+                                        placeholder="Describe el fallo, qué estabas haciendo y si tienes una ruta activa."
                                         disabled={supportLoading}
                                         rows={5}
                                         style={{ width: '100%', resize: 'vertical', minHeight: '120px', padding: '0.8rem', background: '#0d1117', border: '1px solid rgba(59,246,59,0.18)', borderRadius: '12px', color: '#e5e7eb', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5 }}
                                     />
                                     <div style={{ fontSize: '0.62rem', color: '#4b5563' }}>
-                                        {rutaActiva ? `Se adjunta el contexto de la ruta #${rutaActiva.id?.slice(-6).toUpperCase()}.` : 'Se env\u00eda como soporte general si no ten\u00e9s una ruta en progreso.'}
+                                        {rutaActiva ? `Se adjunta el contexto de la ruta #${rutaActiva.id?.slice(-6).toUpperCase()}.` : 'Se envía como soporte general si no tienes una ruta en progreso.'}
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                         <button
