@@ -94,35 +94,64 @@ public class MainActivity extends Activity {
             public boolean onShowFileChooser(WebView webView,
                                              ValueCallback<Uri[]> filePathCallback,
                                              FileChooserParams fileChooserParams) {
-                // Si había un callback pendiente (usuario abrió y cerró sin elegir),
-                // lo cancelamos para no bloquear futuros pickers.
+                // Si había un callback pendiente, lo cancelamos para no bloquear.
                 if (mFilePathCallback != null) {
                     mFilePathCallback.onReceiveValue(null);
                 }
                 mFilePathCallback = filePathCallback;
 
+                // Parsear el atributo accept="..." correctamente. Algunos WebViews
+                // devuelven ["image/*,video/*"] como un solo string con coma —
+                // lo expandimos a array de mimes individuales. setType no acepta
+                // strings con coma, así que en ese caso usamos */* + EXTRA_MIME_TYPES.
+                java.util.List<String> mimes = new java.util.ArrayList<>();
+                String[] raw = fileChooserParams.getAcceptTypes();
+                if (raw != null) {
+                    for (String r : raw) {
+                        if (r == null) continue;
+                        for (String part : r.split(",")) {
+                            String p = part.trim();
+                            if (!p.isEmpty()) mimes.add(p);
+                        }
+                    }
+                }
+                if (mimes.isEmpty()) {
+                    mimes.add("image/*");
+                }
+
+                // Intent principal: file picker estándar (Photos / Documents / Drive…).
                 Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
                 contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
-
-                // Respetar el atributo accept="..." del input. Si no, image/* por defecto.
-                String[] acceptTypes = fileChooserParams.getAcceptTypes();
-                String mime = "*/*";
-                if (acceptTypes != null && acceptTypes.length > 0 && acceptTypes[0] != null && !acceptTypes[0].isEmpty()) {
-                    if (acceptTypes.length == 1) {
-                        mime = acceptTypes[0];
-                    } else {
-                        contentIntent.putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes);
-                    }
+                if (mimes.size() == 1) {
+                    contentIntent.setType(mimes.get(0));
                 } else {
-                    mime = "image/*";
+                    contentIntent.setType("*/*");
+                    contentIntent.putExtra(Intent.EXTRA_MIME_TYPES, mimes.toArray(new String[0]));
                 }
-                contentIntent.setType(mime);
-
                 if (fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
                     contentIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
                 }
 
-                Intent chooser = Intent.createChooser(contentIntent, "Elegir archivo");
+                // Intent extra: galería directa (ACTION_PICK). Es el que la mayoría
+                // de los usuarios espera ver al tocar 📷. Lo agregamos como
+                // alternativa visible en el chooser cuando el accept incluye imágenes.
+                java.util.List<Intent> extras = new java.util.ArrayList<>();
+                boolean wantsImages = false;
+                for (String m : mimes) {
+                    if (m.startsWith("image/")) { wantsImages = true; break; }
+                }
+                if (wantsImages) {
+                    Intent gallery = new Intent(Intent.ACTION_PICK,
+                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                    gallery.setType("image/*");
+                    extras.add(gallery);
+                }
+
+                Intent chooser = Intent.createChooser(contentIntent, "Adjuntar archivo");
+                if (!extras.isEmpty()) {
+                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, extras.toArray(new Intent[0]));
+                }
+
                 try {
                     startActivityForResult(chooser, FILECHOOSER_REQUEST);
                     return true;

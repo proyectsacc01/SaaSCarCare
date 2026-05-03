@@ -757,16 +757,7 @@ export default function ConductorDashboard() {
                                         {/* Actions */}
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                                             <button
-                                                onClick={() => {
-                                                    // Si tenemos coords del destino, las usamos: más preciso y abre
-                                                    // Google Maps en modo navegación al toque. Si no, fallback a texto.
-                                                    const target =
-                                                        rutaActiva.latitudDestino && rutaActiva.longitudDestino
-                                                            ? `${rutaActiva.latitudDestino},${rutaActiva.longitudDestino}`
-                                                            : (rutaActiva.destino || '');
-                                                    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving`;
-                                                    openExternal(url);
-                                                }}
+                                                onClick={() => router.push(`/conductor/navegacion/${rutaActiva.id}`)}
                                                 style={{ padding: '0.8rem 0.4rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
                                             >
                                                 <span style={{ fontSize: '0.95rem' }}>🧭</span>

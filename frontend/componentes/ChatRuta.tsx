@@ -201,12 +201,12 @@ export default function ChatRuta({ rutaId, rol }: ChatProps) {
         <>
             <div style={{
                 display: 'flex', flexDirection: 'column',
-                // Altura responsive: nunca más alto que el 65% del viewport dinámico
-                // (que respeta el teclado en Android), con un tope razonable.
-                // Esto evita que el contenedor del chat empuje el input fuera de
-                // la pantalla cuando aparece el teclado.
-                height: 'min(420px, 65dvh)',
-                minHeight: '320px',
+                // Chat más alto y responsive: ocupa hasta el 78% del viewport
+                // dinámico para que el conductor tenga espacio cómodo de lectura.
+                // El cap absoluto en 640px evita que en pantallas grandes (tablets)
+                // se haga ridículamente largo.
+                height: 'min(640px, 78dvh)',
+                minHeight: '420px',
                 borderRadius: '20px', overflow: 'hidden',
                 background: 'linear-gradient(180deg, rgba(12,14,20,0.98) 0%, rgba(8,10,16,0.99) 100%)',
                 border: '1px solid rgba(255,255,255,0.06)',
