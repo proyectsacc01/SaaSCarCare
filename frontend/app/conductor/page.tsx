@@ -266,11 +266,16 @@ export default function ConductorDashboard() {
         if (!isOnline) return;
         if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
+        // Throttle 10s para presence: balance entre fluidez visual en el admin
+        // y no saturar backend cuando el conductor está parado. Si arranca una
+        // ruta, el TrackingService nativo / startBrowserGPS manda más rápido al
+        // endpoint /{id}/gps; este watcher solo cubre el caso "abre la app sin
+        // ruta" o "entre rutas".
         let lastSent = 0;
         const watchId = navigator.geolocation.watchPosition(
             (pos) => {
                 const now = Date.now();
-                if (now - lastSent < 30_000) return;
+                if (now - lastSent < 10_000) return;
                 lastSent = now;
                 fetch(`${API_URL}/api/conductores/me/gps`, {
                     method: 'POST',
@@ -284,7 +289,7 @@ export default function ConductorDashboard() {
                 }).catch(() => { /* silencioso */ });
             },
             () => { /* permiso denegado o error — silencioso */ },
-            { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
         );
 
         return () => {
@@ -293,18 +298,42 @@ export default function ConductorDashboard() {
     }, [isOnline]);
 
     // Toggle ACTIVO/INACTIVO:
-    //   - Persiste el estado en localStorage
+    //   - Persiste el estado en localStorage Y en el backend (compartiendoUbicacion)
     //   - El watcher de presencia se ata/desata vía el useEffect de arriba
     //   - El tracking de ruta se sincroniza aparte según el estado que llegue del servidor
+    //   - Si pasamos a INACTIVO con ruta en curso, paramos el TrackingService nativo
     const toggleOnline = () => {
         const next = !isOnline;
         setIsOnline(next);
         if (typeof window !== 'undefined') {
             localStorage.setItem('driverIsOnline', next ? '1' : '0');
         }
+        // Avisar al backend para que el admin vea correctamente el flag.
+        // Best-effort: si falla, el estado local sigue siendo correcto.
+        fetch(`${API_URL}/api/conductores/me/online`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ activo: next }),
+        }).catch(() => { /* silencioso */ });
+
+        const tracker = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
+        const rutaEnCurso = rutas.find(r => isInProgressRoute(r.estado));
         if (!next) {
+            // INACTIVO: paramos GPS del navegador y servicio nativo
+            stopBrowserGPS();
+            if (tracker?.stopTracking) {
+                try { tracker.stopTracking(); } catch { /* noop */ }
+            }
             toast.success("Tu estado es Desconectado — tu ubicación no se comparte");
         } else {
+            // ACTIVO: si tenés ruta en curso, re-arrancar tracking nativo o web
+            if (rutaEnCurso?.id) {
+                if (tracker?.startTracking) {
+                    try { tracker.startTracking(rutaEnCurso.id); } catch { /* noop */ }
+                } else {
+                    startBrowserGPS(rutaEnCurso.id);
+                }
+            }
             toast.success("Tu estado es En línea — tu ubicación se comparte con la central");
         }
     };
@@ -1160,7 +1189,40 @@ export default function ConductorDashboard() {
 
                             {/* SOS */}
                             <button
-                                onClick={() => toast.error("SOS enviado al administrador — te contactaremos en breve", { duration: 6000 })}
+                                onClick={async () => {
+                                    // Mandamos coordenadas si las tenemos para que el admin
+                                    // vea EXACTAMENTE dónde estás cuando activaste el SOS.
+                                    const sendSos = async (lat?: number, lng?: number) => {
+                                        try {
+                                            const body: any = {};
+                                            if (lat != null && lng != null) {
+                                                body.latitud = lat;
+                                                body.longitud = lng;
+                                            }
+                                            const res = await fetch(`${API_URL}/api/conductores/me/sos`, {
+                                                method: 'POST',
+                                                headers: getAuthHeaders(),
+                                                body: JSON.stringify(body),
+                                            });
+                                            if (res.ok) {
+                                                toast.error("🆘 SOS enviado a la central — te contactarán de inmediato", { duration: 8000 });
+                                            } else {
+                                                toast.error("No se pudo notificar el SOS. Probá llamar directo.");
+                                            }
+                                        } catch {
+                                            toast.error("Sin conexión. Llamá al teléfono de la central.");
+                                        }
+                                    };
+                                    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+                                        navigator.geolocation.getCurrentPosition(
+                                            (pos) => sendSos(pos.coords.latitude, pos.coords.longitude),
+                                            () => sendSos(),
+                                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                                        );
+                                    } else {
+                                        await sendSos();
+                                    }
+                                }}
                                 style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', letterSpacing: '0.8px', transition: 'all 0.2s' }}
                             >
                                 🆘 EMERGENCIA SOS

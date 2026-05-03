@@ -43,6 +43,13 @@ public class Ruta {
     private Double velocidadActualKmh; // Velocidad calculada en km/h
     private Double distanciaRestanteKm; // Distancia restante hasta el destino
 
+    // Distancia ACUMULADA realmente recorrida desde el inicio de la ruta,
+    // calculada sumando la distancia entre cada par de GPS recibidos.
+    // Esto es lo que se usa para sumar al kilometraje del vehículo cuando
+    // la ruta se completa, en vez de la distancia estimada que puede no
+    // reflejar el trayecto real (desvíos, origen distinto, etc).
+    private Double distanciaRecorridaKm;
+
     // Getters y Setters manuales para asegurar compatibilidad
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -100,6 +107,9 @@ public class Ruta {
     
     public Double getDistanciaRestanteKm() { return distanciaRestanteKm; }
     public void setDistanciaRestanteKm(Double distanciaRestanteKm) { this.distanciaRestanteKm = distanciaRestanteKm; }
+
+    public Double getDistanciaRecorridaKm() { return distanciaRecorridaKm; }
+    public void setDistanciaRecorridaKm(Double distanciaRecorridaKm) { this.distanciaRecorridaKm = distanciaRecorridaKm; }
 
     public String getInicioDetencion() { return inicioDetencion; }
     public void setInicioDetencion(String inicioDetencion) { this.inicioDetencion = inicioDetencion; }

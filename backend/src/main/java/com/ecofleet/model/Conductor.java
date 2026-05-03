@@ -49,4 +49,9 @@ public class Conductor {
     private Double latitudActual;
     private Double longitudActual;
     private String ultimaActualizacionGPS; // ISO-8601
+
+    // El conductor puede pausar el envío de GPS desde el toggle ACTIVO/INACTIVO.
+    // Cuando false → no aparece en el mapa del admin como "online".
+    // Default true por compatibilidad con conductores ya creados.
+    private Boolean compartiendoUbicacion = true;
 }

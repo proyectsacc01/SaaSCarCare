@@ -136,6 +136,13 @@ public class ConductorController {
                     m.put("latitudActual", c.getLatitudActual());
                     m.put("longitudActual", c.getLongitudActual());
                     m.put("ultimaActualizacionGPS", c.getUltimaActualizacionGPS());
+                    // Flag para que el frontend del admin diferencie conductores
+                    // que apagaron tracking conscientemente vs los que están
+                    // activos pero con GPS rancio.
+                    m.put("compartiendoUbicacion",
+                            c.getCompartiendoUbicacion() == null
+                                    ? Boolean.TRUE
+                                    : c.getCompartiendoUbicacion());
                     return m;
                 })
                 .collect(Collectors.toList());
@@ -224,6 +231,128 @@ public class ConductorController {
                 "emailEnviado", emailEnviado,
                 "canal", emailEnviado ? "panel_y_email" : "panel"
         ));
+    }
+
+    /**
+     * Emergencia SOS — el conductor pulsa el botón rojo y el admin recibe una
+     * alerta CRITICAL con su última ubicación conocida.
+     */
+    @PostMapping("/me/sos")
+    public ResponseEntity<?> activarSOS(
+            @RequestBody(required = false) Map<String, Object> payload,
+            HttpServletRequest request) {
+
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+        String empresaId = (String) request.getAttribute("userId");
+
+        if (!"CONDUCTOR".equals(role) || conductorId == null || conductorId.isBlank()) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        }
+
+        Optional<Conductor> conductorOpt = conductorRepository.findById(conductorId);
+        if (conductorOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
+        }
+        Conductor conductor = conductorOpt.get();
+
+        // Si llega lat/lng en el payload, los persistimos antes de crear la alerta
+        // — así el admin ve la ubicación EXACTA al momento del SOS.
+        if (payload != null) {
+            Object lat = payload.get("latitud");
+            Object lng = payload.get("longitud");
+            if (lat instanceof Number && lng instanceof Number) {
+                conductor.setLatitudActual(((Number) lat).doubleValue());
+                conductor.setLongitudActual(((Number) lng).doubleValue());
+                conductor.setUltimaActualizacionGPS(java.time.Instant.now().toString());
+                conductorRepository.save(conductor);
+            }
+        }
+
+        // Buscar la ruta activa del conductor (si tiene una en curso, la asociamos)
+        String rutaId = null;
+        try {
+            List<Ruta> rutas = rutaRepository.findByUsuarioIdAndConductorId(empresaId, conductorId);
+            for (Ruta r : rutas) {
+                if ("EN_CURSO".equalsIgnoreCase(r.getEstado()) || "DETENIDO".equalsIgnoreCase(r.getEstado())) {
+                    rutaId = r.getId();
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            // continúa sin rutaId
+        }
+
+        String nombre = conductor.getNombre() != null && !conductor.getNombre().isBlank()
+                ? conductor.getNombre()
+                : (conductor.getEmail() != null ? conductor.getEmail() : "Conductor");
+
+        String ubicacionTxt = (conductor.getLatitudActual() != null && conductor.getLongitudActual() != null)
+                ? String.format("Última posición: %.5f, %.5f", conductor.getLatitudActual(), conductor.getLongitudActual())
+                : "Posición desconocida";
+
+        Alerta alerta = new Alerta();
+        alerta.setEmpresaId(empresaId);
+        alerta.setTipo("EMERGENCIA_SOS");
+        alerta.setSeveridad("CRITICAL");
+        alerta.setTitulo("🆘 Emergencia SOS — " + nombre);
+        alerta.setDescripcion("El conductor activó la emergencia. " + ubicacionTxt);
+        alerta.setRutaId(rutaId);
+        // Cada SOS es un evento ÚNICO — usamos timestamp en el grupoKey para no
+        // deduplicarlo nunca. El admin tiene que ver cada SOS individual.
+        alerta.setGrupoKey("EMERGENCIA_SOS|" + conductorId + "|" + System.currentTimeMillis());
+        alerta.setTimestamp(LocalDateTime.now());
+        alerta.setLeida(false);
+        alerta.setResuelta(false);
+        alertaRepository.save(alerta);
+
+        // Email también si está configurado — el SOS es crítico
+        String destinoEmail = resolverDestinoSoporte(empresaId);
+        if (!destinoEmail.isBlank() && emailService.isConfigured()) {
+            try {
+                emailService.enviar(destinoEmail,
+                        "🆘 EMERGENCIA SOS — " + nombre,
+                        buildSosEmailHtml(conductor, ubicacionTxt));
+            } catch (Exception e) {
+                System.err.println("[ConductorController] Error enviando SOS por email: " + e.getMessage());
+            }
+        }
+
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    /**
+     * Marca al conductor como ACTIVO o INACTIVO en cuanto a compartir ubicación.
+     * Cuando se setea inactivo, el admin lo verá como "Sin compartir GPS" en el
+     * mapa aunque tenga última ubicación conocida.
+     */
+    @PostMapping("/me/online")
+    public ResponseEntity<?> setOnline(
+            @RequestBody Map<String, Object> payload,
+            HttpServletRequest request) {
+
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+
+        if (!"CONDUCTOR".equals(role) || conductorId == null || conductorId.isBlank()) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        }
+
+        Object activoObj = payload.get("activo");
+        boolean activo = activoObj instanceof Boolean ? (Boolean) activoObj : true;
+
+        Optional<Conductor> opt = conductorRepository.findById(conductorId);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
+        }
+        Conductor c = opt.get();
+        c.setCompartiendoUbicacion(activo);
+        if (!activo) {
+            // Limpiamos el timestamp para que el admin vea "GPS desconectado"
+            c.setUltimaActualizacionGPS(null);
+        }
+        conductorRepository.save(c);
+        return ResponseEntity.ok(Map.of("ok", true, "activo", activo));
     }
 
     /**
@@ -347,5 +476,38 @@ public class ConductorController {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
+    }
+
+    private String buildSosEmailHtml(Conductor conductor, String ubicacionTxt) {
+        String nombre = conductor.getNombre() != null && !conductor.getNombre().isBlank()
+                ? conductor.getNombre()
+                : (conductor.getEmail() != null ? conductor.getEmail() : "Conductor");
+        String empresa = conductor.getNombreEmpresa() != null && !conductor.getNombreEmpresa().isBlank()
+                ? conductor.getNombreEmpresa()
+                : "Sin empresa";
+        String mapsLink = (conductor.getLatitudActual() != null && conductor.getLongitudActual() != null)
+                ? String.format("https://www.google.com/maps?q=%s,%s",
+                        conductor.getLatitudActual(), conductor.getLongitudActual())
+                : null;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<body style='margin:0;padding:0;background:#080c14;font-family:Segoe UI,Roboto,Arial,sans-serif;'>");
+        sb.append("<table width='100%' cellpadding='0' cellspacing='0' style='background:#080c14;'><tr><td align='center'>");
+        sb.append("<table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%;'>");
+        sb.append("<tr><td style='background:linear-gradient(135deg,#7f1d1d,#450a0a);padding:32px;border-bottom:3px solid #ef4444;'>");
+        sb.append("<div style='color:#fca5a5;font-size:24px;font-weight:800;letter-spacing:2px;'>🆘 EMERGENCIA</div>");
+        sb.append("<div style='color:#ffffff;font-size:18px;font-weight:700;margin-top:10px;'>El conductor ").append(escapeHtml(nombre)).append(" activó SOS</div>");
+        sb.append("</td></tr>");
+        sb.append("<tr><td style='background:#0d1117;padding:28px;'>");
+        sb.append("<div style='background:#1f1115;border:1px solid rgba(239,68,68,0.3);border-radius:14px;padding:20px;color:#e5e7eb;'>");
+        sb.append("<p style='margin:0 0 12px;font-size:14px;'><strong>Conductor:</strong> ").append(escapeHtml(nombre)).append("</p>");
+        sb.append("<p style='margin:0 0 12px;font-size:14px;'><strong>Email:</strong> ").append(escapeHtml(conductor.getEmail())).append("</p>");
+        sb.append("<p style='margin:0 0 12px;font-size:14px;'><strong>Empresa:</strong> ").append(escapeHtml(empresa)).append("</p>");
+        sb.append("<p style='margin:0 0 18px;font-size:14px;'><strong>Ubicación:</strong> ").append(escapeHtml(ubicacionTxt)).append("</p>");
+        if (mapsLink != null) {
+            sb.append("<a href='").append(mapsLink).append("' style='display:inline-block;background:#ef4444;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px;'>Abrir en Google Maps</a>");
+        }
+        sb.append("</div></td></tr></table></td></tr></table></body>");
+        return sb.toString();
     }
 }

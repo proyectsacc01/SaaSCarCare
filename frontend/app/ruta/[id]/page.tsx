@@ -19,19 +19,20 @@ interface Ruta {
     id: string;
     origen: string;
     destino: string;
-    distanciaEstimadaKm: number;
+    distanciaEstimadaKm?: number;
+    distanciaRecorridaKm?: number;
     estado: string;
     vehiculoId: string;
     conductorId?: string;
     conductorNombre?: string;
-    fecha: string;
-    latitudOrigen: number;
-    longitudOrigen: number;
-    latitudDestino: number;
-    longitudDestino: number;
-    latitudActual: number;
-    longitudActual: number;
-    desviado: boolean;
+    fecha?: string;
+    latitudOrigen?: number;
+    longitudOrigen?: number;
+    latitudDestino?: number;
+    longitudDestino?: number;
+    latitudActual?: number;
+    longitudActual?: number;
+    desviado?: boolean;
     velocidadActualKmh?: number;
     distanciaRestanteKm?: number;
     ultimaActualizacionGPS?: string;
@@ -625,9 +626,15 @@ export default function RutaTracking() {
                                             <span>SALIDA: {ruta.origen}</span>
                                             <span>ETA: {eta}</span>
                                         </div>
-                                        {ruta.distanciaEstimadaKm > 0 && ruta.distanciaRestanteKm !== undefined && (
+                                        {ruta.distanciaEstimadaKm != null && ruta.distanciaEstimadaKm > 0 && (
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.7rem', color: '#374151' }}>
-                                                <span>{(ruta.distanciaEstimadaKm - (ruta.distanciaRestanteKm || 0)).toFixed(1)} km recorridos</span>
+                                                <span>
+                                                    {/* Preferimos los KM RECORRIDOS reales (acumulados desde GPS).
+                                                        Caemos al cálculo estimado-restante solo si todavía no llegó GPS. */}
+                                                    {ruta.distanciaRecorridaKm != null
+                                                        ? ruta.distanciaRecorridaKm.toFixed(1)
+                                                        : (ruta.distanciaEstimadaKm - (ruta.distanciaRestanteKm ?? 0)).toFixed(1)} km recorridos
+                                                </span>
                                                 <span>{ruta.distanciaEstimadaKm.toFixed(1)} km totales</span>
                                             </div>
                                         )}
@@ -735,7 +742,7 @@ export default function RutaTracking() {
                                                     <span style={{ fontSize: '2rem', fontWeight: '800', color: '#fff', transition: 'all 0.5s ease' }}>
                                                         {distRestante !== undefined && distRestante !== null
                                                             ? distRestante.toFixed(1)
-                                                            : (ruta.latitudActual && ruta.latitudDestino
+                                                            : (ruta.distanciaEstimadaKm != null
                                                                 ? ruta.distanciaEstimadaKm.toFixed(1)
                                                                 : '--')}
                                                     </span>

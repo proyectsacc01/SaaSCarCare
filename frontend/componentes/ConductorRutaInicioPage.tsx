@@ -260,24 +260,25 @@ export default function ConductorRutaInicioPage() {
     ? [ruta.latitudDestino, ruta.longitudDestino]
     : null;
 
-  const abrirNavegacionExterna = () => {
+  const [recenterTick, setRecenterTick] = useState(0);
+
+  const recentrarEnConductor = () => {
+    if (!currentPos) {
+      toast.error("Esperando GPS… activá la ubicación si está apagada");
+      return;
+    }
+    setRecenterTick(t => t + 1);
+  };
+
+  const recalcularRuta = () => {
     if (!ruta?.latitudDestino || !ruta?.longitudDestino) {
-      toast.error("El destino no tiene coordenadas disponibles");
+      toast.error("El destino no tiene coordenadas para calcular");
       return;
     }
-
-    const target = `${ruta.latitudDestino},${ruta.longitudDestino}`;
-    const bridge = getAndroidTracker();
-    if (bridge && typeof bridge.openExternalUrl === "function") {
-      bridge.openExternalUrl(`google.navigation:q=${encodeURIComponent(target)}&mode=d`);
-      return;
-    }
-
-    window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}&travelmode=driving&dir_action=navigate`,
-      "_blank",
-      "noopener,noreferrer"
-    );
+    // Forzar el siguiente useEffect a refetchear OSRM ignorando el throttle
+    lastFetchRef.current = null;
+    setRoutes([]);
+    toast.success("Recalculando la ruta…");
   };
 
   if (!ruta) {
@@ -330,6 +331,7 @@ export default function ConductorRutaInicioPage() {
           liveHeading={liveHeading}
           driverZoom={18}
           showAlternativeRoutes={false}
+          recenterTrigger={recenterTick}
         />
 
         {loadingRoutes && (
@@ -374,13 +376,44 @@ export default function ConductorRutaInicioPage() {
           </div>
         )}
 
-        <button
-          onClick={abrirNavegacionExterna}
-          style={{ width: "100%", padding: "0.95rem", background: "linear-gradient(135deg, #3bf63b, #22c55e)", border: "none", borderRadius: "14px", color: "#041107", fontWeight: 900, fontSize: "0.84rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 10px 25px -12px rgba(59,246,59,0.7)" }}
-        >
-          <span style={{ fontSize: "1rem" }}>🧭</span>
-          Abrir en Google Maps
-        </button>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.55rem" }}>
+          <button
+            onClick={recentrarEnConductor}
+            disabled={!currentPos}
+            style={{
+              padding: "0.85rem 0.6rem",
+              background: currentPos
+                ? "linear-gradient(135deg, #3bf63b, #22c55e)"
+                : "rgba(255,255,255,0.05)",
+              border: currentPos ? "none" : "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "14px",
+              color: currentPos ? "#041107" : "#6b7280",
+              fontWeight: 800, fontSize: "0.78rem",
+              cursor: currentPos ? "pointer" : "not-allowed",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+              boxShadow: currentPos ? "0 8px 22px -12px rgba(59,246,59,0.7)" : "none",
+            }}
+          >
+            <span style={{ fontSize: "1rem" }}>📍</span>
+            Centrar en mí
+          </button>
+          <button
+            onClick={recalcularRuta}
+            style={{
+              padding: "0.85rem 0.6rem",
+              background: "rgba(96,165,250,0.1)",
+              border: "1px solid rgba(96,165,250,0.3)",
+              borderRadius: "14px",
+              color: "#60a5fa",
+              fontWeight: 800, fontSize: "0.78rem",
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+            }}
+          >
+            <span style={{ fontSize: "1rem" }}>🔄</span>
+            Recalcular ruta
+          </button>
+        </div>
       </div>
     </main>
   );

@@ -129,24 +129,31 @@ public class RutaController {
                         // Solo si la transición ES a COMPLETADA (evitar doble conteo)
                         if ("COMPLETADA".equals(rutaActualizada.getEstado())
                                 && !"COMPLETADA".equals(estadoAnterior)
-                                && ruta.getVehiculoId() != null
-                                && ruta.getDistanciaEstimadaKm() != null) {
+                                && ruta.getVehiculoId() != null) {
 
-                            double kmAñadir = ruta.getDistanciaEstimadaKm();
-
-                            // Si el GPS estuvo activo, usar la distancia real recorrida
-                            // (estimada - restante). Si la restante es < 10% del total, asumir ruta completa.
-                            if (ruta.getDistanciaRestanteKm() != null
-                                    && ruta.getDistanciaRestanteKm() >= 0
-                                    && ruta.getDistanciaRestanteKm() < ruta.getDistanciaEstimadaKm()) {
-                                double restante = ruta.getDistanciaRestanteKm();
-                                if (restante <= ruta.getDistanciaEstimadaKm() * 0.10) {
-                                    // Llegó al destino (GPS) — sumar km totales estimados
-                                    kmAñadir = ruta.getDistanciaEstimadaKm();
-                                } else {
-                                    // Paró antes del destino — sumar solo lo recorrido según GPS
-                                    kmAñadir = ruta.getDistanciaEstimadaKm() - restante;
+                            // Política de conteo de km al completar:
+                            //  1. Si tenemos distanciaRecorridaKm (acumulada GPS real), USAR ESA.
+                            //     Es la verdad: refleja desvíos, origen distinto al planificado, etc.
+                            //  2. Si no, caer al cálculo viejo: estimada - restante.
+                            //  3. Si nada de eso, sumamos la estimada como último recurso.
+                            double kmAñadir = 0;
+                            if (ruta.getDistanciaRecorridaKm() != null && ruta.getDistanciaRecorridaKm() > 0) {
+                                kmAñadir = ruta.getDistanciaRecorridaKm();
+                            } else if (ruta.getDistanciaEstimadaKm() != null && ruta.getDistanciaEstimadaKm() > 0) {
+                                kmAñadir = ruta.getDistanciaEstimadaKm();
+                                if (ruta.getDistanciaRestanteKm() != null
+                                        && ruta.getDistanciaRestanteKm() >= 0
+                                        && ruta.getDistanciaRestanteKm() < ruta.getDistanciaEstimadaKm()) {
+                                    double restante = ruta.getDistanciaRestanteKm();
+                                    if (restante <= ruta.getDistanciaEstimadaKm() * 0.10) {
+                                        kmAñadir = ruta.getDistanciaEstimadaKm();
+                                    } else {
+                                        kmAñadir = ruta.getDistanciaEstimadaKm() - restante;
+                                    }
                                 }
+                            } else {
+                                // Sin datos de distancia, no sumamos nada — mejor cero que un valor falso
+                                kmAñadir = 0;
                             }
 
                             final double kmFinal = kmAñadir;
@@ -253,6 +260,23 @@ public class RutaController {
                     if (gps.getVelocidadKmh() != null && gps.getVelocidadKmh() >= 0) {
                         double velocidadReportada = Math.max(0, Math.min(200, gps.getVelocidadKmh()));
                         ruta.setVelocidadActualKmh(velocidadReportada);
+                    }
+
+                    // ═══ ACUMULAR DISTANCIA RECORRIDA REAL ═══
+                    // Sumamos la distancia entre cada par de GPS para tener el km
+                    // verdadero al completar. Filtramos jitter (saltos > 1km en
+                    // <30s = error GPS) y movimiento sub-precisión.
+                    if (distanciaRecorrida > 0) {
+                        double precisionM = gps.getPrecision() != null && gps.getPrecision() > 0
+                                ? gps.getPrecision()
+                                : 15.0;
+                        double umbralKm = Math.max(0.005, (precisionM * 1.5) / 1000.0);
+                        if (distanciaRecorrida >= umbralKm && distanciaRecorrida < 1.0) {
+                            double acumulada = ruta.getDistanciaRecorridaKm() != null
+                                    ? ruta.getDistanciaRecorridaKm()
+                                    : 0.0;
+                            ruta.setDistanciaRecorridaKm(acumulada + distanciaRecorrida);
+                        }
                     }
 
                     // ═══ DETECCIÓN DE INACTIVIDAD (5 min sin moverse) ═══

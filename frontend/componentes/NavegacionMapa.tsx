@@ -37,6 +37,8 @@ interface Props {
     liveHeading?: number | null;
     driverZoom?: number;
     showAlternativeRoutes?: boolean;
+    /** Cuando cambia, el mapa vuelve a centrar/zoomear en el conductor. */
+    recenterTrigger?: number;
 }
 
 // ─── Iconos Leaflet ───────────────────────────────────────────────────────────
@@ -160,6 +162,26 @@ function RemoveLeafletPrefix() {
     return null;
 }
 
+// Cuando recenterTrigger cambia, el mapa vuela al conductor.
+// Útil para el botón "Centrar en mi posición" que rompe el follow estático.
+function RecenterOnTrigger({
+    trigger,
+    pos,
+    zoom,
+}: {
+    trigger?: number;
+    pos: [number, number] | null;
+    zoom: number;
+}) {
+    const map = useMap();
+    useEffect(() => {
+        if (trigger == null || !pos) return;
+        map.flyTo(pos, zoom, { animate: true, duration: 0.6 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [trigger]);
+    return null;
+}
+
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function NavegacionMapa({
@@ -173,6 +195,7 @@ export default function NavegacionMapa({
     liveHeading,
     driverZoom = 18,
     showAlternativeRoutes = true,
+    recenterTrigger,
 }: Props) {
 
     // Punto de partida visible: GPS si lo hay, sino origen de la ruta
@@ -215,6 +238,7 @@ export default function NavegacionMapa({
             />
 
             <FollowDriverCamera enabled={followMode} driverPos={startPos} driverZoom={driverZoom} />
+            <RecenterOnTrigger trigger={recenterTrigger} pos={startPos} zoom={driverZoom} />
 
             {/* Rutas alternativas (apagadas) primero, para que la activa quede arriba */}
             {showAlternativeRoutes && routes.map((r, i) => i !== activeIdx && (

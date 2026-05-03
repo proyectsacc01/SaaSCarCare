@@ -35,6 +35,12 @@ export interface ConductorUbicacion {
     latitudActual?: number;
     longitudActual?: number;
     ultimaActualizacionGPS?: string;
+    /**
+     * Flag del backend: el conductor toggleó ACTIVO/INACTIVO en su app.
+     * - true / undefined → comparte GPS (default)
+     * - false → apagó el tracking conscientemente; lo mostramos en gris
+     */
+    compartiendoUbicacion?: boolean;
 }
 
 export interface MapTrackingGlobalProps {
@@ -535,6 +541,19 @@ export default function MapTrackingGlobal({
 
     return (
         <div style={{ display: "flex", height: "100%", gap: 12 }}>
+            {/* Interpolación CSS: cuando el truck cambia de posición, el wrapper
+                de Leaflet anima la transición del transform — en vez de saltar.
+                Resultado: movimiento fluido aunque el GPS llegue cada N segundos. */}
+            <style>{`
+                .leaflet-marker-icon, .leaflet-marker-shadow {
+                    transition: transform 1.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+                    will-change: transform;
+                }
+                .leaflet-zoom-anim .leaflet-marker-icon,
+                .leaflet-zoom-anim .leaflet-marker-shadow {
+                    transition: none;
+                }
+            `}</style>
             {/* ── Sidebar ────────────────────────────────────── */}
             <div
                 style={{
@@ -850,7 +869,12 @@ export default function MapTrackingGlobal({
                         />
                     ))}
                     {idleDrivers.map((c) => {
-                        const gps = getGPSStatus(c.ultimaActualizacionGPS, true);
+                        // Si el conductor apagó el tracking en su app, lo mostramos
+                        // como "offline" aunque tenga última posición conocida.
+                        const sharing = c.compartiendoUbicacion !== false;
+                        const gps = sharing
+                            ? getGPSStatus(c.ultimaActualizacionGPS, true)
+                            : { text: "Sin compartir", status: "offline" as GPSStatus };
                         const label = c.nombre?.split(" ")[0] ?? "Driver";
                         return (
                             <Marker
@@ -861,7 +885,9 @@ export default function MapTrackingGlobal({
                                 <Popup>
                                     <div style={{ fontFamily: "system-ui, sans-serif", fontSize: "0.8rem", color: "#111" }}>
                                         <div style={{ fontWeight: 800, marginBottom: 4 }}>👤 {c.nombre}</div>
-                                        <div style={{ fontSize: "0.7rem", color: "#666" }}>Sin ruta activa</div>
+                                        <div style={{ fontSize: "0.7rem", color: "#666" }}>
+                                            {sharing ? "Sin ruta activa" : "GPS apagado por el conductor"}
+                                        </div>
                                         <div style={{ fontSize: "0.7rem", marginTop: 4 }}>🕐 GPS: {gps.text}</div>
                                         <div style={{ fontFamily: "monospace", fontSize: "0.62rem", color: "#888", marginTop: 2 }}>
                                             {c.latitudActual!.toFixed(5)}, {c.longitudActual!.toFixed(5)}
