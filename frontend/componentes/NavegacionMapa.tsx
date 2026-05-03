@@ -191,6 +191,7 @@ export default function NavegacionMapa({
             center={initialCenter}
             zoom={followMode && startPos ? driverZoom : 13}
             zoomControl={false}
+            attributionControl={false}
             style={{ width: '100%', height: '100%', background: '#050608' }}
         >
             <RemoveLeafletPrefix />

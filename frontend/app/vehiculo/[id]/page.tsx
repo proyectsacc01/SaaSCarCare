@@ -231,7 +231,7 @@ export default function VehiculoDetalle() {
       if (resRepostajes.ok) setRepostajes(await resRepostajes.json());
       if (resRutas.ok) {
         const dataRutas = await resRutas.json();
-        setRutas(dataRutas.map((r: Ruta) => ({ ...r, estado: normalizeRouteState(r.estado) })));
+        setRutas(dataRutas.map((r: RutaEstado) => ({ ...r, estado: normalizeRouteState(r.estado) })));
       }
       if (resDocumentos.ok) setDocumentos(await resDocumentos.json());
       if (resProgramaciones.ok) setProgramaciones(await resProgramaciones.json());

@@ -2,7 +2,7 @@
 
 import { useTranslation } from "@/lib/i18n";
 import { formatDriverAvailabilityLabel } from "@/lib/status-labels";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
@@ -1608,7 +1608,7 @@ export default function ConductorDashboard() {
                         { id: 'perfil', label: 'Perfil', icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         )},
-                    ] satisfies Array<{ id: DriverTab; label: string; icon: (active: boolean) => JSX.Element }>).map(tab => {
+                    ] satisfies Array<{ id: DriverTab; label: string; icon: (active: boolean) => ReactNode }>).map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
                             <button
