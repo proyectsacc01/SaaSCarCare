@@ -47,6 +47,8 @@ type AndroidTrackerBridge = {
     startTracking?: (rutaId: string) => void;
     stopTracking?: () => void;
     openExternalUrl?: (url: string) => void;
+    pickProfileImage?: () => void;
+    pickChatAudio?: () => void;
 };
 
 function getAndroidTracker(): AndroidTrackerBridge | null {
@@ -356,6 +358,46 @@ export default function ConductorDashboard() {
         reader.readAsDataURL(file);
         e.target.value = "";
     };
+
+    const openProfilePicker = () => {
+        const tracker = getAndroidTracker();
+        if (tracker?.pickProfileImage) {
+            tracker.pickProfileImage();
+            return;
+        }
+        profileFileRef.current?.click();
+    };
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const handleNativeProfileSelected = (event: Event) => {
+            const detail = (event as CustomEvent<{ dataUrl?: string }>).detail;
+            if (!detail?.dataUrl) {
+                toast.error('No se pudo recibir la imagen seleccionada');
+                return;
+            }
+            setProfilePhoto(detail.dataUrl);
+            localStorage.setItem('profilePhoto', detail.dataUrl);
+            toast.success('Foto de perfil actualizada');
+        };
+
+        const handleNativeProfileError = (event: Event) => {
+            const detail = (event as CustomEvent<{ message?: string }>).detail;
+            if (detail?.message === 'Selección cancelada') {
+                return;
+            }
+            toast.error(detail?.message || 'No se pudo seleccionar la foto de perfil');
+        };
+
+        window.addEventListener('native-profile-image-selected', handleNativeProfileSelected as EventListener);
+        window.addEventListener('native-profile-image-error', handleNativeProfileError as EventListener);
+
+        return () => {
+            window.removeEventListener('native-profile-image-selected', handleNativeProfileSelected as EventListener);
+            window.removeEventListener('native-profile-image-error', handleNativeProfileError as EventListener);
+        };
+    }, []);
 
     // Timer para ruta activa
     useEffect(() => {
@@ -1419,7 +1461,7 @@ export default function ConductorDashboard() {
                             {/* Avatar with camera overlay */}
                             <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
                                 <div
-                                    onClick={() => profileFileRef.current?.click()}
+                                    onClick={openProfilePicker}
                                     style={{
                                         width: '90px', height: '90px', borderRadius: '50%', margin: '0 auto 0.75rem',
                                         position: 'relative', cursor: 'pointer',
@@ -1488,7 +1530,7 @@ export default function ConductorDashboard() {
                             {/* Quick Actions */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                 <button
-                                    onClick={() => profileFileRef.current?.click()}
+                                    onClick={openProfilePicker}
                                     style={{ padding: '0.9rem', background: 'rgba(96,165,250,0.07)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: '14px', color: '#60a5fa', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                                 >📷 Cambiar Foto</button>
                                 <button

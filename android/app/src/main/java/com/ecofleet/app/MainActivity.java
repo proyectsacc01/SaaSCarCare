@@ -6,9 +6,12 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
@@ -24,6 +27,9 @@ import android.widget.Toast;
 import android.Manifest;
 import android.provider.MediaStore;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+
 public class MainActivity extends Activity {
 
     private WebView mWebView;
@@ -32,6 +38,13 @@ public class MainActivity extends Activity {
     // Lo guardamos para entregarle el resultado del picker en onActivityResult.
     private ValueCallback<Uri[]> mFilePathCallback;
     private static final int FILECHOOSER_REQUEST = 1100;
+    private static final int PROFILE_IMAGE_REQUEST = 1101;
+    private static final int CHAT_AUDIO_REQUEST = 1102;
+    private static final int NATIVE_PERMISSION_REQUEST = 1103;
+    private static final String ACTION_PROFILE_IMAGE = "profile_image";
+    private static final String ACTION_CHAT_AUDIO = "chat_audio";
+
+    private String pendingNativeAction = null;
 
     private static final String API_URL = BuildConfig.API_URL;
     private static final String WEB_URL = BuildConfig.WEB_URL;
@@ -345,6 +358,209 @@ public class MainActivity extends Activity {
                 android.util.Log.e("EcoFleet", "openExternalUrl falló: " + e.getMessage());
             }
         }
+
+        @JavascriptInterface
+        public void pickProfileImage() {
+            mContext.runOnUiThread(() -> {
+                if (!ensureNativePermissions(ACTION_PROFILE_IMAGE)) {
+                    return;
+                }
+                openNativeProfileImagePicker();
+            });
+        }
+
+        @JavascriptInterface
+        public void pickChatAudio() {
+            mContext.runOnUiThread(() -> {
+                if (!ensureNativePermissions(ACTION_CHAT_AUDIO)) {
+                    return;
+                }
+                openNativeChatAudioPicker();
+            });
+        }
+    }
+
+    private boolean ensureNativePermissions(String action) {
+        java.util.List<String> missing = new java.util.ArrayList<>();
+
+        if (ACTION_CHAT_AUDIO.equals(action)) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.RECORD_AUDIO);
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(Manifest.permission.READ_MEDIA_AUDIO);
+                }
+            } else if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
+        }
+
+        if (ACTION_PROFILE_IMAGE.equals(action)) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(Manifest.permission.READ_MEDIA_IMAGES);
+                }
+            } else if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
+        }
+
+        if (missing.isEmpty()) {
+            return true;
+        }
+
+        pendingNativeAction = action;
+        requestPermissions(missing.toArray(new String[0]), NATIVE_PERMISSION_REQUEST);
+        return false;
+    }
+
+    private void openNativeProfileImagePicker() {
+        Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
+        contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+        contentIntent.setType("image/*");
+
+        Intent galleryIntent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        galleryIntent.setType("image/*");
+
+        Intent chooser = Intent.createChooser(contentIntent, "Seleccionar foto de perfil");
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{galleryIntent});
+
+        try {
+            startActivityForResult(chooser, PROFILE_IMAGE_REQUEST);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No hay app para elegir imágenes", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-profile-image-error", "No hay app para elegir imágenes");
+        }
+    }
+
+    private void openNativeChatAudioPicker() {
+        Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
+        contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+        contentIntent.setType("audio/*");
+
+        java.util.List<Intent> extras = new java.util.ArrayList<>();
+        Intent audioRecorder = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
+        if (audioRecorder.resolveActivity(getPackageManager()) != null) {
+            extras.add(audioRecorder);
+        }
+
+        Intent chooser = Intent.createChooser(contentIntent, "Grabar o seleccionar audio");
+        if (!extras.isEmpty()) {
+            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, extras.toArray(new Intent[0]));
+        }
+
+        try {
+            startActivityForResult(chooser, CHAT_AUDIO_REQUEST);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No hay app para grabar o elegir audio", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-audio-error", "No hay app para grabar o elegir audio");
+        }
+    }
+
+    private void dispatchNativeEvent(String eventName, String detailJson) {
+        if (mWebView == null) return;
+        String js = "window.dispatchEvent(new CustomEvent(" + quoteJs(eventName) + ", { detail: " + detailJson + " }));";
+        mWebView.post(() -> mWebView.evaluateJavascript(js, null));
+    }
+
+    private void dispatchNativeError(String eventName, String message) {
+        dispatchNativeEvent(eventName, "{\"message\":" + quoteJs(message) + "}");
+    }
+
+    private String quoteJs(String value) {
+        if (value == null) return "\"\"";
+        return "\""
+                + value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
+    }
+
+    private byte[] readUriBytes(Uri uri) throws Exception {
+        try (InputStream inputStream = getContentResolver().openInputStream(uri);
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            if (inputStream == null) {
+                throw new IllegalStateException("No se pudo abrir el archivo seleccionado");
+            }
+
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+            return outputStream.toByteArray();
+        }
+    }
+
+    private Bitmap decodeBitmap(Uri uri) throws Exception {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            ImageDecoder.Source source = ImageDecoder.createSource(getContentResolver(), uri);
+            return ImageDecoder.decodeBitmap(source, (decoder, info, src) -> decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE));
+        }
+
+        try (InputStream inputStream = getContentResolver().openInputStream(uri)) {
+            if (inputStream == null) return null;
+            return BitmapFactory.decodeStream(inputStream);
+        }
+    }
+
+    private void handleProfileImageResult(int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            dispatchNativeError("native-profile-image-error", "Selección cancelada");
+            return;
+        }
+
+        try {
+            Bitmap original = decodeBitmap(data.getData());
+            if (original == null) {
+                throw new IllegalStateException("No se pudo procesar la imagen seleccionada");
+            }
+
+            int maxSide = 1024;
+            float scale = Math.min(1f, (float) maxSide / Math.max(original.getWidth(), original.getHeight()));
+            int width = Math.max(1, Math.round(original.getWidth() * scale));
+            int height = Math.max(1, Math.round(original.getHeight() * scale));
+            Bitmap scaled = Bitmap.createScaledBitmap(original, width, height, true);
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            scaled.compress(Bitmap.CompressFormat.JPEG, 82, outputStream);
+            String base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP);
+            dispatchNativeEvent("native-profile-image-selected", "{\"dataUrl\":" + quoteJs("data:image/jpeg;base64," + base64) + "}");
+        } catch (Exception e) {
+            Toast.makeText(this, "No se pudo seleccionar la imagen", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-profile-image-error", e.getMessage() != null ? e.getMessage() : "No se pudo seleccionar la imagen");
+        }
+    }
+
+    private void handleChatAudioResult(int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            dispatchNativeError("native-chat-audio-error", "Grabación o selección cancelada");
+            return;
+        }
+
+        try {
+            byte[] bytes = readUriBytes(data.getData());
+            if (bytes.length > 2 * 1024 * 1024) {
+                throw new IllegalStateException("Audio demasiado grande (máx. 2MB)");
+            }
+
+            String mimeType = getContentResolver().getType(data.getData());
+            if (mimeType == null || mimeType.isBlank()) {
+                mimeType = "audio/*";
+            }
+
+            String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            dispatchNativeEvent(
+                    "native-chat-audio-selected",
+                    "{\"base64\":" + quoteJs(base64) + ",\"type\":" + quoteJs(mimeType) + "}"
+            );
+        } catch (Exception e) {
+            Toast.makeText(this, "No se pudo preparar el audio", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-audio-error", e.getMessage() != null ? e.getMessage() : "No se pudo preparar el audio");
+        }
     }
 
     @Override
@@ -356,12 +572,55 @@ public class MainActivity extends Activity {
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode != NATIVE_PERMISSION_REQUEST) {
+            return;
+        }
+
+        boolean granted = true;
+        for (int result : grantResults) {
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                granted = false;
+                break;
+            }
+        }
+
+        if (!granted) {
+            if (ACTION_PROFILE_IMAGE.equals(pendingNativeAction)) {
+                dispatchNativeError("native-profile-image-error", "Permiso denegado para seleccionar imágenes");
+            } else if (ACTION_CHAT_AUDIO.equals(pendingNativeAction)) {
+                dispatchNativeError("native-chat-audio-error", "Permiso denegado para grabar o seleccionar audio");
+            }
+            pendingNativeAction = null;
+            return;
+        }
+
+        String action = pendingNativeAction;
+        pendingNativeAction = null;
+        if (ACTION_PROFILE_IMAGE.equals(action)) {
+            openNativeProfileImagePicker();
+        } else if (ACTION_CHAT_AUDIO.equals(action)) {
+            openNativeChatAudioPicker();
+        }
+    }
+
     // Recibe el resultado del file picker (galería/archivos) y se lo entrega al
     // WebView vía el callback que guardamos en onShowFileChooser. Sin esto el
     // <input type="file"> queda colgado para siempre.
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PROFILE_IMAGE_REQUEST) {
+            handleProfileImageResult(resultCode, data);
+            return;
+        }
+        if (requestCode == CHAT_AUDIO_REQUEST) {
+            handleChatAudioResult(resultCode, data);
+            return;
+        }
         if (requestCode != FILECHOOSER_REQUEST) return;
         if (mFilePathCallback == null) return;
 

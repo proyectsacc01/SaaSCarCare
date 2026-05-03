@@ -24,6 +24,10 @@ interface ChatProps {
     fillParent?: boolean;
 }
 
+type AndroidTrackerBridge = {
+    pickChatAudio?: () => void;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 const MAX_MEDIA_SIZE = 2 * 1024 * 1024; // 2MB
 const MAX_AUDIO_SECONDS = 90;
@@ -63,6 +67,11 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const [newMsgPulse, setNewMsgPulse] = useState(0);
 
     const quickReplies = rol === 'CONDUCTOR' ? QUICK_REPLIES_CONDUCTOR : QUICK_REPLIES_ADMIN;
+
+    const getAndroidTracker = () => {
+        if (typeof window === 'undefined') return null;
+        return (window as Window & { AndroidTracker?: AndroidTrackerBridge }).AndroidTracker ?? null;
+    };
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -124,6 +133,36 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             if (recorderRef.current && recorderRef.current.state !== "inactive") {
                 recorderRef.current.stop();
             }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const handleNativeAudioSelected = (event: Event) => {
+            const detail = (event as CustomEvent<{ base64?: string; type?: string }>).detail;
+            if (!detail?.base64 || !detail?.type) {
+                toast.error("No se pudo recibir el audio nativo");
+                return;
+            }
+            setIsRecording(false);
+            setRecordingSeconds(0);
+            setMediaPreview({ base64: detail.base64, type: detail.type });
+        };
+
+        const handleNativeAudioError = (event: Event) => {
+            const detail = (event as CustomEvent<{ message?: string }>).detail;
+            setIsRecording(false);
+            setRecordingSeconds(0);
+            toast.error(detail?.message || "No se pudo capturar el audio");
+        };
+
+        window.addEventListener("native-chat-audio-selected", handleNativeAudioSelected as EventListener);
+        window.addEventListener("native-chat-audio-error", handleNativeAudioError as EventListener);
+
+        return () => {
+            window.removeEventListener("native-chat-audio-selected", handleNativeAudioSelected as EventListener);
+            window.removeEventListener("native-chat-audio-error", handleNativeAudioError as EventListener);
         };
     }, []);
 
@@ -198,6 +237,15 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const startAudioRecording = async () => {
         if (sending) return;
         if (typeof window === "undefined") return;
+
+        const bridge = getAndroidTracker();
+        if (bridge?.pickChatAudio) {
+            setIsRecording(true);
+            setRecordingSeconds(0);
+            setMediaPreview(null);
+            bridge.pickChatAudio();
+            return;
+        }
 
         if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
             fileRef.current?.click();
