@@ -234,6 +234,40 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
     };
 
+    const requestMicPermission = async (): Promise<boolean> => {
+        if (typeof window === "undefined") return false;
+
+        // Si el navegador soporta Permissions API, chequeamos el estado primero
+        if (navigator.permissions && navigator.permissions.query) {
+            try {
+                const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+                if (result.state === 'granted') return true;
+                if (result.state === 'denied') {
+                    toast.error("El micrófono está bloqueado. Ve a Configuración del navegador para habilitarlo.");
+                    return false;
+                }
+            } catch {
+                // Permissions API no soportado para mic — continuamos igual
+            }
+        }
+
+        // Mostramos un diálogo amigable antes de pedir el permiso
+        const grant = window.confirm(
+            "Se necesita acceso al micrófono para grabar audios.\n\n" +
+            "¿Deseas permitir el acceso al micrófono?"
+        );
+        if (!grant) return false;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            return true;
+        } catch {
+            toast.error("No se pudo acceder al micrófono. Verifica los permisos en la configuración del navegador.");
+            return false;
+        }
+    };
+
     const startAudioRecording = async () => {
         if (sending) return;
         if (typeof window === "undefined") return;
@@ -248,7 +282,8 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
 
         if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-            fileRef.current?.click();
+            const granted = await requestMicPermission();
+            if (!granted) fileRef.current?.click();
             return;
         }
 
@@ -303,9 +338,13 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     return next;
                 });
             }, 1000);
-        } catch {
-            toast.error("No se pudo acceder al micrófono. Se abrirá el selector de audio.");
-            fileRef.current?.click();
+        } catch (err) {
+            // Permission denied o fallo — preguntar explícitamente por permisos
+            const granted = await requestMicPermission();
+            if (!granted) {
+                setIsRecording(false);
+                setRecordingSeconds(0);
+            }
         }
     };
 
