@@ -251,7 +251,7 @@ export default function ConductorDashboard() {
         const nombre = driverUser?.nombre || 'Conductor';
         const empresa = driverUser?.nombreEmpresa || cfg?.nombreEmpresa || 'Empresa';
         const asunto = kind === 'SOS'
-            ? `SOS URGENTE — ${nombre}`
+            ? `CONTACTO URGENTE — ${nombre}`
             : `Soporte CarCare Driver — ${nombre}`;
 
         const mapsLink = payload.lat != null && payload.lng != null
@@ -259,7 +259,7 @@ export default function ConductorDashboard() {
             : '';
 
         const body = [
-            kind === 'SOS' ? 'EMERGENCIA SOS' : 'SOLICITUD DE SOPORTE',
+            kind === 'SOS' ? 'CONTACTO URGENTE CON LA CENTRAL' : 'SOLICITUD DE SOPORTE',
             `Conductor: ${nombre}`,
             `Email: ${driverUser?.email || '-'}`,
             `Empresa: ${empresa}`,
@@ -279,7 +279,7 @@ export default function ConductorDashboard() {
             window.location.href = gmailUrl;
         }
         toast.success(kind === 'SOS'
-            ? 'Se abrió un correo urgente para la central'
+            ? 'Se abrió un contacto urgente por correo para la central'
             : 'Se abrió un correo de soporte para la central');
     };
 
@@ -1376,11 +1376,11 @@ export default function ConductorDashboard() {
                                 );
                             })()}
 
-                            {/* SOS */}
+                            {/* Contacto urgente */}
                             <button
                                 onClick={async () => {
-                                    // Mandamos coordenadas si las tenemos para que el admin
-                                    // vea EXACTAMENTE dónde estás cuando activaste el SOS.
+                                    // Mandamos coordenadas si las tenemos para que la central
+                                    // vea EXACTAMENTE dónde estás cuando activaste el aviso urgente.
                                     const sendSos = async (lat?: number, lng?: number) => {
                                         try {
                                             const body: { latitud?: number; longitud?: number; conductorId?: string; conductorEmail?: string; conductorNombre?: string } = {};
@@ -1394,8 +1394,8 @@ export default function ConductorDashboard() {
                                             const { res, data } = await postConductorCritical('/me/sos', body);
                                             if (res.ok) {
                                                 toast.error(data.emailEnviado
-                                                    ? "🆘 SOS enviado a la central y por correo"
-                                                    : "🆘 SOS enviado a la central — te contactarán de inmediato", { duration: 8000 });
+                                                    ? "🚨 Aviso urgente enviado a la central y por correo"
+                                                    : "🚨 Aviso urgente enviado a la central — te contactarán de inmediato", { duration: 8000 });
                                                 if (!data.emailEnviado && data.emailError) {
                                                     toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
                                                 }
@@ -1432,7 +1432,7 @@ export default function ConductorDashboard() {
                                 }}
                                 style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', letterSpacing: '0.8px', transition: 'all 0.2s' }}
                             >
-                                🆘 EMERGENCIA SOS
+                                🚨 CONTACTO URGENTE CON LA CENTRAL
                             </button>
                         </div>
                     )}
