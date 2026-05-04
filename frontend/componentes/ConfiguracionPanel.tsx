@@ -62,11 +62,16 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   useEffect(() => {
     if (!open) return;
     setMsg(null);
+    const localPhone = readLocalUrgentPhone(emailCuenta);
+    if (localPhone) {
+      setTelefonoUrgencias(localPhone);
+      setTelefonoOriginal(localPhone);
+    }
     fetch(`${apiUrl}/api/configuracion`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         const emailCuentaValue = data?.emailCuenta ?? "";
-        const localPhone = readLocalUrgentPhone(emailCuentaValue);
+        const localPhone = readLocalUrgentPhone(emailCuentaValue || emailCuenta);
         const backendPhone = data?.telefonoUrgencias ?? "";
 
         if (!data) {
