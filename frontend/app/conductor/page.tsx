@@ -312,7 +312,7 @@ export default function ConductorDashboard() {
         return t;
     };
 
-    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT' | 'CALL') => {
+    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT' | 'CALL' | '112') => {
         const phone = await syncCentralPhone();
         setShowCallDialog({ open: true, reason: kind, phone });
     };
@@ -1468,7 +1468,7 @@ export default function ConductorDashboard() {
                                                     await openUrgentFallback('SOS');
                                                     toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
                                                 } catch {
-                                                    toast.error("Sin conexión. Llamá al teléfono de la central.");
+                                                    toast.error("Sin conexión. Llama al teléfono de la central.");
                                                 }
                                             }
                                         };
@@ -1487,12 +1487,30 @@ export default function ConductorDashboard() {
                                     🚨 CONTACTO URGENTE CON LA CENTRAL
                                 </button>
 
-                                <button
-                                    onClick={() => { void openUrgentFallback('112'); }}
-                                    style={{ width: '100%', padding: '1rem', background: 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(220,38,38,0.14))', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '14px', color: '#fff', fontWeight: '900', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', letterSpacing: '0.9px', boxShadow: '0 10px 24px -12px rgba(239,68,68,0.5)', transition: 'all 0.2s' }}
+                                <a
+                                    href="tel:112"
+                                    onClick={(e) => {
+                                        const bridge = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
+                                        if (bridge?.openExternalUrl) {
+                                            e.preventDefault();
+                                            try { bridge.openExternalUrl('tel:112'); } catch { /* fallback al <a> */ }
+                                        }
+                                    }}
+                                    style={{
+                                        width: '100%', padding: '1.2rem 1rem',
+                                        background: 'linear-gradient(135deg, #dc2626, #991b1b)',
+                                        border: '2px solid rgba(239,68,68,0.6)',
+                                        borderRadius: '16px', color: '#fff', fontWeight: '900',
+                                        fontSize: '1.1rem', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        gap: '0.6rem', letterSpacing: '1.2px',
+                                        boxShadow: '0 12px 30px -10px rgba(239,68,68,0.65), inset 0 1px 0 rgba(255,255,255,0.1)',
+                                        transition: 'all 0.2s', textDecoration: 'none',
+                                        animation: 'sos-pulse 2.5s ease-in-out infinite',
+                                    }}
                                 >
-                                    🆘 SOS 112
-                                </button>
+                                    🆘 SOS — LLAMAR AL 112
+                                </a>
                             </div>
                         </div>
                     )}
@@ -1826,14 +1844,7 @@ export default function ConductorDashboard() {
                                             void openUrgentFallback('CALL');
                                         },
                                     },
-                                    {
-                                        icon: '✉️', label: 'Contactar soporte',
-                                        sub: 'Reporta un problema o sugerencia',
-                                        action: () => {
-                                            setSupportSubject(v => v || 'Soporte desde CarCare Driver');
-                                            setShowSupportForm(v => !v);
-                                        },
-                                    },
+
                                     {
                                         icon: '🔄', label: 'Recargar datos',
                                         sub: 'Forzar sincronización con la central',
@@ -1860,54 +1871,13 @@ export default function ConductorDashboard() {
                                 ))}
                             </div>
 
-                            {showSupportForm && (
-                                <form onSubmit={enviarSoporte} style={{ background: 'rgba(59,246,59,0.04)', border: '1px solid rgba(59,246,59,0.14)', borderRadius: '16px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.72rem', color: '#3bf63b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Soporte directo</div>
-                                        <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: '0.2rem' }}>
-                                            Esto le llega a la central dentro del panel. Si el email est\u00e1 configurado, tambi\u00e9n sale por correo.
-                                        </div>
-                                    </div>
-                                    <input
-                                        type="text"
-                                        value={supportSubject}
-                                        onChange={e => setSupportSubject(e.target.value)}
-                                        placeholder="Asunto"
-                                        disabled={supportLoading}
-                                        style={{ width: '100%', padding: '0.7rem 0.8rem', background: '#0d1117', border: '1px solid rgba(59,246,59,0.18)', borderRadius: '10px', color: '#e5e7eb', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
-                                    />
-                                    <textarea
-                                        value={supportMessage}
-                                        onChange={e => setSupportMessage(e.target.value)}
-                                        placeholder="Describe el fallo, qué estabas haciendo y si tienes una ruta activa."
-                                        disabled={supportLoading}
-                                        rows={5}
-                                        style={{ width: '100%', resize: 'vertical', minHeight: '120px', padding: '0.8rem', background: '#0d1117', border: '1px solid rgba(59,246,59,0.18)', borderRadius: '12px', color: '#e5e7eb', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box', lineHeight: 1.5 }}
-                                    />
-                                    <div style={{ fontSize: '0.62rem', color: '#4b5563' }}>
-                                        {rutaActiva ? `Se adjunta el contexto de la ruta #${rutaActiva.id?.slice(-6).toUpperCase()}.` : 'Se envía como soporte general si no tienes una ruta en progreso.'}
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowSupportForm(false)}
-                                            disabled={supportLoading}
-                                            style={{ padding: '0.85rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: '#9ca3af', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}
-                                        >Cancelar</button>
-                                        <button
-                                            type="submit"
-                                            disabled={supportLoading}
-                                            style={{ padding: '0.85rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', border: 'none', borderRadius: '12px', color: '#000', fontWeight: '900', fontSize: '0.78rem', cursor: 'pointer', boxShadow: '0 8px 22px -12px rgba(59,246,59,0.55)' }}
-                                        >{supportLoading ? 'Enviando...' : 'Enviar soporte'}</button>
-                                    </div>
-                                </form>
-                            )}
+
 
                             {/* Logout */}
                             <button
                                 onClick={() => {
                                     if (rutaActiva) {
-                                        if (!confirm('Tenés una ruta activa. ¿Cerrar sesión igual?')) return;
+                                        if (!confirm('Tienes una ruta activa. ¿Cerrar sesión igual?')) return;
                                         stopRouteTracking();
                                     }
                                     localStorage.removeItem("user");
@@ -2016,6 +1986,10 @@ export default function ConductorDashboard() {
                     0%, 100% { transform: scale(0.95); opacity: 1; }
                     50% { transform: scale(1.1); opacity: 0.7; }
                 }
+                @keyframes sos-pulse {
+                    0%, 100% { box-shadow: 0 12px 30px -10px rgba(239,68,68,0.65), inset 0 1px 0 rgba(255,255,255,0.1); transform: scale(1); }
+                    50% { box-shadow: 0 12px 40px -8px rgba(239,68,68,0.85), inset 0 1px 0 rgba(255,255,255,0.15); transform: scale(1.015); }
+                }
                 * { -webkit-tap-highlight-color: transparent; }
                 input, select { font-family: inherit; }
             `}</style>
@@ -2077,7 +2051,7 @@ export default function ConductorDashboard() {
                                         : showCallDialog.reason === 'SOS'
                                         ? 'Toca el botón para llamar a la central de inmediato.'
                                         : 'Tu dispositivo abrirá la app de teléfono.'
-                                    : 'La central aún no configuró un número de urgencia. Pedíle al admin que lo guarde en Ajustes de Notificaciones del panel.'}
+                                    : 'La central aún no configuró un número de urgencia. Pídele al admin que lo guarde en Ajustes de Notificaciones del panel.'}
                             </p>
                         </div>
 
@@ -2143,9 +2117,9 @@ export default function ConductorDashboard() {
                                         if (typeof navigator !== 'undefined' && navigator.clipboard) {
                                             navigator.clipboard.writeText(phone)
                                                 .then(() => toast.success(`Número copiado: ${phone}`))
-                                                .catch(() => toast.error(`Marcá manualmente: ${phone}`));
+                                                .catch(() => toast.error(`Marca manualmente: ${phone}`));
                                         } else {
-                                            toast.error(`Marcá manualmente: ${phone}`);
+                                            toast.error(`Marca manualmente: ${phone}`);
                                         }
                                     }}
                                     style={{
