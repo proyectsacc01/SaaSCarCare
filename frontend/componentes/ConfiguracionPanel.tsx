@@ -25,17 +25,27 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
     return `urgentPhone:${fallbackEmail || "default"}`;
   };
 
+  const getUrgentPhoneGlobalKey = () => "urgentPhone:global";
+
   const readLocalUrgentPhone = (fallbackEmail = "") => {
     if (typeof window === "undefined") return "";
-    return localStorage.getItem(getUrgentPhoneStorageKey(fallbackEmail)) || "";
+    return localStorage.getItem(getUrgentPhoneStorageKey(fallbackEmail))
+      || localStorage.getItem(getUrgentPhoneGlobalKey())
+      || "";
   };
 
   const saveLocalUrgentPhone = (phone: string, fallbackEmail = "") => {
     if (typeof window === "undefined") return;
     const key = getUrgentPhoneStorageKey(fallbackEmail);
+    const globalKey = getUrgentPhoneGlobalKey();
     const normalized = phone.trim();
-    if (normalized) localStorage.setItem(key, normalized);
-    else localStorage.removeItem(key);
+    if (normalized) {
+      localStorage.setItem(key, normalized);
+      localStorage.setItem(globalKey, normalized);
+    } else {
+      localStorage.removeItem(key);
+      localStorage.removeItem(globalKey);
+    }
   };
 
   const [open, setOpen] = useState(false);

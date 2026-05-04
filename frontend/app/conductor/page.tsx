@@ -235,9 +235,13 @@ export default function ConductorDashboard() {
         return `urgentPhone:${scope}`;
     };
 
+    const getUrgentPhoneGlobalKey = () => 'urgentPhone:global';
+
     const readLocalUrgentPhone = (fallback = '') => {
         if (typeof window === 'undefined') return '';
-        return localStorage.getItem(getUrgentPhoneStorageKey(fallback)) || '';
+        return localStorage.getItem(getUrgentPhoneStorageKey(fallback))
+            || localStorage.getItem(getUrgentPhoneGlobalKey())
+            || '';
     };
 
     const getConfigEmpresa = async (): Promise<ConfiguracionEmpresa | null> => {
