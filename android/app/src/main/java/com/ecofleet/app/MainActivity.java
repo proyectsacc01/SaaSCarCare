@@ -42,9 +42,11 @@ public class MainActivity extends Activity {
     private static final int CHAT_AUDIO_REQUEST = 1102;
     private static final int NATIVE_PERMISSION_REQUEST = 1103;
     private static final int RECORD_AUDIO_REQUEST = 1104;
+    private static final int CHAT_MEDIA_REQUEST = 1105;
     private static final String ACTION_PROFILE_IMAGE = "profile_image";
     private static final String ACTION_CHAT_AUDIO = "chat_audio";
     private static final String ACTION_RECORD_AUDIO = "record_audio";
+    private static final String ACTION_CHAT_MEDIA = "chat_media";
 
     private String pendingNativeAction = null;
     // Guardamos la PermissionRequest pendiente del WebView para concederla
@@ -389,6 +391,16 @@ public class MainActivity extends Activity {
             });
         }
 
+        @JavascriptInterface
+        public void pickChatMedia() {
+            mContext.runOnUiThread(() -> {
+                if (!ensureNativePermissions(ACTION_CHAT_MEDIA)) {
+                    return;
+                }
+                openNativeChatMediaPicker();
+            });
+        }
+
         // Lanza DIRECTAMENTE la grabadora de audio del sistema sin abrir
         // ningún chooser ni explorador de archivos.
         @JavascriptInterface
@@ -429,10 +441,14 @@ public class MainActivity extends Activity {
             }
         }
 
-        if (ACTION_PROFILE_IMAGE.equals(action)) {
+        if (ACTION_PROFILE_IMAGE.equals(action) || ACTION_CHAT_MEDIA.equals(action)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
                     missing.add(Manifest.permission.READ_MEDIA_IMAGES);
+                }
+                if (ACTION_CHAT_MEDIA.equals(action)
+                        && checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                    missing.add(Manifest.permission.READ_MEDIA_VIDEO);
                 }
             } else if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 missing.add(Manifest.permission.READ_EXTERNAL_STORAGE);
@@ -488,6 +504,33 @@ public class MainActivity extends Activity {
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "No hay app para grabar o elegir audio", Toast.LENGTH_SHORT).show();
             dispatchNativeError("native-chat-audio-error", "No hay app para grabar o elegir audio");
+        }
+    }
+
+    private void openNativeChatMediaPicker() {
+        Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
+        contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+        contentIntent.setType("*/*");
+        contentIntent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+
+        java.util.List<Intent> extras = new java.util.ArrayList<>();
+
+        Intent galleryImages = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        galleryImages.setType("image/*");
+        extras.add(galleryImages);
+
+        Intent galleryVideos = new Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
+        galleryVideos.setType("video/*");
+        extras.add(galleryVideos);
+
+        Intent chooser = Intent.createChooser(contentIntent, "Seleccionar imagen o video");
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, extras.toArray(new Intent[0]));
+
+        try {
+            startActivityForResult(chooser, CHAT_MEDIA_REQUEST);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No hay app para elegir imágenes o videos", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-media-error", "No hay app para elegir imágenes o videos");
         }
     }
 
@@ -607,6 +650,61 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void handleChatMediaResult(int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            dispatchNativeError("native-chat-media-error", "Selección cancelada");
+            return;
+        }
+
+        try {
+            Uri uri = data.getData();
+            String mimeType = getContentResolver().getType(uri);
+            if (mimeType == null || mimeType.isBlank()) {
+                mimeType = "application/octet-stream";
+            }
+
+            String base64;
+
+            if (mimeType.startsWith("image/")) {
+                Bitmap original = decodeBitmap(uri);
+                if (original == null) {
+                    throw new IllegalStateException("No se pudo procesar la imagen seleccionada");
+                }
+
+                int maxSide = 1440;
+                float scale = Math.min(1f, (float) maxSide / Math.max(original.getWidth(), original.getHeight()));
+                int width = Math.max(1, Math.round(original.getWidth() * scale));
+                int height = Math.max(1, Math.round(original.getHeight() * scale));
+                Bitmap scaled = Bitmap.createScaledBitmap(original, width, height, true);
+
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                scaled.compress(Bitmap.CompressFormat.JPEG, 84, outputStream);
+                byte[] bytes = outputStream.toByteArray();
+                if (bytes.length > 4 * 1024 * 1024) {
+                    throw new IllegalStateException("Imagen demasiado grande (máx. 4MB)");
+                }
+                mimeType = "image/jpeg";
+                base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            } else if (mimeType.startsWith("video/")) {
+                byte[] bytes = readUriBytes(uri);
+                if (bytes.length > 8 * 1024 * 1024) {
+                    throw new IllegalStateException("Video demasiado grande (máx. 8MB)");
+                }
+                base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            } else {
+                throw new IllegalStateException("Solo imágenes o videos");
+            }
+
+            dispatchNativeEvent(
+                    "native-chat-media-selected",
+                    "{\"base64\":" + quoteJs(base64) + ",\"type\":" + quoteJs(mimeType) + "}"
+            );
+        } catch (Exception e) {
+            Toast.makeText(this, "No se pudo preparar el archivo", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-media-error", e.getMessage() != null ? e.getMessage() : "No se pudo preparar el archivo");
+        }
+    }
+
     @Override
     public void onBackPressed() {
         if (mWebView.canGoBack()) {
@@ -650,6 +748,8 @@ public class MainActivity extends Activity {
                 dispatchNativeError("native-profile-image-error", "Permiso denegado para seleccionar imágenes");
             } else if (ACTION_CHAT_AUDIO.equals(pendingNativeAction)) {
                 dispatchNativeError("native-chat-audio-error", "Permiso denegado para grabar o seleccionar audio");
+            } else if (ACTION_CHAT_MEDIA.equals(pendingNativeAction)) {
+                dispatchNativeError("native-chat-media-error", "Permiso denegado para seleccionar imágenes o videos");
             } else if ("mic_permission".equals(pendingNativeAction)) {
                 dispatchNativeEvent("mic-permission-denied", "{}");
             }
@@ -663,6 +763,8 @@ public class MainActivity extends Activity {
             openNativeProfileImagePicker();
         } else if (ACTION_CHAT_AUDIO.equals(action)) {
             openNativeChatAudioPicker();
+        } else if (ACTION_CHAT_MEDIA.equals(action)) {
+            openNativeChatMediaPicker();
         } else if (ACTION_RECORD_AUDIO.equals(action)) {
             openDirectRecorder();
         } else if ("mic_permission".equals(action)) {
@@ -682,6 +784,10 @@ public class MainActivity extends Activity {
         }
         if (requestCode == CHAT_AUDIO_REQUEST) {
             handleChatAudioResult(resultCode, data);
+            return;
+        }
+        if (requestCode == CHAT_MEDIA_REQUEST) {
+            handleChatMediaResult(resultCode, data);
             return;
         }
         if (requestCode == RECORD_AUDIO_REQUEST) {

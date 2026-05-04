@@ -26,12 +26,15 @@ interface ChatProps {
 
 type AndroidTrackerBridge = {
     pickChatAudio?: () => void;
+    pickChatMedia?: () => void;
     startRecording?: () => void;
     requestMicPermission?: () => void;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
-const MAX_MEDIA_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_AUDIO_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB ya procesada
+const MAX_VIDEO_SIZE = 8 * 1024 * 1024; // 8MB
 const MAX_AUDIO_SECONDS = 90;
 
 // Mensajes rápidos preestablecidos según el rol — para que el conductor no tenga que tipear
@@ -60,6 +63,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const [isRecording, setIsRecording] = useState(false);
     const [recordingSeconds, setRecordingSeconds] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const mediaFileRef = useRef<HTMLInputElement>(null);
     const lastSeenIdRef = useRef<string | null>(null);
     const recorderRef = useRef<MediaRecorder | null>(null);
     const recorderChunksRef = useRef<Blob[]>([]);
@@ -158,12 +162,30 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             toast.error(detail?.message || "No se pudo capturar el audio");
         };
 
+        const handleNativeMediaSelected = (event: Event) => {
+            const detail = (event as CustomEvent<{ base64?: string; type?: string }>).detail;
+            if (!detail?.base64 || !detail?.type) {
+                toast.error("No se pudo recibir el archivo seleccionado");
+                return;
+            }
+            setMediaPreview({ base64: detail.base64, type: detail.type });
+        };
+
+        const handleNativeMediaError = (event: Event) => {
+            const detail = (event as CustomEvent<{ message?: string }>).detail;
+            toast.error(detail?.message || "No se pudo seleccionar el archivo");
+        };
+
         window.addEventListener("native-chat-audio-selected", handleNativeAudioSelected as EventListener);
         window.addEventListener("native-chat-audio-error", handleNativeAudioError as EventListener);
+        window.addEventListener("native-chat-media-selected", handleNativeMediaSelected as EventListener);
+        window.addEventListener("native-chat-media-error", handleNativeMediaError as EventListener);
 
         return () => {
             window.removeEventListener("native-chat-audio-selected", handleNativeAudioSelected as EventListener);
             window.removeEventListener("native-chat-audio-error", handleNativeAudioError as EventListener);
+            window.removeEventListener("native-chat-media-selected", handleNativeMediaSelected as EventListener);
+            window.removeEventListener("native-chat-media-error", handleNativeMediaError as EventListener);
         };
     }, []);
 
@@ -226,6 +248,29 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             "audio/ogg;codecs=opus",
         ];
         return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+    };
+
+    const getMaxSizeForType = (type: string) => {
+        if (type.startsWith("audio/")) return MAX_AUDIO_SIZE;
+        if (type.startsWith("image/")) return MAX_IMAGE_SIZE;
+        if (type.startsWith("video/")) return MAX_VIDEO_SIZE;
+        return MAX_IMAGE_SIZE;
+    };
+
+    const getSizeErrorForType = (type: string) => {
+        if (type.startsWith("audio/")) return "Audio demasiado grande (máx. 2MB)";
+        if (type.startsWith("image/")) return "Imagen demasiado grande (máx. 4MB)";
+        if (type.startsWith("video/")) return "Video demasiado grande (máx. 8MB)";
+        return "Archivo demasiado grande";
+    };
+
+    const openMediaPicker = () => {
+        const bridge = getAndroidTracker();
+        if (bridge?.pickChatMedia) {
+            bridge.pickChatMedia();
+            return;
+        }
+        mediaFileRef.current?.click();
     };
 
     const stopAudioRecording = () => {
@@ -327,7 +372,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     return;
                 }
 
-                if (blob.size > MAX_MEDIA_SIZE) {
+                if (blob.size > MAX_AUDIO_SIZE) {
                     toast.error("Audio demasiado grande (máx. 2MB)");
                     return;
                 }
@@ -378,6 +423,31 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
     };
 
+    const handleMediaFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = "";
+
+        if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+            toast.error("Solo imágenes o videos");
+            return;
+        }
+
+        try {
+            const maxSize = getMaxSizeForType(file.type);
+            if (file.size > maxSize) {
+                toast.error(getSizeErrorForType(file.type));
+                return;
+            }
+
+            const dataUrl = await fileToDataUrl(file);
+            const base64 = dataUrl.split(",")[1] || "";
+            setMediaPreview({ base64, type: file.type });
+        } catch {
+            toast.error("No se pudo adjuntar el archivo");
+        }
+    };
+
     const enviar = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!nuevoMensaje.trim() && !mediaPreview) return;
@@ -392,7 +462,13 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         } = {
             rutaId,
             remitente: rol,
-            contenido: nuevoMensaje.trim() || (mediaPreview ? "🎤 Audio" : ""),
+            contenido: nuevoMensaje.trim() || (mediaPreview
+                ? mediaPreview.type.startsWith("audio/")
+                    ? "🎤 Audio"
+                    : mediaPreview.type.startsWith("image/")
+                        ? "📷 Imagen"
+                        : "🎬 Video"
+                : ""),
         };
         if (mediaPreview) {
             mensajeObj.mediaBase64 = mediaPreview.base64;
@@ -742,9 +818,28 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     background: 'rgba(255,255,255,0.02)',
                     borderTop: '1px solid rgba(255,255,255,0.05)',
                 }}>
-                    {/* Sin input type=file: el botón del micrófono SIEMPRE graba —
-                        nunca abre el explorador de archivos. La grabación va por
-                        bridge nativo (preferido) o getUserMedia, en ese orden. */}
+                    <input
+                        ref={mediaFileRef}
+                        type="file"
+                        accept="image/*,video/*"
+                        onChange={handleMediaFileSelect}
+                        style={{ display: 'none' }}
+                    />
+                    <button
+                        type="button"
+                        onClick={openMediaPicker}
+                        disabled={sending || isRecording}
+                        style={{
+                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '50%', width: '38px', height: '38px', minWidth: '38px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: sending || isRecording ? 'default' : 'pointer', fontSize: '1rem', color: '#6b7280',
+                            transition: 'all 0.2s', opacity: sending || isRecording ? 0.5 : 1,
+                        }}
+                        title="Adjuntar foto o video"
+                    >🖼</button>
+                    {/* El botón de media abre foto/video. El micrófono SIEMPRE graba
+                        y nunca abre el explorador de archivos. */}
                     <button
                         type="button"
                         onClick={() => {
