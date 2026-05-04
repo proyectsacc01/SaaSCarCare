@@ -31,6 +31,13 @@ interface Repostaje {
     conductorId?: string | null;
 }
 
+interface ConfiguracionEmpresa {
+    emailCuenta?: string;
+    emailNotificaciones?: string;
+    nombreEmpresa?: string;
+    emailDisponible?: boolean;
+}
+
 interface Vehiculo {
     id: string;
     matricula: string;
@@ -219,6 +226,56 @@ export default function ConductorDashboard() {
         }
 
         throw lastError || new Error('No se pudo contactar con el servidor');
+    };
+
+    const getConfigEmpresa = async (): Promise<ConfiguracionEmpresa | null> => {
+        try {
+            const res = await fetch(`${API_URL}/api/configuracion`, {
+                headers: getAuthHeaders(),
+            });
+            if (!res.ok) return null;
+            return await res.json();
+        } catch {
+            return null;
+        }
+    };
+
+    const openEmailFallback = async (kind: 'SOS' | 'SUPPORT', payload: { mensaje?: string; lat?: number; lng?: number; rutaId?: string }) => {
+        const cfg = await getConfigEmpresa();
+        const destino = cfg?.emailNotificaciones?.trim() || cfg?.emailCuenta?.trim();
+
+        if (!destino) {
+            throw new Error('No hay email de la empresa configurado para contacto');
+        }
+
+        const nombre = driverUser?.nombre || 'Conductor';
+        const empresa = driverUser?.nombreEmpresa || cfg?.nombreEmpresa || 'Empresa';
+        const asunto = kind === 'SOS'
+            ? `SOS URGENTE — ${nombre}`
+            : `Soporte CarCare Driver — ${nombre}`;
+
+        const mapsLink = payload.lat != null && payload.lng != null
+            ? `https://www.google.com/maps?q=${payload.lat},${payload.lng}`
+            : '';
+
+        const body = [
+            kind === 'SOS' ? 'EMERGENCIA SOS' : 'SOLICITUD DE SOPORTE',
+            `Conductor: ${nombre}`,
+            `Email: ${driverUser?.email || '-'}`,
+            `Empresa: ${empresa}`,
+            payload.rutaId ? `Ruta: #${payload.rutaId.slice(-6).toUpperCase()}` : 'Ruta: sin contexto',
+            mapsLink ? `Ubicación: ${mapsLink}` : 'Ubicación: no disponible',
+            '',
+            payload.mensaje?.trim() || (kind === 'SOS'
+                ? 'Necesito asistencia urgente. Revisad mi ubicación y contactad conmigo cuanto antes.'
+                : 'Solicitud de soporte enviada desde CarCare Driver.'),
+        ].join('\n');
+
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(destino)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(body)}`;
+        openExternal(gmailUrl);
+        toast.success(kind === 'SOS'
+            ? 'Se abrió un correo urgente para la central'
+            : 'Se abrió un correo de soporte para la central');
     };
 
     const cargarRutas = async () => {
@@ -737,7 +794,15 @@ export default function ConductorDashboard() {
                 toast.success('Soporte enviado al panel de la central');
             }
         } catch (err: unknown) {
-            toast.error(getErrorMessage(err, 'Error enviando soporte'));
+            try {
+                await openEmailFallback('SUPPORT', {
+                    mensaje,
+                    rutaId: rutaContexto?.id,
+                });
+                toast.warning('El envío interno falló. Abrimos un correo directo como alternativa.');
+            } catch {
+                toast.error(getErrorMessage(err, 'Error enviando soporte'));
+            }
         } finally {
             setSupportLoading(false);
         }
@@ -1330,10 +1395,24 @@ export default function ConductorDashboard() {
                                                     toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
                                                 }
                                             } else {
-                                                toast.error(data.error || "No se pudo notificar el SOS. Llama directamente a la central.");
+                                                await openEmailFallback('SOS', {
+                                                    lat,
+                                                    lng,
+                                                    rutaId: rutaActiva?.id,
+                                                });
+                                                toast.warning(data.error || 'El canal interno falló. Abrimos un correo urgente a la central.');
                                             }
                                         } catch {
-                                            toast.error("Sin conexión. Llama al teléfono de la central.");
+                                            try {
+                                                await openEmailFallback('SOS', {
+                                                    lat,
+                                                    lng,
+                                                    rutaId: rutaActiva?.id,
+                                                });
+                                                toast.warning('Sin conexión interna. Abrimos un correo urgente a la central.');
+                                            } catch {
+                                                toast.error("Sin conexión. Llama al teléfono de la central.");
+                                            }
                                         }
                                     };
                                     if (typeof navigator !== 'undefined' && navigator.geolocation) {
