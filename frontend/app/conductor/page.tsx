@@ -202,8 +202,12 @@ export default function ConductorDashboard() {
 
                 const data = await res.json().catch(() => ({}));
 
-                // Si el path simplemente no existe o el proxy está roto, probamos el siguiente.
-                if ([404, 405, 502, 503].includes(res.status)) {
+                const backendError = (data as { error?: string }).error?.trim();
+                const isGenericNotFound = res.status === 404 && (!backendError || backendError.toLowerCase() === 'not found');
+
+                // Solo fallback si parece una ruta/proxy roto, no si el backend devolvió
+                // un 404 de negocio con mensaje útil.
+                if (isGenericNotFound || [405, 502, 503].includes(res.status)) {
                     lastError = new Error((data as { error?: string }).error || `Fallo ${res.status} en ${url}`);
                     continue;
                 }
@@ -714,6 +718,8 @@ export default function ConductorDashboard() {
                 asunto: supportSubject.trim() || 'Soporte desde CarCare Driver',
                 mensaje,
                 rutaId: rutaContexto?.id,
+                conductorId: driverUser?.id,
+                conductorEmail: driverUser?.email,
             });
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo enviar la solicitud');
@@ -1306,11 +1312,13 @@ export default function ConductorDashboard() {
                                     // vea EXACTAMENTE dónde estás cuando activaste el SOS.
                                     const sendSos = async (lat?: number, lng?: number) => {
                                         try {
-                                            const body: { latitud?: number; longitud?: number } = {};
+                                            const body: { latitud?: number; longitud?: number; conductorId?: string; conductorEmail?: string } = {};
                                             if (lat != null && lng != null) {
                                                 body.latitud = lat;
                                                 body.longitud = lng;
                                             }
+                                            if (driverUser?.id) body.conductorId = driverUser.id;
+                                            if (driverUser?.email) body.conductorEmail = driverUser.email;
                                             const { res, data } = await postConductorCritical('/me/sos', body);
                                             if (res.ok) {
                                                 toast.error(data.emailEnviado

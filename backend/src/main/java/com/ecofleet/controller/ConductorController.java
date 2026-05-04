@@ -156,10 +156,9 @@ public class ConductorController {
             HttpServletRequest request) {
 
         String role = (String) request.getAttribute("userRole");
-        String conductorId = (String) request.getAttribute("conductorId");
         String empresaId = (String) request.getAttribute("userId");
 
-        if (!"CONDUCTOR".equals(role) || conductorId == null || conductorId.isBlank()) {
+        if (!"CONDUCTOR".equals(role) || empresaId == null || empresaId.isBlank()) {
             return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
         }
 
@@ -168,12 +167,13 @@ public class ConductorController {
             return ResponseEntity.badRequest().body(Map.of("error", "El mensaje de soporte es obligatorio"));
         }
 
-        Optional<Conductor> conductorOpt = conductorRepository.findById(conductorId);
+        Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payload.get("conductorId"), payload.get("conductorEmail"));
         if (conductorOpt.isEmpty()) {
             return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
         }
 
         Conductor conductor = conductorOpt.get();
+        String conductorId = conductor.getId();
         String asunto = payload.get("asunto") != null && !payload.get("asunto").trim().isBlank()
                 ? payload.get("asunto").trim()
                 : "Solicitud de soporte del conductor";
@@ -257,18 +257,21 @@ public class ConductorController {
             HttpServletRequest request) {
 
         String role = (String) request.getAttribute("userRole");
-        String conductorId = (String) request.getAttribute("conductorId");
         String empresaId = (String) request.getAttribute("userId");
 
-        if (!"CONDUCTOR".equals(role) || conductorId == null || conductorId.isBlank()) {
+        if (!"CONDUCTOR".equals(role) || empresaId == null || empresaId.isBlank()) {
             return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
         }
 
-        Optional<Conductor> conductorOpt = conductorRepository.findById(conductorId);
+        String payloadConductorId = payload != null ? trimToNull(asString(payload.get("conductorId"))) : null;
+        String payloadConductorEmail = payload != null ? trimToNull(asString(payload.get("conductorEmail"))) : null;
+
+        Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payloadConductorId, payloadConductorEmail);
         if (conductorOpt.isEmpty()) {
             return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
         }
         Conductor conductor = conductorOpt.get();
+        String conductorId = conductor.getId();
 
         // Si llega lat/lng en el payload, los persistimos antes de crear la alerta
         // — así el admin ve la ubicación EXACTA al momento del SOS.
@@ -447,6 +450,39 @@ public class ConductorController {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Optional<Conductor> resolverConductorDesdeRequest(HttpServletRequest request, String empresaId, String payloadConductorId, String payloadConductorEmail) {
+        String claimConductorId = trimToNull((String) request.getAttribute("conductorId"));
+
+        if (claimConductorId != null) {
+            Optional<Conductor> claimMatch = conductorRepository.findById(claimConductorId)
+                    .filter(c -> empresaId.equals(c.getEmpresaId()));
+            if (claimMatch.isPresent()) {
+                return claimMatch;
+            }
+        }
+
+        String bodyConductorId = trimToNull(payloadConductorId);
+        if (bodyConductorId != null) {
+            Optional<Conductor> bodyIdMatch = conductorRepository.findById(bodyConductorId)
+                    .filter(c -> empresaId.equals(c.getEmpresaId()));
+            if (bodyIdMatch.isPresent()) {
+                return bodyIdMatch;
+            }
+        }
+
+        String bodyConductorEmail = trimToNull(payloadConductorEmail);
+        if (bodyConductorEmail != null) {
+            return conductorRepository.findByEmail(bodyConductorEmail.trim().toLowerCase())
+                    .filter(c -> empresaId.equals(c.getEmpresaId()));
+        }
+
+        return Optional.empty();
     }
 
     private String resumir(String mensaje, int maxLen) {
