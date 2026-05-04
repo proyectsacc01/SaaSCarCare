@@ -59,6 +59,7 @@ interface Ruta {
   latitudActual?: number;
   longitudActual?: number;
   velocidadActualKmh?: number;
+  distanciaRecorridaKm?: number;
   distanciaRestanteKm?: number;
   desviado?: boolean;
   ultimaActualizacionGPS?: string;
@@ -379,7 +380,11 @@ export default function Dashboard() {
       if (d.getFullYear() === añoActual) {
         // Solo estimar si no hay repostajes reales ese mes
         if (consumoPorMes[d.getMonth()] === 0) {
-          consumoPorMes[d.getMonth()] += (r.distanciaEstimadaKm / 100) * 8;
+          // Priorizar km reales (GPS) sobre estimados
+          const kmRuta = r.distanciaRecorridaKm && r.distanciaRecorridaKm > 0
+            ? r.distanciaRecorridaKm
+            : r.distanciaEstimadaKm;
+          consumoPorMes[d.getMonth()] += (kmRuta / 100) * 8;
         }
       }
     });
@@ -551,7 +556,11 @@ export default function Dashboard() {
           if (ruta.vehiculoId !== v.id) continue;
           if (normalizeRouteState(ruta.estado) !== 'COMPLETADA') continue;
           if (!matchYM(getYM(ruta.fecha), mes)) continue;
-          totalKm += ruta.distanciaEstimadaKm || 0;
+          // Priorizar km reales (GPS) sobre estimados
+          const kmRuta = ruta.distanciaRecorridaKm && ruta.distanciaRecorridaKm > 0
+            ? ruta.distanciaRecorridaKm
+            : (ruta.distanciaEstimadaKm || 0);
+          totalKm += kmRuta;
         }
       }
 
@@ -590,7 +599,11 @@ export default function Dashboard() {
       for (const ruta of rutas) {
         if (normalizeRouteState(ruta.estado) !== 'COMPLETADA') continue;
         if (!matchYM(getYM(ruta.fecha), mes)) continue;
-        km += ruta.distanciaEstimadaKm || 0;
+        // Priorizar km reales (GPS) sobre estimados
+        const kmRuta = ruta.distanciaRecorridaKm && ruta.distanciaRecorridaKm > 0
+          ? ruta.distanciaRecorridaKm
+          : (ruta.distanciaEstimadaKm || 0);
+        km += kmRuta;
       }
 
       const costeTotal = costeComb + costeMant;
