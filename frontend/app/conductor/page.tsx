@@ -1435,56 +1435,65 @@ export default function ConductorDashboard() {
                                 );
                             })()}
 
-                            {/* Contacto urgente */}
-                            <button
-                                onClick={async () => {
-                                    // Mandamos coordenadas si las tenemos para que la central
-                                    // vea EXACTAMENTE dónde estás cuando activaste el aviso urgente.
-                                    const sendSos = async (lat?: number, lng?: number) => {
-                                        try {
-                                            const body: { latitud?: number; longitud?: number; conductorId?: string; conductorEmail?: string; conductorNombre?: string } = {};
-                                            if (lat != null && lng != null) {
-                                                body.latitud = lat;
-                                                body.longitud = lng;
-                                            }
-                                            if (driverUser?.id) body.conductorId = driverUser.id;
-                                            if (driverUser?.email) body.conductorEmail = driverUser.email;
-                                            if (driverUser?.nombre) body.conductorNombre = driverUser.nombre;
-                                            const { res, data } = await postConductorCritical('/me/sos', body);
-                                            if (res.ok) {
-                                                toast.error(data.emailEnviado
-                                                    ? "🚨 Aviso urgente enviado a la central y por correo"
-                                                    : "🚨 Aviso urgente enviado a la central — te contactarán de inmediato", { duration: 8000 });
-                                                if (!data.emailEnviado && data.emailError) {
-                                                    toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
-                                                }
-                                            } else {
-                                                await openUrgentFallback('SOS');
-                                                toast.warning(data.error || 'El canal interno falló. Te conectamos con la central.');
-                                            }
-                                        } catch {
+                            {/* Contactos urgentes */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.65rem' }}>
+                                <button
+                                    onClick={async () => {
+                                        // Mandamos coordenadas si las tenemos para que la central
+                                        // vea EXACTAMENTE dónde estás cuando activaste el aviso urgente.
+                                        const sendSos = async (lat?: number, lng?: number) => {
                                             try {
-                                                await openUrgentFallback('SOS');
-                                                toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
+                                                const body: { latitud?: number; longitud?: number; conductorId?: string; conductorEmail?: string; conductorNombre?: string } = {};
+                                                if (lat != null && lng != null) {
+                                                    body.latitud = lat;
+                                                    body.longitud = lng;
+                                                }
+                                                if (driverUser?.id) body.conductorId = driverUser.id;
+                                                if (driverUser?.email) body.conductorEmail = driverUser.email;
+                                                if (driverUser?.nombre) body.conductorNombre = driverUser.nombre;
+                                                const { res, data } = await postConductorCritical('/me/sos', body);
+                                                if (res.ok) {
+                                                    toast.error(data.emailEnviado
+                                                        ? "🚨 Aviso urgente enviado a la central y por correo"
+                                                        : "🚨 Aviso urgente enviado a la central — te contactarán de inmediato", { duration: 8000 });
+                                                    if (!data.emailEnviado && data.emailError) {
+                                                        toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
+                                                    }
+                                                } else {
+                                                    await openUrgentFallback('SOS');
+                                                    toast.warning(data.error || 'El canal interno falló. Te conectamos con la central.');
+                                                }
                                             } catch {
-                                                toast.error("Sin conexión. Llamá al teléfono de la central.");
+                                                try {
+                                                    await openUrgentFallback('SOS');
+                                                    toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
+                                                } catch {
+                                                    toast.error("Sin conexión. Llamá al teléfono de la central.");
+                                                }
                                             }
+                                        };
+                                        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+                                            navigator.geolocation.getCurrentPosition(
+                                                (pos) => sendSos(pos.coords.latitude, pos.coords.longitude),
+                                                () => sendSos(),
+                                                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                                            );
+                                        } else {
+                                            await sendSos();
                                         }
-                                    };
-                                    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-                                        navigator.geolocation.getCurrentPosition(
-                                            (pos) => sendSos(pos.coords.latitude, pos.coords.longitude),
-                                            () => sendSos(),
-                                            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-                                        );
-                                    } else {
-                                        await sendSos();
-                                    }
-                                }}
-                                style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', letterSpacing: '0.8px', transition: 'all 0.2s' }}
-                            >
-                                🚨 CONTACTO URGENTE CON LA CENTRAL
-                            </button>
+                                    }}
+                                    style={{ width: '100%', padding: '1rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: '14px', color: '#ef4444', fontWeight: '800', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', letterSpacing: '0.8px', transition: 'all 0.2s' }}
+                                >
+                                    🚨 CONTACTO URGENTE CON LA CENTRAL
+                                </button>
+
+                                <button
+                                    onClick={() => { void openUrgentFallback('112'); }}
+                                    style={{ width: '100%', padding: '1rem', background: 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(220,38,38,0.14))', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '14px', color: '#fff', fontWeight: '900', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', letterSpacing: '0.9px', boxShadow: '0 10px 24px -12px rgba(239,68,68,0.5)', transition: 'all 0.2s' }}
+                                >
+                                    🆘 SOS 112
+                                </button>
+                            </div>
                         </div>
                     )}
 
