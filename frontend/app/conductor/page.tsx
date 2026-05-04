@@ -272,7 +272,12 @@ export default function ConductorDashboard() {
         ].join('\n');
 
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(destino)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(body)}`;
-        openExternal(gmailUrl);
+        const bridge = getAndroidTracker();
+        if (bridge?.openExternalUrl) {
+            bridge.openExternalUrl(gmailUrl);
+        } else if (typeof window !== 'undefined') {
+            window.location.href = gmailUrl;
+        }
         toast.success(kind === 'SOS'
             ? 'Se abrió un correo urgente para la central'
             : 'Se abrió un correo de soporte para la central');
