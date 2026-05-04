@@ -290,7 +290,15 @@ export default function ConductorDashboard() {
      * NUNCA caemos a email/Gmail silenciosamente — si no hay teléfono
      * configurado, el modal lo dice claramente con instrucciones.
      */
-    const openUrgentFallback = (kind: 'SOS' | 'SUPPORT') => {
+    const syncCentralPhone = async () => {
+        const cfg = await getConfigEmpresa();
+        const t = cfg?.telefonoUrgencias?.trim() || '';
+        if (t) setCentralPhone(t);
+        return t;
+    };
+
+    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT' | 'CALL') => {
+        await syncCentralPhone();
         setShowCallDialog({ open: true, reason: kind });
     };
 
@@ -391,12 +399,7 @@ export default function ConductorDashboard() {
         // hay que llamar al dialer (tel:), tiene que estar en estado para
         // disparar en el mismo click — sin awaits que rompan el user-gesture.
         const refreshCentralPhone = () => {
-            getConfigEmpresa()
-                .then((cfg) => {
-                    const t = cfg?.telefonoUrgencias?.trim();
-                    if (t) setCentralPhone(t);
-                })
-                .catch(() => { /* silencioso */ });
+            syncCentralPhone().catch(() => { /* silencioso */ });
         };
         refreshCentralPhone();
         const phoneInterval = setInterval(refreshCentralPhone, 60_000);
@@ -827,7 +830,7 @@ export default function ConductorDashboard() {
             }
         } catch (err: unknown) {
             try {
-                openUrgentFallback('SUPPORT');
+                await openUrgentFallback('SUPPORT');
                 toast.warning('El envío interno falló. Te conectamos con la central por teléfono.');
             } catch {
                 toast.error(getErrorMessage(err, 'Error enviando soporte'));
@@ -1424,12 +1427,12 @@ export default function ConductorDashboard() {
                                                     toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
                                                 }
                                             } else {
-                                                openUrgentFallback('SOS');
+                                                await openUrgentFallback('SOS');
                                                 toast.warning(data.error || 'El canal interno falló. Te conectamos con la central.');
                                             }
                                         } catch {
                                             try {
-                                                openUrgentFallback('SOS');
+                                                await openUrgentFallback('SOS');
                                                 toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
                                             } catch {
                                                 toast.error("Sin conexión. Llamá al teléfono de la central.");
@@ -1779,7 +1782,7 @@ export default function ConductorDashboard() {
                                             // SIN await: usamos el cache para que el click siga
                                             // siendo el mismo user-gesture y el tel: se abra en
                                             // iOS/Android sin que el navegador lo bloquee.
-                                            setShowCallDialog({ open: true, reason: 'CALL' });
+                                            void openUrgentFallback('CALL');
                                         },
                                     },
                                     {

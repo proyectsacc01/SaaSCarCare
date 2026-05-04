@@ -110,19 +110,25 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         body: JSON.stringify({ emailNotificaciones: emailNotif, telefonoUrgencias }),
       });
       if (res.ok) {
-        setEmailOriginal(emailNotif);
-        setTelefonoOriginal(telefonoUrgencias);
-        setMsg({ tipo: "ok", texto: t.components.savedSuccessfully });
-        setTimeout(() => setMsg(null), 4000);
+        const verifyRes = await fetch(`${apiUrl}/api/configuracion`, { headers: getAuthHeaders() });
+        const verifyData = verifyRes.ok ? await verifyRes.json().catch(() => null) : null;
+        const serverPhone = verifyData?.telefonoUrgencias?.trim?.() || "";
+        const wantedPhone = telefonoUrgencias.trim();
+
+        if (serverPhone === wantedPhone) {
+          setEmailOriginal(emailNotif);
+          setTelefonoOriginal(telefonoUrgencias);
+          setTelefonoUrgencias(serverPhone);
+          setMsg({ tipo: "ok", texto: t.components.savedSuccessfully });
+          setTimeout(() => setMsg(null), 4000);
+        } else {
+          setMsg({ tipo: "error", texto: "El servidor no confirmó el teléfono urgente todavía. En este navegador queda cacheado, pero el conductor en otro dispositivo aún no lo verá." });
+        }
       } else {
-        setEmailOriginal(emailNotif);
-        setTelefonoOriginal(telefonoUrgencias);
-        setMsg({ tipo: "ok", texto: "Guardado en este navegador. El servidor aún no confirmó el cambio." });
+        setMsg({ tipo: "error", texto: "El servidor no guardó el teléfono urgente. Reintentá en unos segundos." });
       }
     } catch {
-      setEmailOriginal(emailNotif);
-      setTelefonoOriginal(telefonoUrgencias);
-      setMsg({ tipo: "ok", texto: "Guardado en este navegador. Se sincronizará cuando el servidor responda." });
+      setMsg({ tipo: "error", texto: "No se pudo confirmar el guardado en servidor. El teléfono queda solo en este navegador." });
     } finally {
       setGuardando(false);
     }
