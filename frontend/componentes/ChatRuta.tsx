@@ -352,18 +352,28 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                 });
             }, 1000);
         } catch (err) {
-            // En Android viejo (sin bridge actualizado) el WebView típicamente
-            // tira NotAllowedError aunque el usuario tenga permiso de la app —
-            // damos un mensaje accionable en lugar del genérico.
-            const name = (err as { name?: string } | null)?.name || "";
+            // Logueamos el error real para debug — sin esto era imposible saber
+            // si el problema es permiso, codec, otro proceso usando el mic, etc.
+            console.error("[ChatRuta] getUserMedia/MediaRecorder error:", err);
+            const e = err as { name?: string; message?: string } | null;
+            const name = e?.name || "";
+            const msg = e?.message || "";
+
             if (inAndroidApp && (name === "NotAllowedError" || name === "SecurityError" || name === "NotFoundError")) {
                 toast.error("Actualizá la app desde Play Store para grabar audio", { duration: 6000 });
-            } else if (name === "NotAllowedError") {
-                toast.error("Permiso de micrófono denegado. Habilitálo desde el navegador.");
-            } else if (name === "NotFoundError") {
+            } else if (name === "NotAllowedError" || name === "SecurityError") {
+                // El usuario denegó el permiso, o el navegador (Brave Shields,
+                // privacy mode, etc) está bloqueando la API.
+                toast.error("Permiso de micrófono bloqueado por el navegador. Revisá Shields/permisos del sitio.", { duration: 7000 });
+            } else if (name === "NotReadableError" || name === "TrackStartError") {
+                toast.error("Otro programa está usando el micrófono. Cerrá videollamadas o grabadoras y reintentá.", { duration: 7000 });
+            } else if (name === "NotFoundError" || name === "OverconstrainedError") {
                 toast.error("No se detectó micrófono en este dispositivo");
+            } else if (name === "NotSupportedError") {
+                toast.error("Tu navegador no soporta los formatos de audio. Probá Chrome o Firefox.");
             } else {
-                toast.error("No se pudo acceder al micrófono");
+                // Mostramos name + message para que el usuario nos diga qué es
+                toast.error(`Error de micrófono: ${name || "desconocido"}${msg ? " — " + msg : ""}`, { duration: 8000 });
             }
         }
     };
