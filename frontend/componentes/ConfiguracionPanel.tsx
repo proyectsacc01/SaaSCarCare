@@ -73,18 +73,19 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         const emailCuentaValue = data?.emailCuenta ?? "";
         const localPhone = readLocalUrgentPhone(emailCuentaValue || emailCuenta);
         const backendPhone = data?.telefonoUrgencias ?? "";
+        const rememberedPhone = backendPhone || localPhone || telefonoUrgencias || telefonoOriginal || "";
 
         if (!data) {
-          setTelefonoUrgencias(localPhone);
-          setTelefonoOriginal(localPhone);
+          setTelefonoUrgencias(rememberedPhone);
+          setTelefonoOriginal(rememberedPhone);
           return;
         }
 
         setEmailCuenta(emailCuentaValue);
         setEmailNotif(data.emailNotificaciones ?? "");
         setEmailOriginal(data.emailNotificaciones ?? "");
-        setTelefonoUrgencias(backendPhone || localPhone);
-        setTelefonoOriginal(backendPhone || localPhone);
+        setTelefonoUrgencias(rememberedPhone);
+        setTelefonoOriginal(rememberedPhone);
       })
       .catch(() => {});
   }, [open, apiUrl, getAuthHeaders]);
