@@ -167,13 +167,15 @@ public class ConductorController {
             return ResponseEntity.badRequest().body(Map.of("error", "El mensaje de soporte es obligatorio"));
         }
 
-        Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payload.get("conductorId"), payload.get("conductorEmail"));
-        if (conductorOpt.isEmpty()) {
-            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
-        }
+        String payloadConductorId = trimToNull(payload.get("conductorId"));
+        String payloadConductorEmail = trimToNull(payload.get("conductorEmail"));
+        String payloadConductorNombre = trimToNull(payload.get("conductorNombre"));
 
-        Conductor conductor = conductorOpt.get();
-        String conductorId = conductor.getId();
+        Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payloadConductorId, payloadConductorEmail);
+        Conductor conductor = conductorOpt.orElseGet(() -> construirConductorFallback(empresaId, payloadConductorId, payloadConductorEmail, payloadConductorNombre));
+        String conductorId = trimToNull(conductor.getId()) != null
+                ? conductor.getId()
+                : (payloadConductorEmail != null ? payloadConductorEmail : "conductor_sin_id");
         String asunto = payload.get("asunto") != null && !payload.get("asunto").trim().isBlank()
                 ? payload.get("asunto").trim()
                 : "Solicitud de soporte del conductor";
@@ -185,7 +187,9 @@ public class ConductorController {
             Optional<Ruta> rutaOpt = rutaRepository.findById(rutaId);
             if (rutaOpt.isPresent()) {
                 Ruta rutaEncontrada = rutaOpt.get();
-                if (empresaId.equals(rutaEncontrada.getUsuarioId()) && conductorId.equals(rutaEncontrada.getConductorId())) {
+                boolean mismaEmpresa = empresaId.equals(rutaEncontrada.getUsuarioId());
+                boolean mismoConductor = conductor.getId() == null || conductor.getId().isBlank() || conductorId.equals(rutaEncontrada.getConductorId());
+                if (mismaEmpresa && mismoConductor) {
                     ruta = rutaEncontrada;
                 } else {
                     rutaIgnorada = true;
@@ -265,13 +269,13 @@ public class ConductorController {
 
         String payloadConductorId = payload != null ? trimToNull(asString(payload.get("conductorId"))) : null;
         String payloadConductorEmail = payload != null ? trimToNull(asString(payload.get("conductorEmail"))) : null;
+        String payloadConductorNombre = payload != null ? trimToNull(asString(payload.get("conductorNombre"))) : null;
 
         Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payloadConductorId, payloadConductorEmail);
-        if (conductorOpt.isEmpty()) {
-            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
-        }
-        Conductor conductor = conductorOpt.get();
-        String conductorId = conductor.getId();
+        Conductor conductor = conductorOpt.orElseGet(() -> construirConductorFallback(empresaId, payloadConductorId, payloadConductorEmail, payloadConductorNombre));
+        String conductorId = trimToNull(conductor.getId()) != null
+                ? conductor.getId()
+                : (payloadConductorEmail != null ? payloadConductorEmail : "conductor_sin_id");
 
         // Si llega lat/lng en el payload, los persistimos antes de crear la alerta
         // — así el admin ve la ubicación EXACTA al momento del SOS.
@@ -282,7 +286,9 @@ public class ConductorController {
                 conductor.setLatitudActual(((Number) lat).doubleValue());
                 conductor.setLongitudActual(((Number) lng).doubleValue());
                 conductor.setUltimaActualizacionGPS(java.time.Instant.now().toString());
-                conductorRepository.save(conductor);
+                if (conductorOpt.isPresent()) {
+                    conductorRepository.save(conductor);
+                }
             }
         }
 
@@ -292,7 +298,9 @@ public class ConductorController {
         try {
             List<Ruta> rutas = rutaRepository.findByUsuarioIdAndConductorId(empresaId, conductorId);
             for (Ruta r : rutas) {
-                if ("EN_CURSO".equalsIgnoreCase(r.getEstado()) || "DETENIDO".equalsIgnoreCase(r.getEstado())) {
+                boolean esActiva = "EN_CURSO".equalsIgnoreCase(r.getEstado()) || "DETENIDO".equalsIgnoreCase(r.getEstado());
+                boolean mismoConductor = conductor.getId() == null || conductor.getId().isBlank() || conductorId.equals(r.getConductorId());
+                if (esActiva && mismoConductor) {
                     rutaId = r.getId();
                     rutaActiva = r;
                     break;
@@ -483,6 +491,16 @@ public class ConductorController {
         }
 
         return Optional.empty();
+    }
+
+    private Conductor construirConductorFallback(String empresaId, String payloadConductorId, String payloadConductorEmail, String payloadConductorNombre) {
+        Conductor conductor = new Conductor();
+        conductor.setId(payloadConductorId);
+        conductor.setEmail(payloadConductorEmail != null ? payloadConductorEmail : "");
+        conductor.setNombre(payloadConductorNombre != null ? payloadConductorNombre : (payloadConductorEmail != null ? payloadConductorEmail : "Conductor"));
+        conductor.setEmpresaId(empresaId);
+        conductor.setNombreEmpresa(usuarioRepository.findById(empresaId).map(Usuario::getNombreEmpresa).orElse("Sin empresa"));
+        return conductor;
     }
 
     private String resumir(String mensaje, int maxLen) {

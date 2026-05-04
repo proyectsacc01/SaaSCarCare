@@ -720,6 +720,7 @@ export default function ConductorDashboard() {
                 rutaId: rutaContexto?.id,
                 conductorId: driverUser?.id,
                 conductorEmail: driverUser?.email,
+                conductorNombre: driverUser?.nombre,
             });
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo enviar la solicitud');
@@ -1312,13 +1313,14 @@ export default function ConductorDashboard() {
                                     // vea EXACTAMENTE dónde estás cuando activaste el SOS.
                                     const sendSos = async (lat?: number, lng?: number) => {
                                         try {
-                                            const body: { latitud?: number; longitud?: number; conductorId?: string; conductorEmail?: string } = {};
+                                            const body: { latitud?: number; longitud?: number; conductorId?: string; conductorEmail?: string; conductorNombre?: string } = {};
                                             if (lat != null && lng != null) {
                                                 body.latitud = lat;
                                                 body.longitud = lng;
                                             }
                                             if (driverUser?.id) body.conductorId = driverUser.id;
                                             if (driverUser?.email) body.conductorEmail = driverUser.email;
+                                            if (driverUser?.nombre) body.conductorNombre = driverUser.nombre;
                                             const { res, data } = await postConductorCritical('/me/sos', body);
                                             if (res.ok) {
                                                 toast.error(data.emailEnviado
