@@ -183,6 +183,40 @@ export default function ConductorDashboard() {
         return headers;
     };
 
+    const postConductorCritical = async <TBody extends Record<string, unknown>>(path: '/me/support' | '/me/sos', body: TBody) => {
+        const candidates = [
+            `/proxy/conductores${path}`,
+            `${API_URL}/api/conductores${path}`,
+            `/api/conductores${path}`,
+        ];
+
+        let lastError: Error | null = null;
+
+        for (const url of candidates) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(body),
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                // Si el path simplemente no existe o el proxy está roto, probamos el siguiente.
+                if ([404, 405, 502, 503].includes(res.status)) {
+                    lastError = new Error((data as { error?: string }).error || `Fallo ${res.status} en ${url}`);
+                    continue;
+                }
+
+                return { res, data };
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error('Error de red');
+            }
+        }
+
+        throw lastError || new Error('No se pudo contactar con el servidor');
+    };
+
     const cargarRutas = async () => {
         try {
             setError(null);
@@ -676,16 +710,11 @@ export default function ConductorDashboard() {
             const rutaContexto = rutaEnProgreso || rutasPendientes[0];
         setSupportLoading(true);
         try {
-            const res = await fetch(`/proxy/conductores/me/support`, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({
-                    asunto: supportSubject.trim() || 'Soporte desde CarCare Driver',
-                    mensaje,
-                    rutaId: rutaContexto?.id,
-                }),
+            const { res, data } = await postConductorCritical('/me/support', {
+                asunto: supportSubject.trim() || 'Soporte desde CarCare Driver',
+                mensaje,
+                rutaId: rutaContexto?.id,
             });
-            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo enviar la solicitud');
             }
@@ -1282,12 +1311,7 @@ export default function ConductorDashboard() {
                                                 body.latitud = lat;
                                                 body.longitud = lng;
                                             }
-                                            const res = await fetch(`/proxy/conductores/me/sos`, {
-                                                method: 'POST',
-                                                headers: getAuthHeaders(),
-                                                body: JSON.stringify(body),
-                                            });
-                                            const data = await res.json().catch(() => ({}));
+                                            const { res, data } = await postConductorCritical('/me/sos', body);
                                             if (res.ok) {
                                                 toast.error(data.emailEnviado
                                                     ? "🆘 SOS enviado a la central y por correo"
