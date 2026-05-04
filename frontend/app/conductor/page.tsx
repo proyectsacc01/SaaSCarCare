@@ -267,62 +267,86 @@ export default function ConductorDashboard() {
         }
     };
 
-    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT', payload: { mensaje?: string; lat?: number; lng?: number; rutaId?: string }) => {
+    /**
+     * Abre el dialer del dispositivo con el número de la central.
+     * Estrategia robusta probando tres caminos en orden:
+     *   1. Bridge nativo Android (Intent.ACTION_VIEW con tel:) — el más fiable
+     *   2. <a href="tel:" target="_blank">.click() — funciona en Safari/Chrome móvil
+     *   3. window.location.href = "tel:" — último recurso
+     * Si ninguno funciona, copia el número al portapapeles y lo muestra.
+     */
+    const abrirDialerCentral = async (telefonoCrudo: string): Promise<boolean> => {
+        const limpio = telefonoCrudo.replace(/[^\d+]/g, '');
+        if (!limpio) return false;
+        const phoneUrl = `tel:${limpio}`;
+
+        // 1. Bridge nativo (AAB v25+): lanza Intent ACTION_VIEW que el sistema
+        // resuelve con la app de teléfono — sin pasar por el WebView.
+        const bridge = getAndroidTracker();
+        if (bridge?.openExternalUrl) {
+            try {
+                bridge.openExternalUrl(phoneUrl);
+                return true;
+            } catch { /* probamos siguiente */ }
+        }
+
+        // 2. <a href="tel:">.click() — más compatible que window.location.
+        // Safari iOS y Chrome Android responden mejor a un click sintético
+        // de un anchor que a un cambio de href programático.
+        if (typeof document !== 'undefined') {
+            try {
+                const a = document.createElement('a');
+                a.href = phoneUrl;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                return true;
+            } catch { /* probamos siguiente */ }
+        }
+
+        // 3. Fallback final
+        if (typeof window !== 'undefined') {
+            try {
+                window.location.href = phoneUrl;
+                return true;
+            } catch { return false; }
+        }
+        return false;
+    };
+
+    /**
+     * Cuando el flujo principal falla (ej. SOS al backend cayó), abrimos el
+     * teléfono de la central. NUNCA caemos a email/Gmail silenciosamente:
+     * si no hay teléfono configurado, mostramos un error claro y accionable.
+     */
+    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT') => {
         const cfg = await getConfigEmpresa();
         const telefono = cfg?.telefonoUrgencias?.trim();
-        const destino = cfg?.emailNotificaciones?.trim() || cfg?.emailCuenta?.trim();
 
         if (telefono) {
-            const phoneUrl = `tel:${telefono.replace(/[^\d+]/g, '')}`;
-            const bridge = getAndroidTracker();
-            if (bridge?.openExternalUrl) {
-                bridge.openExternalUrl(phoneUrl);
-            } else if (typeof window !== 'undefined') {
-                window.location.href = phoneUrl;
+            const ok = await abrirDialerCentral(telefono);
+            if (ok) {
+                toast.success(kind === 'SOS'
+                    ? `Llamando a la central · ${telefono}`
+                    : `Llamando a ${telefono}`,
+                    { duration: 6000 });
+                return;
             }
-            toast.success(kind === 'SOS'
-                ? 'Se abrió una llamada urgente a la central'
-                : 'Se abrió una llamada a la central');
+            // El dispositivo no permitió abrir el dialer — copiamos al portapapeles
+            try {
+                if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                    await navigator.clipboard.writeText(telefono);
+                    toast.error(`Tu dispositivo no abrió el teléfono. Número copiado: ${telefono}`, { duration: 10000 });
+                    return;
+                }
+            } catch { /* ignore */ }
+            toast.error(`Llamá manualmente a la central: ${telefono}`, { duration: 12000 });
             return;
         }
 
-        if (!destino) {
-            throw new Error('No hay email de la empresa configurado para contacto');
-        }
-
-        const nombre = driverUser?.nombre || 'Conductor';
-        const empresa = driverUser?.nombreEmpresa || cfg?.nombreEmpresa || 'Empresa';
-        const asunto = kind === 'SOS'
-            ? `CONTACTO URGENTE — ${nombre}`
-            : `Soporte CarCare Driver — ${nombre}`;
-
-        const mapsLink = payload.lat != null && payload.lng != null
-            ? `https://www.google.com/maps?q=${payload.lat},${payload.lng}`
-            : '';
-
-        const body = [
-            kind === 'SOS' ? 'CONTACTO URGENTE CON LA CENTRAL' : 'SOLICITUD DE SOPORTE',
-            `Conductor: ${nombre}`,
-            `Email: ${driverUser?.email || '-'}`,
-            `Empresa: ${empresa}`,
-            payload.rutaId ? `Ruta: #${payload.rutaId.slice(-6).toUpperCase()}` : 'Ruta: sin contexto',
-            mapsLink ? `Ubicación: ${mapsLink}` : 'Ubicación: no disponible',
-            '',
-            payload.mensaje?.trim() || (kind === 'SOS'
-                ? 'Necesito asistencia urgente. Revisad mi ubicación y contactad conmigo cuanto antes.'
-                : 'Solicitud de soporte enviada desde CarCare Driver.'),
-        ].join('\n');
-
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(destino)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(body)}`;
-        const bridge = getAndroidTracker();
-        if (bridge?.openExternalUrl) {
-            bridge.openExternalUrl(gmailUrl);
-        } else if (typeof window !== 'undefined') {
-            window.location.href = gmailUrl;
-        }
-        toast.success(kind === 'SOS'
-            ? 'Se abrió un contacto urgente por correo para la central'
-            : 'Se abrió un correo de soporte para la central');
+        // Sin teléfono configurado — instrucción clara al usuario.
+        toast.error("La central no configuró un teléfono de urgencia. Pedíle al admin que lo configure en Ajustes de Notificaciones.", { duration: 10000 });
     };
 
     const cargarRutas = async () => {
@@ -842,11 +866,8 @@ export default function ConductorDashboard() {
             }
         } catch (err: unknown) {
             try {
-                await openUrgentFallback('SUPPORT', {
-                    mensaje,
-                    rutaId: rutaContexto?.id,
-                });
-                toast.warning('El envío interno falló. Abrimos contacto directo con la central como alternativa.');
+                await openUrgentFallback('SUPPORT');
+                toast.warning('El envío interno falló. Te conectamos con la central por teléfono.');
             } catch {
                 toast.error(getErrorMessage(err, 'Error enviando soporte'));
             }
@@ -1442,23 +1463,15 @@ export default function ConductorDashboard() {
                                                     toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
                                                 }
                                             } else {
-                                                await openUrgentFallback('SOS', {
-                                                    lat,
-                                                    lng,
-                                                    rutaId: rutaActiva?.id,
-                                                });
-                                                toast.warning(data.error || 'El canal interno falló. Abrimos contacto directo con la central.');
+                                                await openUrgentFallback('SOS');
+                                                toast.warning(data.error || 'El canal interno falló. Te conectamos con la central.');
                                             }
                                         } catch {
                                             try {
-                                                await openUrgentFallback('SOS', {
-                                                    lat,
-                                                    lng,
-                                                    rutaId: rutaActiva?.id,
-                                                });
-                                                toast.warning('Sin conexión interna. Abrimos contacto directo con la central.');
+                                                await openUrgentFallback('SOS');
+                                                toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
                                             } catch {
-                                                toast.error("Sin conexión. Llama al teléfono de la central.");
+                                                toast.error("Sin conexión. Llamá al teléfono de la central.");
                                             }
                                         }
                                     };
@@ -1794,6 +1807,31 @@ export default function ConductorDashboard() {
                                         action: () => {
                                             const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/privacy`;
                                             openExternal(url);
+                                        },
+                                    },
+                                    {
+                                        icon: '📞', label: 'Llamar a la central',
+                                        sub: 'Abrir el teléfono con el número configurado por el admin',
+                                        action: async () => {
+                                            const cfg = await getConfigEmpresa();
+                                            const tel = cfg?.telefonoUrgencias?.trim();
+                                            if (!tel) {
+                                                toast.error("La central aún no configuró un teléfono. Pedíle al admin que lo guarde en Ajustes de Notificaciones.", { duration: 8000 });
+                                                return;
+                                            }
+                                            const ok = await abrirDialerCentral(tel);
+                                            if (ok) {
+                                                toast.success(`Llamando a ${tel}`, { duration: 5000 });
+                                            } else {
+                                                try {
+                                                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                                        await navigator.clipboard.writeText(tel);
+                                                        toast.error(`No se pudo abrir el teléfono. Número copiado: ${tel}`, { duration: 10000 });
+                                                        return;
+                                                    }
+                                                } catch { /* ignore */ }
+                                                toast.error(`Llamá manualmente: ${tel}`, { duration: 12000 });
+                                            }
                                         },
                                     },
                                     {
