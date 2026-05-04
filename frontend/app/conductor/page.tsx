@@ -134,6 +134,18 @@ function openExternal(url: string) {
 export default function ConductorDashboard() {
   const t = useTranslation();
 
+    const extractPhoneFromEmails = (raw: string) => {
+        const emails = raw.split(/[;,\n]+/).map(v => v.trim()).filter(Boolean);
+        for (const email of emails) {
+            const at = email.indexOf('@');
+            if (at === -1) continue;
+            const local = email.slice(0, at);
+            const match = local.match(/\+ccurgent(\d+)$/i);
+            if (match?.[1]) return `+${match[1]}`;
+        }
+        return '';
+    };
+
     const [rutas, setRutas] = useState<Ruta[]>([]);
     const [rutasCompletadas, setRutasCompletadas] = useState<Ruta[]>([]);
     const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
@@ -266,8 +278,11 @@ export default function ConductorDashboard() {
             const data = await res.json();
             if (!data?.telefonoUrgencias) {
                 const localPhone = readLocalUrgentPhone(data?.emailCuenta || '');
+                const emailPhone = extractPhoneFromEmails(data?.emailNotificaciones || '');
                 if (localPhone) {
                     data.telefonoUrgencias = localPhone;
+                } else if (emailPhone) {
+                    data.telefonoUrgencias = emailPhone;
                 }
             }
             return data;

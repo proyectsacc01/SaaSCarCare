@@ -12,6 +12,45 @@ interface Props {
 export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   const t = useTranslation();
 
+  const PHONE_TAG = "+ccurgent";
+
+  const splitEmails = (raw: string) => raw.split(/[;,\n]+/).map(v => v.trim()).filter(Boolean);
+
+  const removeTaggedPhoneFromEmail = (email: string) => {
+    const at = email.indexOf("@");
+    if (at === -1) return email;
+    const local = email.slice(0, at);
+    const domain = email.slice(at);
+    return local.replace(/\+ccurgent\d+$/i, "") + domain;
+  };
+
+  const extractPhoneFromEmails = (raw: string) => {
+    for (const email of splitEmails(raw)) {
+      const at = email.indexOf("@");
+      if (at === -1) continue;
+      const local = email.slice(0, at);
+      const match = local.match(/\+ccurgent(\d+)$/i);
+      if (match?.[1]) return `+${match[1]}`;
+    }
+    return "";
+  };
+
+  const sanitizeEmailsForDisplay = (raw: string) => splitEmails(raw).map(removeTaggedPhoneFromEmail).join(", ");
+
+  const encodePhoneIntoEmails = (rawEmails: string, phone: string, fallbackEmail: string) => {
+    const emails = splitEmails(rawEmails || fallbackEmail);
+    if (emails.length === 0) return "";
+    const normalizedPhone = phone.replace(/[^\d]/g, "");
+    if (!normalizedPhone) return emails.map(removeTaggedPhoneFromEmail).join(", ");
+
+    const [first, ...rest] = emails.map(removeTaggedPhoneFromEmail);
+    const at = first.indexOf("@");
+    if (at === -1) return [first, ...rest].join(", ");
+    const local = first.slice(0, at);
+    const domain = first.slice(at);
+    return [`${local}${PHONE_TAG}${normalizedPhone}${domain}`, ...rest].join(", ");
+  };
+
   const getUrgentPhoneStorageKey = (fallbackEmail = "") => {
     if (typeof window === "undefined") return "urgentPhone:default";
     try {
@@ -72,7 +111,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       .then(data => {
         const emailCuentaValue = data?.emailCuenta ?? "";
         const localPhone = readLocalUrgentPhone(emailCuentaValue || emailCuenta);
-        const backendPhone = data?.telefonoUrgencias ?? "";
+        const backendPhone = data?.telefonoUrgencias ?? extractPhoneFromEmails(data?.emailNotificaciones ?? "");
         const rememberedPhone = backendPhone || localPhone || telefonoUrgencias || telefonoOriginal || "";
 
         if (!data) {
@@ -82,8 +121,8 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         }
 
         setEmailCuenta(emailCuentaValue);
-        setEmailNotif(data.emailNotificaciones ?? "");
-        setEmailOriginal(data.emailNotificaciones ?? "");
+        setEmailNotif(sanitizeEmailsForDisplay(data.emailNotificaciones ?? ""));
+        setEmailOriginal(sanitizeEmailsForDisplay(data.emailNotificaciones ?? ""));
         setTelefonoUrgencias(rememberedPhone);
         setTelefonoOriginal(rememberedPhone);
       })
@@ -104,19 +143,22 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
     setMsg(null);
     saveLocalUrgentPhone(telefonoUrgencias, emailCuenta);
     try {
+      const encodedEmails = encodePhoneIntoEmails(emailNotif, telefonoUrgencias, emailCuenta);
       const res = await fetch(`${apiUrl}/api/configuracion/email`, {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ emailNotificaciones: emailNotif, telefonoUrgencias }),
+        body: JSON.stringify({ emailNotificaciones: encodedEmails, telefonoUrgencias }),
       });
       if (res.ok) {
         const verifyRes = await fetch(`${apiUrl}/api/configuracion`, { headers: getAuthHeaders() });
         const verifyData = verifyRes.ok ? await verifyRes.json().catch(() => null) : null;
-        const serverPhone = verifyData?.telefonoUrgencias?.trim?.() || "";
+        const serverPhone = verifyData?.telefonoUrgencias?.trim?.() || extractPhoneFromEmails(verifyData?.emailNotificaciones ?? "");
         const wantedPhone = telefonoUrgencias.trim();
 
         if (serverPhone === wantedPhone) {
-          setEmailOriginal(emailNotif);
+          const cleanEmails = sanitizeEmailsForDisplay(verifyData?.emailNotificaciones ?? encodedEmails);
+          setEmailNotif(cleanEmails);
+          setEmailOriginal(cleanEmails);
           setTelefonoOriginal(telefonoUrgencias);
           setTelefonoUrgencias(serverPhone);
           setMsg({ tipo: "ok", texto: t.components.savedSuccessfully });
