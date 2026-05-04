@@ -202,7 +202,7 @@ export default function ConductorDashboard() {
     // Modal de "Llamar a la central". Cuando algo falla (SOS, soporte, etc) o el
     // usuario toca "Llamar" en el menú, mostramos este diálogo con un botón grande
     // que dispara el dialer en un click limpio.
-    const [showCallDialog, setShowCallDialog] = useState<{ open: boolean; reason: 'SOS' | 'SUPPORT' | 'CALL'; phone: string } | null>(null);
+    const [showCallDialog, setShowCallDialog] = useState<{ open: boolean; reason: 'SOS' | 'SUPPORT' | 'CALL' | '112'; phone: string } | null>(null);
     const trackedRouteIdRef = useRef<string | null>(null);
 
     const getAuthHeaders = (): Record<string, string> => {
@@ -1487,14 +1487,13 @@ export default function ConductorDashboard() {
                                     🚨 CONTACTO URGENTE CON LA CENTRAL
                                 </button>
 
-                                <a
-                                    href="tel:112"
-                                    onClick={(e) => {
+                                <button
+                                    onClick={() => {
                                         const bridge = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
                                         if (bridge?.openExternalUrl) {
-                                            e.preventDefault();
-                                            try { bridge.openExternalUrl('tel:112'); } catch { /* fallback al <a> */ }
+                                            try { bridge.openExternalUrl('tel:112'); return; } catch { /* fallback */ }
                                         }
+                                        window.location.href = 'tel:112';
                                     }}
                                     style={{
                                         width: '100%', padding: '1.2rem 1rem',
@@ -1504,13 +1503,15 @@ export default function ConductorDashboard() {
                                         fontSize: '1.1rem', cursor: 'pointer',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         gap: '0.6rem', letterSpacing: '1.2px',
+                                        boxSizing: 'border-box' as const, minHeight: '56px',
                                         boxShadow: '0 12px 30px -10px rgba(239,68,68,0.65), inset 0 1px 0 rgba(255,255,255,0.1)',
-                                        transition: 'all 0.2s', textDecoration: 'none',
+                                        transition: 'all 0.2s',
                                         animation: 'sos-pulse 2.5s ease-in-out infinite',
                                     }}
                                 >
-                                    🆘 SOS — LLAMAR AL 112
-                                </a>
+                                    <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>&#x1F198;</span>
+                                    <span>SOS — LLAMAR AL 112</span>
+                                </button>
                             </div>
                         </div>
                     )}
