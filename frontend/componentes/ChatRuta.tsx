@@ -60,7 +60,6 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const [isRecording, setIsRecording] = useState(false);
     const [recordingSeconds, setRecordingSeconds] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const fileRef = useRef<HTMLInputElement>(null);
     const lastSeenIdRef = useRef<string | null>(null);
     const recorderRef = useRef<MediaRecorder | null>(null);
     const recorderChunksRef = useRef<Blob[]>([]);
@@ -241,24 +240,43 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         if (typeof window === "undefined") return;
 
         const bridge = getAndroidTracker();
+
+        // Detectamos si estamos en el WebView de la app Android. AndroidTracker
+        // existe siempre en la app, aunque sea una versión vieja.
+        const inAndroidApp = !!bridge;
+
+        // Camino preferido: bridge nativo de la versión nueva — abre la grabadora
+        // del sistema directamente, NUNCA el explorador de archivos.
         if (bridge?.startRecording) {
             setIsRecording(true);
             setRecordingSeconds(0);
             setMediaPreview(null);
-            bridge.startRecording();
-            return;
+            try {
+                bridge.startRecording();
+                return;
+            } catch {
+                setIsRecording(false);
+                toast.error("No se pudo abrir la grabadora del sistema");
+                return;
+            }
         }
 
         if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-            toast.error("Tu navegador no soporta grabación de audio");
+            // Si estamos en la app Android sin bridge nuevo, lo único que falta
+            // es actualizarla — no hay nada que el frontend pueda hacer.
+            if (inAndroidApp) {
+                toast.error("Actualizá la app desde Play Store para grabar audio", { duration: 6000 });
+            } else {
+                toast.error("Tu navegador no soporta grabación de audio");
+            }
             return;
         }
 
-        // En Android WebView, getUserMedia puede fallar porque la web no tiene
-        // el permiso RESOURCE_AUDIO_CAPTURE concedido aún. Si eso pasa, invocamos
-        // el puente nativo para que pida el permiso de micrófono al sistema.
-        // Cuando el usuario conceda, llega el evento "mic-permission-granted"
-        // y reintentamos la grabación automáticamente.
+        // En WebView Android, getUserMedia puede fallar porque la web no tiene
+        // el permiso RESOURCE_AUDIO_CAPTURE concedido aún. Si el bridge expone
+        // requestMicPermission, lo usamos para pedir el permiso de micrófono al
+        // sistema. Cuando el usuario conceda, llega "mic-permission-granted" y
+        // reintentamos la grabación automáticamente.
         if (bridge?.requestMicPermission) {
             const onGranted = () => {
                 window.removeEventListener("mic-permission-granted", onGranted);
@@ -268,12 +286,18 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             const onDenied = () => {
                 window.removeEventListener("mic-permission-granted", onGranted);
                 window.removeEventListener("mic-permission-denied", onDenied);
-                toast.error("Permiso de micrófono denegado. Habilítalo en Ajustes de la app.");
+                toast.error("Permiso de micrófono denegado. Habilitálo en Ajustes de la app.");
             };
             window.addEventListener("mic-permission-granted", onGranted);
             window.addEventListener("mic-permission-denied", onDenied);
-            bridge.requestMicPermission();
-            return;
+            try {
+                bridge.requestMicPermission();
+                return;
+            } catch {
+                window.removeEventListener("mic-permission-granted", onGranted);
+                window.removeEventListener("mic-permission-denied", onDenied);
+                // Cae al getUserMedia como último recurso
+            }
         }
 
         try {
@@ -327,32 +351,20 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     return next;
                 });
             }, 1000);
-        } catch {
-            toast.error("No se pudo acceder al micrófono");
-        }
-    };
-
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        e.target.value = "";
-
-        if (!file.type.startsWith("audio/")) {
-            toast.error("Solo audios");
-            return;
-        }
-
-        try {
-            if (file.size > MAX_MEDIA_SIZE) {
-                toast.error("Audio demasiado grande (máx. 2MB)");
-                return;
+        } catch (err) {
+            // En Android viejo (sin bridge actualizado) el WebView típicamente
+            // tira NotAllowedError aunque el usuario tenga permiso de la app —
+            // damos un mensaje accionable en lugar del genérico.
+            const name = (err as { name?: string } | null)?.name || "";
+            if (inAndroidApp && (name === "NotAllowedError" || name === "SecurityError" || name === "NotFoundError")) {
+                toast.error("Actualizá la app desde Play Store para grabar audio", { duration: 6000 });
+            } else if (name === "NotAllowedError") {
+                toast.error("Permiso de micrófono denegado. Habilitálo desde el navegador.");
+            } else if (name === "NotFoundError") {
+                toast.error("No se detectó micrófono en este dispositivo");
+            } else {
+                toast.error("No se pudo acceder al micrófono");
             }
-
-            const dataUrl = await fileToDataUrl(file);
-            const base64 = dataUrl.split(",")[1] || "";
-            setMediaPreview({ base64, type: file.type });
-        } catch {
-            toast.error("No se pudo adjuntar el archivo");
         }
     };
 
@@ -720,13 +732,9 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                     background: 'rgba(255,255,255,0.02)',
                     borderTop: '1px solid rgba(255,255,255,0.05)',
                 }}>
-                    <input
-                        ref={fileRef}
-                        type="file"
-                        accept="audio/*"
-                        onChange={handleFileSelect}
-                        style={{ display: 'none' }}
-                    />
+                    {/* Sin input type=file: el botón del micrófono SIEMPRE graba —
+                        nunca abre el explorador de archivos. La grabación va por
+                        bridge nativo (preferido) o getUserMedia, en ese orden. */}
                     <button
                         type="button"
                         onClick={() => {
