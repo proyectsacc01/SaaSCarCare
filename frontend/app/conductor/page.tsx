@@ -13,6 +13,7 @@ interface Ruta {
     origen: string;
     destino: string;
     distanciaEstimadaKm: number;
+    distanciaRecorridaKm?: number | null;
     estado: string;
     vehiculoId: string;
     fecha: string;
@@ -20,6 +21,14 @@ interface Ruta {
     longitudOrigen?: number;
     latitudDestino?: number;
     longitudDestino?: number;
+}
+
+interface Repostaje {
+    id: string;
+    fecha?: string;
+    litros?: number | null;
+    costeTotal?: number | null;
+    conductorId?: string | null;
 }
 
 interface Vehiculo {
@@ -120,6 +129,7 @@ export default function ConductorDashboard() {
     const [rutas, setRutas] = useState<Ruta[]>([]);
     const [rutasCompletadas, setRutasCompletadas] = useState<Ruta[]>([]);
     const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
+    const [repostajes, setRepostajes] = useState<Repostaje[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<DriverTab>('inicio');
@@ -239,6 +249,16 @@ export default function ConductorDashboard() {
         } catch { /* silencioso — los vehículos son auxiliares */ }
     };
 
+    const cargarRepostajes = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/repostajes`, { headers: getAuthHeaders() });
+            if (res.ok) {
+                const data: Repostaje[] = await res.json();
+                setRepostajes(data);
+            }
+        } catch { /* silencioso — solo afecta métricas del perfil */ }
+    };
+
     useEffect(() => {
         const userStr = localStorage.getItem("user");
         if (!userStr) {
@@ -252,6 +272,7 @@ export default function ConductorDashboard() {
         if (savedPhoto) setProfilePhoto(savedPhoto);
         cargarRutas();
         cargarVehiculos();
+        cargarRepostajes();
         const interval = setInterval(cargarRutas, 10000);
 
         return () => {
@@ -602,6 +623,7 @@ export default function ConductorDashboard() {
                 toast.success(`Repostaje registrado — €${costeTotal.toFixed(2)}`);
                 setShowRefuelForm(false);
                 setRefuelData({ vehiculoId: '', litros: '', precioPorLitro: '1.650', estacion: '', kmActual: '' });
+                cargarRepostajes();
             } else {
                 const body = await res.text().catch(() => '');
                 if (res.status === 403) toast.error("Sin permiso para este vehículo");
@@ -654,7 +676,7 @@ export default function ConductorDashboard() {
             const rutaContexto = rutaEnProgreso || rutasPendientes[0];
         setSupportLoading(true);
         try {
-            const res = await fetch(`/api/conductores/me/support`, {
+            const res = await fetch(`/proxy/conductores/me/support`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
@@ -704,6 +726,17 @@ export default function ConductorDashboard() {
 
     const rutaActiva = rutaEnProgreso;
 
+    const getRouteKm = (ruta: Ruta) => {
+        if (ruta.distanciaRecorridaKm != null && ruta.distanciaRecorridaKm > 0) {
+            return ruta.distanciaRecorridaKm;
+        }
+        return ruta.distanciaEstimadaKm || 0;
+    };
+
+    const repostajesDelConductor = repostajes.filter((r) => r.conductorId && r.conductorId === driverUser?.id);
+    const litrosCombustible = repostajesDelConductor.reduce((acc, r) => acc + (r.litros || 0), 0);
+    const dineroCombustible = repostajesDelConductor.reduce((acc, r) => acc + (r.costeTotal || 0), 0);
+
     // KM RECORRIDOS HOY: solo rutas completadas con fecha = hoy (zona horaria local)
     const hoyStr = new Date().toISOString().slice(0, 10);
     const completadasHoy = rutasCompletadas.filter(r => {
@@ -712,8 +745,8 @@ export default function ConductorDashboard() {
         if (isNaN(f.getTime())) return false;
         return f.toISOString().slice(0, 10) === hoyStr;
     });
-    const kmHoyReales = completadasHoy.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
-    const kmTotalAcumulado = rutasCompletadas.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
+    const kmHoyReales = completadasHoy.reduce((acc, r) => acc + getRouteKm(r), 0);
+    const kmTotalAcumulado = rutasCompletadas.reduce((acc, r) => acc + getRouteKm(r), 0);
 
     // FILTRO DE HISTORIAL — calculamos las rutas visibles según filtro + búsqueda
     const filtroFecha = (() => {
@@ -735,7 +768,7 @@ export default function ConductorDashboard() {
         }
         return true;
     });
-    const kmTotalesPeriodo = rutasHistorialFiltradas.reduce((acc, r) => acc + (r.distanciaEstimadaKm || 0), 0);
+    const kmTotalesPeriodo = rutasHistorialFiltradas.reduce((acc, r) => acc + getRouteKm(r), 0);
 
     if (loading && !error) return (
         <BackgroundMeteors>
@@ -1070,7 +1103,7 @@ export default function ConductorDashboard() {
                                                                     ? new Date(r.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                                                                     : 'Sin fecha'}
                                                             </span>
-                                                            <span style={{ fontSize: '0.55rem', color: '#4b5563' }}>• {r.distanciaEstimadaKm} km</span>
+                                                            <span style={{ fontSize: '0.55rem', color: '#4b5563' }}>• {getRouteKm(r).toFixed(1)} km</span>
                                                         </div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden' }}>
                                                             <span style={{ fontSize: '0.85rem', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.origen}</span>
@@ -1249,7 +1282,7 @@ export default function ConductorDashboard() {
                                                 body.latitud = lat;
                                                 body.longitud = lng;
                                             }
-                                            const res = await fetch(`/api/conductores/me/sos`, {
+                                            const res = await fetch(`/proxy/conductores/me/sos`, {
                                                 method: 'POST',
                                                 headers: getAuthHeaders(),
                                                 body: JSON.stringify(body),
@@ -1395,7 +1428,7 @@ export default function ConductorDashboard() {
                                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.destino}</span>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
-                                                            <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: 600 }}>{r.distanciaEstimadaKm} km</span>
+                                                            <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: 600 }}>{getRouteKm(r).toFixed(1)} km</span>
                                                             {r.fecha && <span style={{ fontSize: '0.6rem', color: '#4b5563' }}>{new Date(r.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>}
                                                         </div>
                                                     </div>
@@ -1515,9 +1548,11 @@ export default function ConductorDashboard() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                 {[
                                     { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b', icon: '✓' },
-                                    { label: 'KM Totales', value: `${rutasCompletadas.reduce((acc, r) => acc + r.distanciaEstimadaKm, 0).toFixed(0)}`, color: '#60a5fa', icon: '🛣' },
+                                    { label: 'KM Reales', value: `${kmTotalAcumulado.toFixed(0)}`, color: '#60a5fa', icon: '🛣' },
                                     { label: 'En progreso', value: rutasEnProgresoCount, color: '#f59e0b', icon: '⚡' },
                                     { label: 'Tiempo activo', value: elapsedSeconds > 0 ? formatElapsed(elapsedSeconds) : '—', color: '#a78bfa', icon: '⏱' },
+                                    { label: 'Combustible', value: `${litrosCombustible.toFixed(1)} L`, color: '#f97316', icon: '⛽' },
+                                    { label: 'Dinero combustible', value: `€${dineroCombustible.toFixed(2)}`, color: '#14b8a6', icon: '💶' },
                                 ].map((s, i) => (
                                     <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '1rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
                                         <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '40px', height: '40px', background: `radial-gradient(circle, ${s.color}15 0%, transparent 70%)` }} />
