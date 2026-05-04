@@ -181,6 +181,16 @@ export default function ConductorDashboard() {
     const [supportLoading, setSupportLoading] = useState(false);
     const [supportSubject, setSupportSubject] = useState('');
     const [supportMessage, setSupportMessage] = useState('');
+    // Teléfono de la central, cacheado al iniciar y refrescado periódicamente.
+    // CACHEADO porque en iOS Safari el tel: SOLO se abre dentro del mismo
+    // user-gesture del click — si hacemos `await fetch(...)` antes, el browser
+    // pierde el contexto y bloquea el dialer. Con el número en estado, el click
+    // → abrir dialer es síncrono y siempre funciona.
+    const [centralPhone, setCentralPhone] = useState<string>('');
+    // Modal de "Llamar a la central". Cuando algo falla (SOS, soporte, etc) o el
+    // usuario toca "Llamar" en el menú, mostramos este diálogo con un botón grande
+    // que dispara el dialer en un click limpio.
+    const [showCallDialog, setShowCallDialog] = useState<{ open: boolean; reason: 'SOS' | 'SUPPORT' | 'CALL' } | null>(null);
     const trackedRouteIdRef = useRef<string | null>(null);
 
     const getAuthHeaders = (): Record<string, string> => {
@@ -268,85 +278,20 @@ export default function ConductorDashboard() {
     };
 
     /**
-     * Abre el dialer del dispositivo con el número de la central.
-     * Estrategia robusta probando tres caminos en orden:
-     *   1. Bridge nativo Android (Intent.ACTION_VIEW con tel:) — el más fiable
-     *   2. <a href="tel:" target="_blank">.click() — funciona en Safari/Chrome móvil
-     *   3. window.location.href = "tel:" — último recurso
-     * Si ninguno funciona, copia el número al portapapeles y lo muestra.
+     * Cuando el flujo principal falla (ej. SOS o Support al backend cayó),
+     * mostramos un MODAL con el botón grande de "Llamar".
+     *
+     * Por qué un modal en vez de abrir el dialer directo: en iOS Safari y
+     * algunos Chrome Android, `tel:` solo se abre si el click NO pasó por
+     * `await fetch(...)` antes. Como aquí venimos de un fetch fallido, el
+     * navegador ya consumió el user-gesture y bloquea el dialer. El modal
+     * pone un botón nuevo que da un user-gesture limpio para abrir el tel:.
+     *
+     * NUNCA caemos a email/Gmail silenciosamente — si no hay teléfono
+     * configurado, el modal lo dice claramente con instrucciones.
      */
-    const abrirDialerCentral = async (telefonoCrudo: string): Promise<boolean> => {
-        const limpio = telefonoCrudo.replace(/[^\d+]/g, '');
-        if (!limpio) return false;
-        const phoneUrl = `tel:${limpio}`;
-
-        // 1. Bridge nativo (AAB v25+): lanza Intent ACTION_VIEW que el sistema
-        // resuelve con la app de teléfono — sin pasar por el WebView.
-        const bridge = getAndroidTracker();
-        if (bridge?.openExternalUrl) {
-            try {
-                bridge.openExternalUrl(phoneUrl);
-                return true;
-            } catch { /* probamos siguiente */ }
-        }
-
-        // 2. <a href="tel:">.click() — más compatible que window.location.
-        // Safari iOS y Chrome Android responden mejor a un click sintético
-        // de un anchor que a un cambio de href programático.
-        if (typeof document !== 'undefined') {
-            try {
-                const a = document.createElement('a');
-                a.href = phoneUrl;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                return true;
-            } catch { /* probamos siguiente */ }
-        }
-
-        // 3. Fallback final
-        if (typeof window !== 'undefined') {
-            try {
-                window.location.href = phoneUrl;
-                return true;
-            } catch { return false; }
-        }
-        return false;
-    };
-
-    /**
-     * Cuando el flujo principal falla (ej. SOS al backend cayó), abrimos el
-     * teléfono de la central. NUNCA caemos a email/Gmail silenciosamente:
-     * si no hay teléfono configurado, mostramos un error claro y accionable.
-     */
-    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT') => {
-        const cfg = await getConfigEmpresa();
-        const telefono = cfg?.telefonoUrgencias?.trim();
-
-        if (telefono) {
-            const ok = await abrirDialerCentral(telefono);
-            if (ok) {
-                toast.success(kind === 'SOS'
-                    ? `Llamando a la central · ${telefono}`
-                    : `Llamando a ${telefono}`,
-                    { duration: 6000 });
-                return;
-            }
-            // El dispositivo no permitió abrir el dialer — copiamos al portapapeles
-            try {
-                if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                    await navigator.clipboard.writeText(telefono);
-                    toast.error(`Tu dispositivo no abrió el teléfono. Número copiado: ${telefono}`, { duration: 10000 });
-                    return;
-                }
-            } catch { /* ignore */ }
-            toast.error(`Llamá manualmente a la central: ${telefono}`, { duration: 12000 });
-            return;
-        }
-
-        // Sin teléfono configurado — instrucción clara al usuario.
-        toast.error("La central no configuró un teléfono de urgencia. Pedíle al admin que lo configure en Ajustes de Notificaciones.", { duration: 10000 });
+    const openUrgentFallback = (kind: 'SOS' | 'SUPPORT') => {
+        setShowCallDialog({ open: true, reason: kind });
     };
 
     const cargarRutas = async () => {
@@ -441,8 +386,24 @@ export default function ConductorDashboard() {
         cargarRepostajes();
         const interval = setInterval(cargarRutas, 10000);
 
+        // Cargar el teléfono de la central UNA vez al inicio y cachearlo.
+        // Después se refresca cada 60s en background. Crítico cachearlo: si
+        // hay que llamar al dialer (tel:), tiene que estar en estado para
+        // disparar en el mismo click — sin awaits que rompan el user-gesture.
+        const refreshCentralPhone = () => {
+            getConfigEmpresa()
+                .then((cfg) => {
+                    const t = cfg?.telefonoUrgencias?.trim();
+                    if (t) setCentralPhone(t);
+                })
+                .catch(() => { /* silencioso */ });
+        };
+        refreshCentralPhone();
+        const phoneInterval = setInterval(refreshCentralPhone, 60_000);
+
         return () => {
             clearInterval(interval);
+            clearInterval(phoneInterval);
             stopBrowserGPS();
         };
     }, []);
@@ -866,7 +827,7 @@ export default function ConductorDashboard() {
             }
         } catch (err: unknown) {
             try {
-                await openUrgentFallback('SUPPORT');
+                openUrgentFallback('SUPPORT');
                 toast.warning('El envío interno falló. Te conectamos con la central por teléfono.');
             } catch {
                 toast.error(getErrorMessage(err, 'Error enviando soporte'));
@@ -1463,12 +1424,12 @@ export default function ConductorDashboard() {
                                                     toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
                                                 }
                                             } else {
-                                                await openUrgentFallback('SOS');
+                                                openUrgentFallback('SOS');
                                                 toast.warning(data.error || 'El canal interno falló. Te conectamos con la central.');
                                             }
                                         } catch {
                                             try {
-                                                await openUrgentFallback('SOS');
+                                                openUrgentFallback('SOS');
                                                 toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
                                             } catch {
                                                 toast.error("Sin conexión. Llamá al teléfono de la central.");
@@ -1811,27 +1772,14 @@ export default function ConductorDashboard() {
                                     },
                                     {
                                         icon: '📞', label: 'Llamar a la central',
-                                        sub: 'Abrir el teléfono con el número configurado por el admin',
-                                        action: async () => {
-                                            const cfg = await getConfigEmpresa();
-                                            const tel = cfg?.telefonoUrgencias?.trim();
-                                            if (!tel) {
-                                                toast.error("La central aún no configuró un teléfono. Pedíle al admin que lo guarde en Ajustes de Notificaciones.", { duration: 8000 });
-                                                return;
-                                            }
-                                            const ok = await abrirDialerCentral(tel);
-                                            if (ok) {
-                                                toast.success(`Llamando a ${tel}`, { duration: 5000 });
-                                            } else {
-                                                try {
-                                                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                                                        await navigator.clipboard.writeText(tel);
-                                                        toast.error(`No se pudo abrir el teléfono. Número copiado: ${tel}`, { duration: 10000 });
-                                                        return;
-                                                    }
-                                                } catch { /* ignore */ }
-                                                toast.error(`Llamá manualmente: ${tel}`, { duration: 12000 });
-                                            }
+                                        sub: centralPhone
+                                            ? `Marcar ${centralPhone}`
+                                            : 'El admin aún no configuró un número',
+                                        action: () => {
+                                            // SIN await: usamos el cache para que el click siga
+                                            // siendo el mismo user-gesture y el tel: se abra en
+                                            // iOS/Android sin que el navegador lo bloquee.
+                                            setShowCallDialog({ open: true, reason: 'CALL' });
                                         },
                                     },
                                     {
@@ -2027,6 +1975,159 @@ export default function ConductorDashboard() {
                 * { -webkit-tap-highlight-color: transparent; }
                 input, select { font-family: inherit; }
             `}</style>
+
+            {/* ─── MODAL: Llamar a la central ─────────────────────────────
+                Aparece cuando algo falla (SOS, soporte) o cuando el usuario
+                toca explícitamente "Llamar a la central". El botón dispara
+                el dialer en un user-gesture limpio: lee centralPhone del
+                estado (cacheado al iniciar, refrescado cada 60s) y abre
+                tel: SIN awaits intermedios — clave para que iOS Safari y
+                Chrome Android no bloqueen el dialer. */}
+            {showCallDialog?.open && (
+                <div
+                    onClick={() => setShowCallDialog(null)}
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 9999,
+                        background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(8px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '1.2rem',
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: '100%', maxWidth: '380px',
+                            background: 'linear-gradient(180deg, rgba(15,18,26,0.99), rgba(8,10,16,1))',
+                            border: '1px solid rgba(59,246,59,0.22)',
+                            borderRadius: '20px',
+                            padding: '1.5rem 1.3rem 1.3rem',
+                            boxShadow: '0 30px 80px -20px rgba(0,0,0,0.7)',
+                        }}
+                    >
+                        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                            <div style={{
+                                width: '56px', height: '56px', margin: '0 auto 0.75rem',
+                                borderRadius: '50%',
+                                background: showCallDialog.reason === 'SOS'
+                                    ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                                    : 'linear-gradient(135deg, #3bf63b, #22c55e)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '1.7rem',
+                                boxShadow: showCallDialog.reason === 'SOS'
+                                    ? '0 10px 26px -8px rgba(239,68,68,0.7)'
+                                    : '0 10px 26px -8px rgba(59,246,59,0.6)',
+                            }}>
+                                {showCallDialog.reason === 'SOS' ? '🚨' : '📞'}
+                            </div>
+                            <h3 style={{ margin: '0 0 0.35rem', color: '#fff', fontSize: '1.05rem', fontWeight: 800 }}>
+                                {showCallDialog.reason === 'SOS' ? 'Contacto urgente' : 'Llamar a la central'}
+                            </h3>
+                            <p style={{ margin: 0, color: '#9ca3af', fontSize: '0.78rem', lineHeight: 1.4 }}>
+                                {centralPhone
+                                    ? showCallDialog.reason === 'SOS'
+                                        ? 'Toca el botón para llamar a la central de inmediato.'
+                                        : 'Tu dispositivo abrirá la app de teléfono.'
+                                    : 'La central aún no configuró un número de urgencia. Pedíle al admin que lo guarde en Ajustes de Notificaciones del panel.'}
+                            </p>
+                        </div>
+
+                        {centralPhone && (
+                            <div style={{
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: '12px',
+                                padding: '0.85rem 1rem',
+                                marginBottom: '0.9rem',
+                                textAlign: 'center',
+                                fontFamily: 'system-ui, -apple-system, sans-serif',
+                                fontSize: '1.35rem',
+                                fontWeight: 700,
+                                color: '#3bf63b',
+                                letterSpacing: '1px',
+                            }}>
+                                {centralPhone}
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                            {centralPhone && (
+                                <a
+                                    href={`tel:${centralPhone.replace(/[^\d+]/g, '')}`}
+                                    onClick={(e) => {
+                                        // En Android con bridge nativo, preferimos el Intent
+                                        // (más fiable que delegar al WebView). Si no hay
+                                        // bridge, dejamos el comportamiento default del <a>
+                                        // — que es lo que mejor funciona en mobile browsers.
+                                        const bridge = (typeof window !== 'undefined' ? (window as any).AndroidTracker : null);
+                                        if (bridge?.openExternalUrl) {
+                                            e.preventDefault();
+                                            try {
+                                                bridge.openExternalUrl(`tel:${centralPhone.replace(/[^\d+]/g, '')}`);
+                                            } catch { /* el <a> ya hizo su trabajo */ }
+                                        }
+                                        setShowCallDialog(null);
+                                    }}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        gap: '8px',
+                                        padding: '0.95rem',
+                                        background: showCallDialog.reason === 'SOS'
+                                            ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                                            : 'linear-gradient(135deg, #3bf63b, #22c55e)',
+                                        color: showCallDialog.reason === 'SOS' ? '#fff' : '#041107',
+                                        textDecoration: 'none',
+                                        borderRadius: '14px',
+                                        fontWeight: 900, fontSize: '0.95rem',
+                                        boxShadow: showCallDialog.reason === 'SOS'
+                                            ? '0 10px 24px -10px rgba(239,68,68,0.6)'
+                                            : '0 10px 24px -10px rgba(59,246,59,0.6)',
+                                    }}
+                                >
+                                    📞 LLAMAR AHORA
+                                </a>
+                            )}
+                            {centralPhone && (
+                                <button
+                                    onClick={() => {
+                                        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                            navigator.clipboard.writeText(centralPhone)
+                                                .then(() => toast.success(`Número copiado: ${centralPhone}`))
+                                                .catch(() => toast.error(`Marcá manualmente: ${centralPhone}`));
+                                        } else {
+                                            toast.error(`Marcá manualmente: ${centralPhone}`);
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '0.7rem',
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid rgba(255,255,255,0.08)',
+                                        borderRadius: '12px',
+                                        color: '#9ca3af',
+                                        fontWeight: 700, fontSize: '0.78rem',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    Copiar número
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowCallDialog(null)}
+                                style={{
+                                    padding: '0.7rem',
+                                    background: 'transparent',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '12px',
+                                    color: '#6b7280',
+                                    fontWeight: 700, fontSize: '0.78rem',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </BackgroundMeteors>
     );
 }
