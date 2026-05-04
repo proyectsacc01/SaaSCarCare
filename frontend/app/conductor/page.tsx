@@ -907,11 +907,9 @@ export default function ConductorDashboard() {
 
     const rutaActiva = rutaEnProgreso;
 
+    // SOLO km reales (GPS). Sin GPS → 0 km.
     const getRouteKm = (ruta: Ruta) => {
-        if (ruta.distanciaRecorridaKm != null && ruta.distanciaRecorridaKm > 0) {
-            return ruta.distanciaRecorridaKm;
-        }
-        return ruta.distanciaEstimadaKm || 0;
+        return ruta.distanciaRecorridaKm ?? 0;
     };
 
     const repostajesDelConductor = repostajes.filter((r) => r.conductorId && r.conductorId === driverUser?.id);

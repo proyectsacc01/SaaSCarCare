@@ -132,29 +132,13 @@ public class RutaController {
                                 && ruta.getVehiculoId() != null) {
 
                             // Política de conteo de km al completar:
-                            //  1. Si tenemos distanciaRecorridaKm (acumulada GPS real), USAR ESA.
-                            //     Es la verdad: refleja desvíos, origen distinto al planificado, etc.
-                            //  2. Si no, caer al cálculo viejo: estimada - restante.
-                            //  3. Si nada de eso, sumamos la estimada como último recurso.
-                            double kmAñadir = 0;
-                            if (ruta.getDistanciaRecorridaKm() != null && ruta.getDistanciaRecorridaKm() > 0) {
-                                kmAñadir = ruta.getDistanciaRecorridaKm();
-                            } else if (ruta.getDistanciaEstimadaKm() != null && ruta.getDistanciaEstimadaKm() > 0) {
-                                kmAñadir = ruta.getDistanciaEstimadaKm();
-                                if (ruta.getDistanciaRestanteKm() != null
-                                        && ruta.getDistanciaRestanteKm() >= 0
-                                        && ruta.getDistanciaRestanteKm() < ruta.getDistanciaEstimadaKm()) {
-                                    double restante = ruta.getDistanciaRestanteKm();
-                                    if (restante <= ruta.getDistanciaEstimadaKm() * 0.10) {
-                                        kmAñadir = ruta.getDistanciaEstimadaKm();
-                                    } else {
-                                        kmAñadir = ruta.getDistanciaEstimadaKm() - restante;
-                                    }
-                                }
-                            } else {
-                                // Sin datos de distancia, no sumamos nada — mejor cero que un valor falso
-                                kmAñadir = 0;
-                            }
+                            //  SOLO contamos distanciaRecorridaKm (acumulada por GPS real).
+                            //  Si el conductor no se movió (GPS no registró distancia),
+                            //  los km son 0. La distancia estimada es para planificación,
+                            //  NO para contabilidad. Esto evita inflar km ficticios.
+                            double kmAñadir = ruta.getDistanciaRecorridaKm() != null
+                                    ? ruta.getDistanciaRecorridaKm()
+                                    : 0;
 
                             final double kmFinal = kmAñadir;
                             vehiculoRepository.findById(ruta.getVehiculoId()).ifPresent(vehiculo -> {

@@ -84,14 +84,11 @@ public class ReporteService {
                 .filter(r -> "COMPLETADA".equals(normalizarEstado(r.getEstado())))
                 .count();
         long rutasTotal       = rutasMes.size();
-        // Priorizar km realmente recorridos (GPS) sobre estimados
+        // SOLO km reales (GPS). Sin GPS → 0 km. La estimada es para planificación.
         double kmTotales      = rutasMes.stream()
                 .filter(r -> "COMPLETADA".equals(normalizarEstado(r.getEstado())))
-                .mapToDouble(r -> {
-                    if (r.getDistanciaRecorridaKm() != null && r.getDistanciaRecorridaKm() > 0)
-                        return r.getDistanciaRecorridaKm();
-                    return r.getDistanciaEstimadaKm() != null ? r.getDistanciaEstimadaKm() : 0;
-                }).sum();
+                .mapToDouble(r -> r.getDistanciaRecorridaKm() != null ? r.getDistanciaRecorridaKm() : 0)
+                .sum();
 
         double litrosTotales = 0, costeCombustible = 0;
         for (String vid : vehiculoIds) {
@@ -371,12 +368,8 @@ public class ReporteService {
         for (Ruta ruta : datos.rutasPorVeh.getOrDefault(vehiculoId, Collections.emptyList())) {
             if ("COMPLETADA".equals(normalizarEstado(ruta.getEstado()))
                     && perteneceAlPeriodo(ruta.getFecha(), mes)) {
-                // Priorizar km realmente recorridos (GPS) sobre estimados
-                if (ruta.getDistanciaRecorridaKm() != null && ruta.getDistanciaRecorridaKm() > 0) {
-                    kmMes += ruta.getDistanciaRecorridaKm();
-                } else {
-                    kmMes += ruta.getDistanciaEstimadaKm() != null ? ruta.getDistanciaEstimadaKm() : 0;
-                }
+                // SOLO km reales (GPS). Sin GPS → 0 km.
+                kmMes += ruta.getDistanciaRecorridaKm() != null ? ruta.getDistanciaRecorridaKm() : 0;
             }
         }
 
