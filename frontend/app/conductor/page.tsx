@@ -202,7 +202,7 @@ export default function ConductorDashboard() {
     // Modal de "Llamar a la central". Cuando algo falla (SOS, soporte, etc) o el
     // usuario toca "Llamar" en el menú, mostramos este diálogo con un botón grande
     // que dispara el dialer en un click limpio.
-    const [showCallDialog, setShowCallDialog] = useState<{ open: boolean; reason: 'SOS' | 'SUPPORT' | 'CALL' } | null>(null);
+    const [showCallDialog, setShowCallDialog] = useState<{ open: boolean; reason: 'SOS' | 'SUPPORT' | 'CALL'; phone: string } | null>(null);
     const trackedRouteIdRef = useRef<string | null>(null);
 
     const getAuthHeaders = (): Record<string, string> => {
@@ -313,8 +313,8 @@ export default function ConductorDashboard() {
     };
 
     const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT' | 'CALL') => {
-        await syncCentralPhone();
-        setShowCallDialog({ open: true, reason: kind });
+        const phone = await syncCentralPhone();
+        setShowCallDialog({ open: true, reason: kind, phone });
     };
 
     const cargarRutas = async () => {
@@ -409,6 +409,11 @@ export default function ConductorDashboard() {
         cargarRepostajes();
         const interval = setInterval(cargarRutas, 10000);
 
+        const cachedPhone = readLocalUrgentPhone();
+        if (cachedPhone) {
+            setCentralPhone(cachedPhone);
+        }
+
         // Cargar el teléfono de la central UNA vez al inicio y cachearlo.
         // Después se refresca cada 60s en background. Crítico cachearlo: si
         // hay que llamar al dialer (tel:), tiene que estar en estado para
@@ -419,9 +424,21 @@ export default function ConductorDashboard() {
         refreshCentralPhone();
         const phoneInterval = setInterval(refreshCentralPhone, 60_000);
 
+        const onStorage = (event: StorageEvent) => {
+            if (!event.key) return;
+            if (event.key.startsWith('urgentPhone:')) {
+                const nextPhone = readLocalUrgentPhone();
+                if (nextPhone) {
+                    setCentralPhone(nextPhone);
+                }
+            }
+        };
+        window.addEventListener('storage', onStorage);
+
         return () => {
             clearInterval(interval);
             clearInterval(phoneInterval);
+            window.removeEventListener('storage', onStorage);
             stopBrowserGPS();
         };
     }, []);
@@ -2041,7 +2058,7 @@ export default function ConductorDashboard() {
                                 {showCallDialog.reason === 'SOS' ? 'Contacto urgente' : 'Llamar a la central'}
                             </h3>
                             <p style={{ margin: 0, color: '#9ca3af', fontSize: '0.78rem', lineHeight: 1.4 }}>
-                                {centralPhone
+                                {(showCallDialog.phone || centralPhone)
                                     ? showCallDialog.reason === 'SOS'
                                         ? 'Toca el botón para llamar a la central de inmediato.'
                                         : 'Tu dispositivo abrirá la app de teléfono.'
@@ -2049,7 +2066,7 @@ export default function ConductorDashboard() {
                             </p>
                         </div>
 
-                        {centralPhone && (
+                        {(showCallDialog.phone || centralPhone) && (
                             <div style={{
                                 background: 'rgba(255,255,255,0.04)',
                                 border: '1px solid rgba(255,255,255,0.08)',
@@ -2063,14 +2080,14 @@ export default function ConductorDashboard() {
                                 color: '#3bf63b',
                                 letterSpacing: '1px',
                             }}>
-                                {centralPhone}
+                                {showCallDialog.phone || centralPhone}
                             </div>
                         )}
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                            {centralPhone && (
+                            {(showCallDialog.phone || centralPhone) && (
                                 <a
-                                    href={`tel:${centralPhone.replace(/[^\d+]/g, '')}`}
+                                    href={`tel:${(showCallDialog.phone || centralPhone).replace(/[^\d+]/g, '')}`}
                                     onClick={(e) => {
                                         // En Android con bridge nativo, preferimos el Intent
                                         // (más fiable que delegar al WebView). Si no hay
@@ -2080,7 +2097,7 @@ export default function ConductorDashboard() {
                                         if (bridge?.openExternalUrl) {
                                             e.preventDefault();
                                             try {
-                                                bridge.openExternalUrl(`tel:${centralPhone.replace(/[^\d+]/g, '')}`);
+                                                bridge.openExternalUrl(`tel:${(showCallDialog.phone || centralPhone).replace(/[^\d+]/g, '')}`);
                                             } catch { /* el <a> ya hizo su trabajo */ }
                                         }
                                         setShowCallDialog(null);
@@ -2104,15 +2121,16 @@ export default function ConductorDashboard() {
                                     📞 LLAMAR AHORA
                                 </a>
                             )}
-                            {centralPhone && (
+                            {(showCallDialog.phone || centralPhone) && (
                                 <button
                                     onClick={() => {
+                                        const phone = showCallDialog.phone || centralPhone;
                                         if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                                            navigator.clipboard.writeText(centralPhone)
-                                                .then(() => toast.success(`Número copiado: ${centralPhone}`))
-                                                .catch(() => toast.error(`Marcá manualmente: ${centralPhone}`));
+                                            navigator.clipboard.writeText(phone)
+                                                .then(() => toast.success(`Número copiado: ${phone}`))
+                                                .catch(() => toast.error(`Marcá manualmente: ${phone}`));
                                         } else {
-                                            toast.error(`Marcá manualmente: ${centralPhone}`);
+                                            toast.error(`Marcá manualmente: ${phone}`);
                                         }
                                     }}
                                     style={{
