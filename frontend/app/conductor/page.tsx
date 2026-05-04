@@ -2043,23 +2043,29 @@ export default function ConductorDashboard() {
                             <div style={{
                                 width: '56px', height: '56px', margin: '0 auto 0.75rem',
                                 borderRadius: '50%',
-                                background: showCallDialog.reason === 'SOS'
+                                background: (showCallDialog.reason === 'SOS' || showCallDialog.reason === '112')
                                     ? 'linear-gradient(135deg, #ef4444, #dc2626)'
                                     : 'linear-gradient(135deg, #3bf63b, #22c55e)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: '1.7rem',
-                                boxShadow: showCallDialog.reason === 'SOS'
+                                boxShadow: (showCallDialog.reason === 'SOS' || showCallDialog.reason === '112')
                                     ? '0 10px 26px -8px rgba(239,68,68,0.7)'
                                     : '0 10px 26px -8px rgba(59,246,59,0.6)',
                             }}>
-                                {showCallDialog.reason === 'SOS' ? '🚨' : '📞'}
+                                {showCallDialog.reason === '112' ? '🆘' : showCallDialog.reason === 'SOS' ? '🚨' : '📞'}
                             </div>
                             <h3 style={{ margin: '0 0 0.35rem', color: '#fff', fontSize: '1.05rem', fontWeight: 800 }}>
-                                {showCallDialog.reason === 'SOS' ? 'Contacto urgente' : 'Llamar a la central'}
+                                {showCallDialog.reason === '112'
+                                    ? 'Llamar al 112'
+                                    : showCallDialog.reason === 'SOS'
+                                        ? 'Contacto urgente'
+                                        : 'Llamar a la central'}
                             </h3>
                             <p style={{ margin: 0, color: '#9ca3af', fontSize: '0.78rem', lineHeight: 1.4 }}>
                                 {(showCallDialog.phone || centralPhone)
-                                    ? showCallDialog.reason === 'SOS'
+                                    ? showCallDialog.reason === '112'
+                                        ? 'Toca el botón para llamar a emergencias (112) de inmediato.'
+                                        : showCallDialog.reason === 'SOS'
                                         ? 'Toca el botón para llamar a la central de inmediato.'
                                         : 'Tu dispositivo abrirá la app de teléfono.'
                                     : 'La central aún no configuró un número de urgencia. Pedíle al admin que lo guarde en Ajustes de Notificaciones del panel.'}
@@ -2106,19 +2112,19 @@ export default function ConductorDashboard() {
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         gap: '8px',
                                         padding: '0.95rem',
-                                        background: showCallDialog.reason === 'SOS'
+                                        background: (showCallDialog.reason === 'SOS' || showCallDialog.reason === '112')
                                             ? 'linear-gradient(135deg, #ef4444, #dc2626)'
                                             : 'linear-gradient(135deg, #3bf63b, #22c55e)',
-                                        color: showCallDialog.reason === 'SOS' ? '#fff' : '#041107',
+                                        color: (showCallDialog.reason === 'SOS' || showCallDialog.reason === '112') ? '#fff' : '#041107',
                                         textDecoration: 'none',
                                         borderRadius: '14px',
                                         fontWeight: 900, fontSize: '0.95rem',
-                                        boxShadow: showCallDialog.reason === 'SOS'
+                                        boxShadow: (showCallDialog.reason === 'SOS' || showCallDialog.reason === '112')
                                             ? '0 10px 24px -10px rgba(239,68,68,0.6)'
                                             : '0 10px 24px -10px rgba(59,246,59,0.6)',
                                     }}
                                 >
-                                    📞 LLAMAR AHORA
+                                    {showCallDialog.reason === '112' ? '🆘 LLAMAR AL 112' : '📞 LLAMAR AHORA'}
                                 </a>
                             )}
                             {(showCallDialog.phone || centralPhone) && (
