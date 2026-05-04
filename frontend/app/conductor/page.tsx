@@ -34,6 +34,7 @@ interface Repostaje {
 interface ConfiguracionEmpresa {
     emailCuenta?: string;
     emailNotificaciones?: string;
+    telefonoUrgencias?: string;
     nombreEmpresa?: string;
     emailDisponible?: boolean;
 }
@@ -240,9 +241,24 @@ export default function ConductorDashboard() {
         }
     };
 
-    const openEmailFallback = async (kind: 'SOS' | 'SUPPORT', payload: { mensaje?: string; lat?: number; lng?: number; rutaId?: string }) => {
+    const openUrgentFallback = async (kind: 'SOS' | 'SUPPORT', payload: { mensaje?: string; lat?: number; lng?: number; rutaId?: string }) => {
         const cfg = await getConfigEmpresa();
+        const telefono = cfg?.telefonoUrgencias?.trim();
         const destino = cfg?.emailNotificaciones?.trim() || cfg?.emailCuenta?.trim();
+
+        if (telefono) {
+            const phoneUrl = `tel:${telefono.replace(/[^\d+]/g, '')}`;
+            const bridge = getAndroidTracker();
+            if (bridge?.openExternalUrl) {
+                bridge.openExternalUrl(phoneUrl);
+            } else if (typeof window !== 'undefined') {
+                window.location.href = phoneUrl;
+            }
+            toast.success(kind === 'SOS'
+                ? 'Se abrió una llamada urgente a la central'
+                : 'Se abrió una llamada a la central');
+            return;
+        }
 
         if (!destino) {
             throw new Error('No hay email de la empresa configurado para contacto');
@@ -800,11 +816,11 @@ export default function ConductorDashboard() {
             }
         } catch (err: unknown) {
             try {
-                await openEmailFallback('SUPPORT', {
+                await openUrgentFallback('SUPPORT', {
                     mensaje,
                     rutaId: rutaContexto?.id,
                 });
-                toast.warning('El envío interno falló. Abrimos un correo directo como alternativa.');
+                toast.warning('El envío interno falló. Abrimos contacto directo con la central como alternativa.');
             } catch {
                 toast.error(getErrorMessage(err, 'Error enviando soporte'));
             }
@@ -1400,21 +1416,21 @@ export default function ConductorDashboard() {
                                                     toast.warning(`Aviso por correo pendiente: ${data.emailError}`);
                                                 }
                                             } else {
-                                                await openEmailFallback('SOS', {
+                                                await openUrgentFallback('SOS', {
                                                     lat,
                                                     lng,
                                                     rutaId: rutaActiva?.id,
                                                 });
-                                                toast.warning(data.error || 'El canal interno falló. Abrimos un correo urgente a la central.');
+                                                toast.warning(data.error || 'El canal interno falló. Abrimos contacto directo con la central.');
                                             }
                                         } catch {
                                             try {
-                                                await openEmailFallback('SOS', {
+                                                await openUrgentFallback('SOS', {
                                                     lat,
                                                     lng,
                                                     rutaId: rutaActiva?.id,
                                                 });
-                                                toast.warning('Sin conexión interna. Abrimos un correo urgente a la central.');
+                                                toast.warning('Sin conexión interna. Abrimos contacto directo con la central.');
                                             } catch {
                                                 toast.error("Sin conexión. Llama al teléfono de la central.");
                                             }

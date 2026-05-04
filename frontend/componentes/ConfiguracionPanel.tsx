@@ -16,6 +16,8 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   const [emailCuenta, setEmailCuenta] = useState("");
   const [emailNotif, setEmailNotif] = useState("");
   const [emailOriginal, setEmailOriginal] = useState("");
+  const [telefonoUrgencias, setTelefonoUrgencias] = useState("");
+  const [telefonoOriginal, setTelefonoOriginal] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [testeando, setTesteando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
@@ -31,6 +33,8 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         setEmailCuenta(data.emailCuenta ?? "");
         setEmailNotif(data.emailNotificaciones ?? "");
         setEmailOriginal(data.emailNotificaciones ?? "");
+        setTelefonoUrgencias(data.telefonoUrgencias ?? "");
+        setTelefonoOriginal(data.telefonoUrgencias ?? "");
       })
       .catch(() => {});
   }, [open, apiUrl, getAuthHeaders]);
@@ -42,7 +46,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   }, []);
 
   const emailActivo = emailNotif || emailCuenta;
-  const hayCambios = emailNotif !== emailOriginal;
+  const hayCambios = emailNotif !== emailOriginal || telefonoUrgencias !== telefonoOriginal;
 
   const guardar = async () => {
     setGuardando(true);
@@ -51,10 +55,11 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
       const res = await fetch(`${apiUrl}/api/configuracion/email`, {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ emailNotificaciones: emailNotif }),
+        body: JSON.stringify({ emailNotificaciones: emailNotif, telefonoUrgencias }),
       });
       if (res.ok) {
         setEmailOriginal(emailNotif);
+        setTelefonoOriginal(telefonoUrgencias);
         setMsg({ tipo: "ok", texto: t.components.savedSuccessfully });
         setTimeout(() => setMsg(null), 4000);
       } else {
@@ -137,6 +142,28 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
                 <span className={styles.dot} />
                 Los reportes llegan a: <strong>{emailActivo}</strong>
               </div>
+            </div>
+
+            <div className={styles.divider} />
+
+            <div className={styles.section}>
+              <label className={styles.sectionTitle}>Teléfono urgente para conductores</label>
+              <p className={styles.sectionDesc}>Cuando falle el canal interno, la app del conductor intentará llamar primero a este número.</p>
+
+              <input
+                className={styles.input}
+                type="text"
+                placeholder="Ej: +34 600 123 456"
+                value={telefonoUrgencias}
+                onChange={e => setTelefonoUrgencias(e.target.value)}
+              />
+
+              {telefonoUrgencias && (
+                <div className={styles.currentEmail}>
+                  <span className={styles.dot} />
+                  Llamada urgente a: <strong>{telefonoUrgencias}</strong>
+                </div>
+              )}
             </div>
 
             {msg && (

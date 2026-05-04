@@ -14,4 +14,7 @@ public class ConfiguracionEmail {
 
     // Email where reports are sent (if null, uses account email)
     private String emailNotificaciones;
+
+    // Teléfono urgente de la central / empresa para conductores.
+    private String telefonoUrgencias;
 }

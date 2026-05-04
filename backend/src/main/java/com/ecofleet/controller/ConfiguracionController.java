@@ -32,6 +32,7 @@ public class ConfiguracionController {
 
                     ConfiguracionEmail cfg = configEmailRepo.findByEmpresaId(empresaId).orElse(null);
                     resp.put("emailNotificaciones", cfg != null && cfg.getEmailNotificaciones() != null ? cfg.getEmailNotificaciones() : "");
+                    resp.put("telefonoUrgencias", cfg != null && cfg.getTelefonoUrgencias() != null ? cfg.getTelefonoUrgencias() : "");
                     return ResponseEntity.ok(resp);
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -57,6 +58,14 @@ public class ConfiguracionController {
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
             }
+        }
+
+        if (body.containsKey("telefonoUrgencias")) {
+            String telefono = body.get("telefonoUrgencias");
+            if (telefono != null) {
+                telefono = telefono.trim();
+            }
+            cfg.setTelefonoUrgencias(telefono == null || telefono.isBlank() ? null : telefono);
         }
 
         configEmailRepo.save(cfg);
