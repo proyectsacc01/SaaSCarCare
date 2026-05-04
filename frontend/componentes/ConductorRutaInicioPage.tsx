@@ -100,6 +100,57 @@ export default function ConductorRutaInicioPage() {
   const watchRef = useRef<number | null>(null);
   const lastFetchRef = useRef<[number, number] | null>(null);
 
+  // ─── Real compass heading (DeviceOrientation API) ─────────────────────
+  // GPS heading only works when moving (>3 km/h). The magnetometer/compass
+  // gives the REAL direction the phone is pointing, even when stationary.
+  const compassHeadingRef = useRef<number | null>(null);
+  const gpsHeadingRef = useRef<number | null>(null);
+  const gpsSpeedRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Request permission on iOS 13+
+    const requestPermission = async () => {
+      const doe = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+      if (typeof doe.requestPermission === "function") {
+        try {
+          const perm = await doe.requestPermission();
+          if (perm !== "granted") return;
+        } catch {
+          return;
+        }
+      }
+    };
+    void requestPermission();
+
+    const handler = (event: DeviceOrientationEvent) => {
+      // iOS: webkitCompassHeading gives absolute compass heading directly
+      // Android: alpha gives device heading (0-360) when absolute is true
+      let heading: number | null = null;
+
+      const iosEvent = event as DeviceOrientationEvent & { webkitCompassHeading?: number };
+      if (typeof iosEvent.webkitCompassHeading === "number" && iosEvent.webkitCompassHeading >= 0) {
+        heading = iosEvent.webkitCompassHeading;
+      } else if (event.absolute && typeof event.alpha === "number") {
+        // Android absolute compass: alpha 0 = North, but it's counter-clockwise
+        heading = (360 - event.alpha) % 360;
+      } else if (typeof event.alpha === "number") {
+        // Non-absolute fallback (less reliable but better than nothing)
+        heading = (360 - event.alpha) % 360;
+      }
+
+      if (heading !== null && Number.isFinite(heading)) {
+        compassHeadingRef.current = heading;
+        // If not moving fast, use compass as primary heading
+        if (gpsSpeedRef.current < 3) {
+          setLiveHeading(heading);
+        }
+      }
+    };
+
+    window.addEventListener("deviceorientation", handler, true);
+    return () => window.removeEventListener("deviceorientation", handler, true);
+  }, []);
+
   const getAuthHeaders = (): Record<string, string> => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     return {
@@ -164,11 +215,24 @@ export default function ConductorRutaInicioPage() {
         if (accuracy > 50 && lastAccuracyRef.current < 50) return;
         lastAccuracyRef.current = accuracy;
 
-        // Always update local state for smooth map rendering
         setLivePos([latitude, longitude]);
-        setLiveHeading(
-          heading != null && heading >= 0 ? heading : null
-        );
+
+        // Heading priority:
+        //  1. GPS heading if moving fast enough (>3 km/h = ~0.83 m/s) — most accurate when driving
+        //  2. Compass/magnetometer heading — real direction the phone is pointing
+        //  3. null — let NavegacionMapa infer from route geometry as last resort
+        const speedKmh = (speed != null && speed >= 0) ? speed * 3.6 : 0;
+        gpsSpeedRef.current = speedKmh;
+
+        if (heading != null && heading >= 0 && speedKmh > 3) {
+          // Moving: GPS heading is the most reliable source
+          gpsHeadingRef.current = heading;
+          setLiveHeading(heading);
+        } else if (compassHeadingRef.current !== null) {
+          // Stationary or slow: use compass
+          setLiveHeading(compassHeadingRef.current);
+        }
+        // If neither available, liveHeading stays null → NavegacionMapa infers from route
 
         // Throttle API uploads: minimum 3s between POSTs
         const now = Date.now();

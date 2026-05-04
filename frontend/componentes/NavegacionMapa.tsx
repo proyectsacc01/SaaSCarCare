@@ -348,30 +348,32 @@ export default function NavegacionMapa({
     // Ruta activa para infer bearing
     const activeGeometry = routes[activeIdx]?.geometry ?? [];
 
-    // Resolve best heading from: GPS heading → route-inferred → previous
+    // Resolve heading from: liveHeading (compass/GPS) → route-inferred → movement → previous
+    // Now that liveHeading comes from real compass (stationary) or GPS (moving),
+    // it is the TRUSTED primary source. Route geometry is only a last resort.
     const resolveHeading = useCallback(
         (pos: [number, number], gpsHeading: number | null | undefined): number => {
-            // 1. GPS heading is reliable if speed > ~3 km/h
+            // 1. Live heading from compass or GPS — this IS the real direction
             if (
                 typeof gpsHeading === "number" &&
                 gpsHeading >= 0 &&
-                gpsHeading !== lastGpsHeadingRef.current
+                Number.isFinite(gpsHeading)
             ) {
                 lastGpsHeadingRef.current = gpsHeading;
                 return gpsHeading;
             }
 
-            // 2. Infer from route geometry
-            const routeBearing = inferRouteBearing(pos, activeGeometry);
-            if (routeBearing !== null) return routeBearing;
-
-            // 3. Calculate from last target → current target
+            // 2. Calculate from movement (last position → current position)
             if (lastTargetRef.current) {
                 const d = distanceMeters(lastTargetRef.current, pos);
-                if (d > 1.5) {
+                if (d > 2) {
                     return bearingDegrees(lastTargetRef.current, pos);
                 }
             }
+
+            // 3. Infer from route geometry (last resort — less accurate)
+            const routeBearing = inferRouteBearing(pos, activeGeometry);
+            if (routeBearing !== null) return routeBearing;
 
             // 4. Keep previous heading
             return headingRef.current;
