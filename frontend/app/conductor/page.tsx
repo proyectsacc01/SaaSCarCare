@@ -229,15 +229,37 @@ export default function ConductorDashboard() {
         throw lastError || new Error('No se pudo contactar con el servidor');
     };
 
+    const getUrgentPhoneStorageKey = (fallback = '') => {
+        if (typeof window === 'undefined') return 'urgentPhone:default';
+        const scope = driverUser?.empresaId || driverUser?.id || driverUser?.email || fallback || 'default';
+        return `urgentPhone:${scope}`;
+    };
+
+    const readLocalUrgentPhone = (fallback = '') => {
+        if (typeof window === 'undefined') return '';
+        return localStorage.getItem(getUrgentPhoneStorageKey(fallback)) || '';
+    };
+
     const getConfigEmpresa = async (): Promise<ConfiguracionEmpresa | null> => {
         try {
             const res = await fetch(`${API_URL}/api/configuracion`, {
                 headers: getAuthHeaders(),
             });
-            if (!res.ok) return null;
-            return await res.json();
+            if (!res.ok) {
+                const localPhone = readLocalUrgentPhone();
+                return localPhone ? { telefonoUrgencias: localPhone } : null;
+            }
+            const data = await res.json();
+            if (!data?.telefonoUrgencias) {
+                const localPhone = readLocalUrgentPhone(data?.emailCuenta || '');
+                if (localPhone) {
+                    data.telefonoUrgencias = localPhone;
+                }
+            }
+            return data;
         } catch {
-            return null;
+            const localPhone = readLocalUrgentPhone();
+            return localPhone ? { telefonoUrgencias: localPhone } : null;
         }
     };
 

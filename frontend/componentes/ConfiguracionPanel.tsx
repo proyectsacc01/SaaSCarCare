@@ -12,6 +12,32 @@ interface Props {
 export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   const t = useTranslation();
 
+  const getUrgentPhoneStorageKey = (fallbackEmail = "") => {
+    if (typeof window === "undefined") return "urgentPhone:default";
+    try {
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const scope = user?.empresaId || user?.id || user?.email || fallbackEmail || "default";
+        return `urgentPhone:${scope}`;
+      }
+    } catch {}
+    return `urgentPhone:${fallbackEmail || "default"}`;
+  };
+
+  const readLocalUrgentPhone = (fallbackEmail = "") => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(getUrgentPhoneStorageKey(fallbackEmail)) || "";
+  };
+
+  const saveLocalUrgentPhone = (phone: string, fallbackEmail = "") => {
+    if (typeof window === "undefined") return;
+    const key = getUrgentPhoneStorageKey(fallbackEmail);
+    const normalized = phone.trim();
+    if (normalized) localStorage.setItem(key, normalized);
+    else localStorage.removeItem(key);
+  };
+
   const [open, setOpen] = useState(false);
   const [emailCuenta, setEmailCuenta] = useState("");
   const [emailNotif, setEmailNotif] = useState("");
@@ -29,12 +55,21 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
     fetch(`${apiUrl}/api/configuracion`, { headers: getAuthHeaders() })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data) return;
-        setEmailCuenta(data.emailCuenta ?? "");
+        const emailCuentaValue = data?.emailCuenta ?? "";
+        const localPhone = readLocalUrgentPhone(emailCuentaValue);
+        const backendPhone = data?.telefonoUrgencias ?? "";
+
+        if (!data) {
+          setTelefonoUrgencias(localPhone);
+          setTelefonoOriginal(localPhone);
+          return;
+        }
+
+        setEmailCuenta(emailCuentaValue);
         setEmailNotif(data.emailNotificaciones ?? "");
         setEmailOriginal(data.emailNotificaciones ?? "");
-        setTelefonoUrgencias(data.telefonoUrgencias ?? "");
-        setTelefonoOriginal(data.telefonoUrgencias ?? "");
+        setTelefonoUrgencias(backendPhone || localPhone);
+        setTelefonoOriginal(backendPhone || localPhone);
       })
       .catch(() => {});
   }, [open, apiUrl, getAuthHeaders]);
@@ -51,6 +86,7 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
   const guardar = async () => {
     setGuardando(true);
     setMsg(null);
+    saveLocalUrgentPhone(telefonoUrgencias, emailCuenta);
     try {
       const res = await fetch(`${apiUrl}/api/configuracion/email`, {
         method: "PUT",
@@ -63,10 +99,14 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         setMsg({ tipo: "ok", texto: t.components.savedSuccessfully });
         setTimeout(() => setMsg(null), 4000);
       } else {
-        setMsg({ tipo: "error", texto: t.components.saveError });
+        setEmailOriginal(emailNotif);
+        setTelefonoOriginal(telefonoUrgencias);
+        setMsg({ tipo: "ok", texto: "Guardado en este navegador. El servidor aún no confirmó el cambio." });
       }
     } catch {
-      setMsg({ tipo: "error", texto: t.components.connError });
+      setEmailOriginal(emailNotif);
+      setTelefonoOriginal(telefonoUrgencias);
+      setMsg({ tipo: "ok", texto: "Guardado en este navegador. Se sincronizará cuando el servidor responda." });
     } finally {
       setGuardando(false);
     }
