@@ -475,7 +475,7 @@ export default function ConductorDashboard() {
                 }).catch(() => { /* silencioso */ });
             },
             () => { /* permiso denegado o error — silencioso */ },
-            { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
         );
 
         return () => {
@@ -681,9 +681,25 @@ export default function ConductorDashboard() {
                         })
                     });
                 } catch {}
+                // Throttle API posts: local map always gets fresh data,
+                // but API calls are limited to avoid saturation
+                let lastRoutePost = Date.now();
+                let bestAccuracy = Infinity;
                 const watchId = navigator.geolocation.watchPosition(
                     async (pos) => {
+                        const { accuracy } = pos.coords;
+                        // Skip noisy readings (>50m) if we already have good data
+                        if (accuracy > 50 && bestAccuracy < 50) return;
+                        if (accuracy < bestAccuracy) bestAccuracy = accuracy;
+
+                        // Always update local UI for smooth map
                         updateLiveGps(pos);
+
+                        // Throttle server updates: min 3s between POSTs
+                        const now = Date.now();
+                        if (now - lastRoutePost < 3000) return;
+                        lastRoutePost = now;
+
                         try {
                             await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
                                 method: 'POST', headers: getAuthHeaders(),
@@ -697,12 +713,12 @@ export default function ConductorDashboard() {
                         } catch {}
                     },
                     (err) => { if (err.code === err.PERMISSION_DENIED) toast.error("Permiso GPS denegado"); },
-                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 1000 }
                 );
                 gpsWatchIdRef.current = watchId;
             },
             (err) => { if (err.code === err.PERMISSION_DENIED) toast.error("Permiso GPS denegado"); },
-            { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
         );
     };
 
@@ -1466,7 +1482,6 @@ export default function ConductorDashboard() {
                                             } catch {
                                                 try {
                                                     await openUrgentFallback('SOS');
-                                                    toast.warning('Sin conexión interna. Te conectamos con la central por teléfono.');
                                                 } catch {
                                                     toast.error("Sin conexión. Llama al teléfono de la central.");
                                                 }

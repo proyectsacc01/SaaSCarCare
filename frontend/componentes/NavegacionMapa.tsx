@@ -3,7 +3,9 @@
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface OSRMStep {
     distance: number;
@@ -41,7 +43,96 @@ interface Props {
     recenterTrigger?: number;
 }
 
-// ─── Iconos Leaflet ───────────────────────────────────────────────────────────
+// ─── Math helpers ───────────────────────────────────────────────────────────
+
+function distanceMeters(a: [number, number], b: [number, number]) {
+    const R = 6371000;
+    const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+    const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+    const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((a[0] * Math.PI) / 180) *
+            Math.cos((b[0] * Math.PI) / 180) *
+            Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function bearingDegrees(from: [number, number], to: [number, number]) {
+    const lat1 = (from[0] * Math.PI) / 180;
+    const lat2 = (to[0] * Math.PI) / 180;
+    const dLng = ((to[1] - from[1]) * Math.PI) / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x =
+        Math.cos(lat1) * Math.sin(lat2) -
+        Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    const angle = (Math.atan2(y, x) * 180) / Math.PI;
+    return (angle + 360) % 360;
+}
+
+function shortestAngleDelta(from: number, to: number) {
+    return ((to - from + 540) % 360) - 180;
+}
+
+function normalizeAngle(angle: number) {
+    return ((angle % 360) + 360) % 360;
+}
+
+function interpolatePoint(
+    from: [number, number],
+    to: [number, number],
+    progress: number
+): [number, number] {
+    return [
+        from[0] + (to[0] - from[0]) * progress,
+        from[1] + (to[1] - from[1]) * progress,
+    ];
+}
+
+/** Cubic ease-out for natural deceleration */
+function easeOutCubic(t: number) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+/**
+ * Find bearing from position along the route ahead.
+ * Looks at the next segment from the closest point on the route,
+ * so the arrow always points in the direction of the road.
+ */
+function inferRouteBearing(
+    position: [number, number],
+    routeCoordinates: [number, number][]
+): number | null {
+    if (routeCoordinates.length < 2) return null;
+
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < routeCoordinates.length; i++) {
+        const d = distanceMeters(position, routeCoordinates[i]);
+        if (d < closestDistance) {
+            closestDistance = d;
+            closestIndex = i;
+        }
+    }
+
+    // Look ahead 2-3 points for a smoother bearing on curves
+    const lookAhead = Math.min(closestIndex + 3, routeCoordinates.length - 1);
+    const nextPoint = routeCoordinates[lookAhead];
+
+    if (nextPoint && distanceMeters(position, nextPoint) > 1) {
+        return bearingDegrees(position, nextPoint);
+    }
+
+    // Fallback: bearing from previous point to current
+    const prevPoint = routeCoordinates[Math.max(closestIndex - 1, 0)];
+    if (prevPoint && distanceMeters(prevPoint, position) > 1) {
+        return bearingDegrees(prevPoint, position);
+    }
+
+    return null;
+}
+
+// ─── Iconos Leaflet ─────────────────────────────────────────────────────────
 
 const iconOrigen = L.divIcon({
     html: `<div style="
@@ -70,45 +161,65 @@ const iconDestino = L.divIcon({
     iconAnchor: [14, 14],
 });
 
-function createConductorIcon(heading?: number | null) {
-    const rotation = typeof heading === "number" && heading >= 0 ? heading : 0;
+function createConductorIcon(heading: number) {
     return L.divIcon({
-    html: `<div style="position: relative;">
-        <div style="
-            position: absolute; top: -10px; left: -10px;
-            width: 40px; height: 40px; border-radius: 50%;
-            background: rgba(59,246,59,0.25);
-            animation: nav-pulse 1.6s ease-out infinite;
-        "></div>
-        <div style="position: relative; width: 22px; height: 22px; z-index: 1; transform: rotate(${rotation}deg);">
+        html: `<div style="position: relative; width: 26px; height: 26px;">
             <div style="
-                position: absolute; left: 50%; top: -2px; transform: translateX(-50%);
-                width: 0; height: 0;
-                border-left: 6px solid transparent;
-                border-right: 6px solid transparent;
-                border-bottom: 11px solid #3bf63b;
-                filter: drop-shadow(0 0 6px rgba(59,246,59,0.8));
+                position: absolute; inset: -12px;
+                border-radius: 999px;
+                background: rgba(59,246,59,0.14);
+                box-shadow: 0 0 28px rgba(59,246,59,0.22);
+                animation: nav-pulse 1.6s ease-out infinite;
             "></div>
             <div style="
-                position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
-                width: 16px; height: 16px; border-radius: 50%;
-                background: #3bf63b;
-                box-shadow: 0 0 0 3px #050608, 0 0 14px #3bf63b;
-            "></div>
-        </div>
-        <style>@keyframes nav-pulse {
-            0% { transform: scale(0.5); opacity: 0.9; }
-            100% { transform: scale(1.4); opacity: 0; }
-        }</style>
-    </div>`,
-    className: "",
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
+                position: absolute; inset: 0;
+                display: flex; align-items: center; justify-content: center;
+                transform: rotate(${heading}deg);
+                transition: transform 150ms linear;
+            ">
+                <div style="position: relative; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;">
+                    <div style="
+                        position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+                        width: 0; height: 0;
+                        border-left: 7px solid transparent;
+                        border-right: 7px solid transparent;
+                        border-bottom: 14px solid #3bf63b;
+                        filter: drop-shadow(0 0 8px rgba(59,246,59,0.85));
+                    "></div>
+                    <div style="
+                        position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
+                        width: 16px; height: 16px; border-radius: 999px;
+                        background: #3bf63b;
+                        border: 3px solid #050608;
+                        box-shadow: 0 0 12px rgba(59,246,59,0.72);
+                    "></div>
+                </div>
+            </div>
+            <style>@keyframes nav-pulse {
+                0% { transform: scale(0.5); opacity: 0.9; }
+                100% { transform: scale(1.4); opacity: 0; }
+            }</style>
+        </div>`,
+        className: "",
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
     });
 }
 
-// ─── Auto-fit cuando cambia origen/destino o llega la primera ruta ───────────
+// ─── Sub-components ─────────────────────────────────────────────────────────
 
+function RemoveLeafletPrefix() {
+    const map = useMap();
+    useEffect(() => {
+        map.attributionControl?.setPrefix("");
+    }, [map]);
+    return null;
+}
+
+/**
+ * AutoFit: Ajusta bounds cuando se cargan las rutas o puntos por primera vez.
+ * Solo corre cuando enabled=true (no en followMode con GPS activo).
+ */
 function AutoFit({
     points,
     deps,
@@ -135,7 +246,12 @@ function AutoFit({
     return null;
 }
 
-function FollowDriverCamera({
+/**
+ * SmoothFollowCamera: En vez de saltar, la cámara PAN suave al conductor
+ * usando flyTo con duración proporcional a la distancia.
+ * No anima si la distancia es mínima (evita micro-stutters).
+ */
+function SmoothFollowCamera({
     enabled,
     driverPos,
     driverZoom,
@@ -145,25 +261,48 @@ function FollowDriverCamera({
     driverZoom: number;
 }) {
     const map = useMap();
-    const driverLat = driverPos?.[0];
-    const driverLng = driverPos?.[1];
+    const lastPanRef = useRef<[number, number] | null>(null);
+
     useEffect(() => {
         if (!enabled || !driverPos) return;
-        map.setView(driverPos, Math.max(map.getZoom(), driverZoom), { animate: true });
-    }, [enabled, driverLat, driverLng, driverPos, driverZoom, map]);
+
+        const currentCenter = map.getCenter();
+        const currentLat = currentCenter.lat;
+        const currentLng = currentCenter.lng;
+        const distFromCenter = distanceMeters(
+            [currentLat, currentLng],
+            driverPos
+        );
+
+        // Si la distancia del centro del mapa al conductor es muy pequeña,
+        // no hacemos nada — evita micro-pans que causan flicker.
+        if (distFromCenter < 3) return;
+
+        // Si es un salto grande (>500m), usamos setView instantáneo
+        if (distFromCenter > 500) {
+            map.setView(driverPos, Math.max(map.getZoom(), driverZoom), {
+                animate: false,
+            });
+            lastPanRef.current = driverPos;
+            return;
+        }
+
+        // Pan suave: duración proporcional a la distancia (más lejos = más lento)
+        // pero acotada entre 0.3s y 1.2s para que siempre se sienta fluido
+        const duration = Math.max(0.3, Math.min(1.2, distFromCenter / 200));
+        map.panTo(driverPos, {
+            animate: true,
+            duration,
+            easeLinearity: 0.4,
+        });
+        lastPanRef.current = driverPos;
+    }, [enabled, driverPos, driverZoom, map]);
     return null;
 }
 
-function RemoveLeafletPrefix() {
-    const map = useMap();
-    useEffect(() => {
-        map.attributionControl?.setPrefix("");
-    }, [map]);
-    return null;
-}
-
-// Cuando recenterTrigger cambia, el mapa vuela al conductor.
-// Útil para el botón "Centrar en mi posición" que rompe el follow estático.
+/**
+ * RecenterOnTrigger: Botón "Centrar en mí" — flyTo con animación
+ */
 function RecenterOnTrigger({
     trigger,
     pos,
@@ -182,7 +321,7 @@ function RecenterOnTrigger({
     return null;
 }
 
-// ─── Componente principal ────────────────────────────────────────────────────
+// ─── Componente principal ───────────────────────────────────────────────────
 
 export default function NavegacionMapa({
     origen,
@@ -197,17 +336,153 @@ export default function NavegacionMapa({
     showAlternativeRoutes = true,
     recenterTrigger,
 }: Props) {
+    // ── Animated state ──────────────────────────────────────────────────────
+    const [animatedPos, setAnimatedPos] = useState<[number, number] | null>(null);
+    const [animatedHeading, setAnimatedHeading] = useState(0);
 
-    // Punto de partida visible: GPS si lo hay, sino origen de la ruta
-    const startPos = currentPos ?? origen;
+    const animFrameRef = useRef<number | null>(null);
+    const lastTargetRef = useRef<[number, number] | null>(null);
+    const headingRef = useRef(0);
+    const lastGpsHeadingRef = useRef<number | null>(null);
 
-    // Center inicial fallback (Madrid). El AutoFit corrige al toque.
+    // Ruta activa para infer bearing
+    const activeGeometry = routes[activeIdx]?.geometry ?? [];
+
+    // Resolve best heading from: GPS heading → route-inferred → previous
+    const resolveHeading = useCallback(
+        (pos: [number, number], gpsHeading: number | null | undefined): number => {
+            // 1. GPS heading is reliable if speed > ~3 km/h
+            if (
+                typeof gpsHeading === "number" &&
+                gpsHeading >= 0 &&
+                gpsHeading !== lastGpsHeadingRef.current
+            ) {
+                lastGpsHeadingRef.current = gpsHeading;
+                return gpsHeading;
+            }
+
+            // 2. Infer from route geometry
+            const routeBearing = inferRouteBearing(pos, activeGeometry);
+            if (routeBearing !== null) return routeBearing;
+
+            // 3. Calculate from last target → current target
+            if (lastTargetRef.current) {
+                const d = distanceMeters(lastTargetRef.current, pos);
+                if (d > 1.5) {
+                    return bearingDegrees(lastTargetRef.current, pos);
+                }
+            }
+
+            // 4. Keep previous heading
+            return headingRef.current;
+        },
+        [activeGeometry]
+    );
+
+    // ── Interpolation animation loop ────────────────────────────────────────
+    useEffect(() => {
+        const targetPos = currentPos;
+        if (!targetPos) return;
+
+        // First fix: snap immediately
+        if (!animatedPos) {
+            const heading = resolveHeading(targetPos, liveHeading);
+            headingRef.current = heading;
+            lastTargetRef.current = targetPos;
+            const frame = requestAnimationFrame(() => {
+                setAnimatedPos(targetPos);
+                setAnimatedHeading(heading);
+            });
+            return () => cancelAnimationFrame(frame);
+        }
+
+        const startPos = animatedPos;
+        const startHeading = headingRef.current;
+        const desiredHeading = resolveHeading(targetPos, liveHeading);
+
+        // Cancel any running animation
+        if (animFrameRef.current !== null) {
+            cancelAnimationFrame(animFrameRef.current);
+            animFrameRef.current = null;
+        }
+
+        const totalDist = distanceMeters(startPos, targetPos);
+
+        // Very small movement: snap instantly
+        if (totalDist < 0.5) {
+            const blended = normalizeAngle(
+                startHeading + shortestAngleDelta(startHeading, desiredHeading) * 0.3
+            );
+            headingRef.current = blended;
+            lastTargetRef.current = targetPos;
+            const frame = requestAnimationFrame(() => {
+                setAnimatedPos(targetPos);
+                setAnimatedHeading(blended);
+            });
+            return () => cancelAnimationFrame(frame);
+        }
+
+        // Adaptive duration:
+        // - Short moves (< 10m): 250ms for snappy response
+        // - Medium (10-100m): 400-800ms
+        // - Long (> 100m): cap at 1300ms to avoid sluggishness
+        const duration = Math.max(250, Math.min(1300, totalDist * 18));
+        const startedAt = performance.now();
+
+        const animate = (now: number) => {
+            const raw = Math.min(1, (now - startedAt) / duration);
+            const eased = easeOutCubic(raw);
+
+            const pos = interpolatePoint(startPos, targetPos, eased);
+            const heading = normalizeAngle(
+                startHeading + shortestAngleDelta(startHeading, desiredHeading) * eased
+            );
+
+            setAnimatedPos(pos);
+            setAnimatedHeading(heading);
+
+            if (raw < 1) {
+                animFrameRef.current = requestAnimationFrame(animate);
+                return;
+            }
+
+            // Animation complete
+            headingRef.current = desiredHeading;
+            lastTargetRef.current = targetPos;
+            animFrameRef.current = null;
+        };
+
+        animFrameRef.current = requestAnimationFrame(animate);
+
+        return () => {
+            if (animFrameRef.current !== null) {
+                cancelAnimationFrame(animFrameRef.current);
+                animFrameRef.current = null;
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPos, liveHeading, resolveHeading]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (animFrameRef.current !== null) {
+                cancelAnimationFrame(animFrameRef.current);
+            }
+        };
+    }, []);
+
+    // ── Derived values ──────────────────────────────────────────────────────
+
+    // Punto visible del conductor (animado o raw)
+    const displayPos = animatedPos ?? currentPos;
+    const startPos = displayPos ?? origen;
     const initialCenter: [number, number] = startPos ?? destino ?? [40.4168, -3.7035];
 
     const fitPoints: [number, number][] = [];
     if (startPos) fitPoints.push(startPos);
     if (destino) fitPoints.push(destino);
-    routes[activeIdx]?.geometry.forEach(p => fitPoints.push(p));
+    activeGeometry.forEach(p => fitPoints.push(p));
 
     return (
         <MapContainer
@@ -220,7 +495,7 @@ export default function NavegacionMapa({
             <RemoveLeafletPrefix />
             <TileLayer
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='© <a href="https://www.openstreetmap.org/copyright">OSM</a> · CartoDB'
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> · CartoDB'
                 maxZoom={19}
                 subdomains="abcd"
             />
@@ -232,15 +507,17 @@ export default function NavegacionMapa({
                     routes.length,
                     activeIdx,
                     destino?.[0], destino?.[1],
-                    // livePos NO va aquí: una vez fitted, dejamos que el conductor
-                    // siga viendo la ruta sin que el mapa salte cada GPS update.
                 ]}
             />
 
-            <FollowDriverCamera enabled={followMode} driverPos={startPos} driverZoom={driverZoom} />
-            <RecenterOnTrigger trigger={recenterTrigger} pos={startPos} zoom={driverZoom} />
+            <SmoothFollowCamera
+                enabled={followMode}
+                driverPos={displayPos}
+                driverZoom={driverZoom}
+            />
+            <RecenterOnTrigger trigger={recenterTrigger} pos={displayPos} zoom={driverZoom} />
 
-            {/* Rutas alternativas (apagadas) primero, para que la activa quede arriba */}
+            {/* Rutas alternativas — debajo de la activa */}
             {showAlternativeRoutes && routes.map((r, i) => i !== activeIdx && (
                 <Polyline
                     key={`alt-${i}`}
@@ -257,7 +534,7 @@ export default function NavegacionMapa({
                 />
             ))}
 
-            {/* Ruta activa */}
+            {/* Ruta activa: sombra + línea */}
             {routes[activeIdx] && (
                 <>
                     <Polyline
@@ -281,7 +558,7 @@ export default function NavegacionMapa({
                 </>
             )}
 
-            {/* Si no hay ruta OSRM, dibujamos una línea recta entre conductor y destino */}
+            {/* Línea recta fallback si no hay ruta OSRM */}
             {routes.length === 0 && startPos && destino && (
                 <Polyline
                     positions={[startPos, destino]}
@@ -294,14 +571,19 @@ export default function NavegacionMapa({
                 />
             )}
 
-            {/* Marker origen — solo si NO tenemos GPS live (sino el truck va arriba) */}
+            {/* Origen — solo si NO hay GPS live */}
             {origen && !currentPos && <Marker position={origen} icon={iconOrigen} />}
 
-            {/* Marker destino */}
+            {/* Destino */}
             {destino && <Marker position={destino} icon={iconDestino} />}
 
-            {/* Marker conductor live */}
-            {currentPos && <Marker position={currentPos} icon={createConductorIcon(liveHeading)} />}
+            {/* Conductor: posición ANIMADA con heading SUAVE */}
+            {displayPos && (
+                <Marker
+                    position={displayPos}
+                    icon={createConductorIcon(animatedHeading)}
+                />
+            )}
         </MapContainer>
     );
 }

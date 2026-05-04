@@ -145,23 +145,45 @@ export default function ConductorRutaInicioPage() {
     };
   }, [rutaId, router]);
 
+  // ─── GPS Tracking (optimized) ───────────────────────────────────────────
+  // • maximumAge: 2s — fresher data for smoother interpolation
+  // • accuracy filter: skip readings > 50m (GPS noise / indoor)
+  // • API throttle: max 1 POST every 3s (local map stays smooth regardless)
+  const lastApiPostRef = useRef(0);
+  const lastAccuracyRef = useRef<number>(Infinity);
+
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
     const id = navigator.geolocation.watchPosition(
       async (pos) => {
-        setLivePos([pos.coords.latitude, pos.coords.longitude]);
-        setLiveHeading(pos.coords.heading != null && pos.coords.heading >= 0 ? pos.coords.heading : null);
+        const { latitude, longitude, accuracy, heading, speed } = pos.coords;
+
+        // Filter: skip readings with accuracy worse than 50m unless
+        // we never had a reading (first fix)
+        if (accuracy > 50 && lastAccuracyRef.current < 50) return;
+        lastAccuracyRef.current = accuracy;
+
+        // Always update local state for smooth map rendering
+        setLivePos([latitude, longitude]);
+        setLiveHeading(
+          heading != null && heading >= 0 ? heading : null
+        );
+
+        // Throttle API uploads: minimum 3s between POSTs
+        const now = Date.now();
+        if (now - lastApiPostRef.current < 3000) return;
+        lastApiPostRef.current = now;
 
         try {
           await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
             method: "POST",
             headers: getAuthHeaders(),
             body: JSON.stringify({
-              latitud: pos.coords.latitude,
-              longitud: pos.coords.longitude,
-              precision: pos.coords.accuracy,
-              velocidadKmh: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed * 3.6 : undefined,
+              latitud: latitude,
+              longitud: longitude,
+              precision: accuracy,
+              velocidadKmh: speed != null && speed >= 0 ? speed * 3.6 : undefined,
             }),
           });
         } catch {
@@ -171,7 +193,7 @@ export default function ConductorRutaInicioPage() {
       () => {
         // Si no hay GPS en este momento, se mantiene el origen como referencia.
       },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
     );
 
     watchRef.current = id;
@@ -264,7 +286,7 @@ export default function ConductorRutaInicioPage() {
 
   const recentrarEnConductor = () => {
     if (!currentPos) {
-      toast.error("Esperando GPS… activá la ubicación si está apagada");
+      toast.error("Esperando GPS… activa la ubicación si está apagada");
       return;
     }
     setRecenterTick(t => t + 1);
