@@ -410,6 +410,14 @@ export default function LandingPage() {
               key={index}
               className={`${styles.featureCard} ${styles.scrollReveal}`}
               style={{ '--delay': `${index * 0.1}s` } as React.CSSProperties}
+              onMouseMove={(e) => {
+                // Spotlight que sigue al cursor — efecto premium tipo Stripe/Linear.
+                // Actualizamos vars CSS para que el ::after las use sin re-render React.
+                const target = e.currentTarget;
+                const rect = target.getBoundingClientRect();
+                target.style.setProperty('--spot-x', `${e.clientX - rect.left}px`);
+                target.style.setProperty('--spot-y', `${e.clientY - rect.top}px`);
+              }}
             >
               <div className={styles.featureIcon}>
                 {feature.icon}
