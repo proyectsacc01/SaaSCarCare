@@ -203,6 +203,10 @@ export default function ConductorDashboard() {
     // usuario toca "Llamar" en el menú, mostramos este diálogo con un botón grande
     // que dispara el dialer en un click limpio.
     const [showCallDialog, setShowCallDialog] = useState<{ open: boolean; reason: 'SOS' | 'SUPPORT' | 'CALL' | '112'; phone: string } | null>(null);
+    // Modal de confirmación al completar una ruta. Evita que el conductor
+    // marque por error la ruta como terminada y pierda km/datos.
+    const [confirmComplete, setConfirmComplete] = useState<Ruta | null>(null);
+    const [completingRoute, setCompletingRoute] = useState(false);
     const trackedRouteIdRef = useRef<string | null>(null);
 
     const getAuthHeaders = (): Record<string, string> => {
@@ -1248,7 +1252,7 @@ export default function ConductorDashboard() {
                                                 )}
                                             </button>
                                             <button
-                                                onClick={() => completarRuta(rutaActiva)}
+                                                onClick={() => setConfirmComplete(rutaActiva)}
                                                 style={{ padding: '0.8rem 0.4rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', border: 'none', borderRadius: '12px', color: '#000', fontWeight: '900', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', boxShadow: '0 4px 14px rgba(59,246,59,0.25)' }}
                                             >
                                                 <span style={{ fontSize: '0.95rem' }}>✓</span>
@@ -2162,6 +2166,111 @@ export default function ConductorDashboard() {
                                 }}
                             >
                                 Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── MODAL: Confirmar completar ruta ─────────────────────── */}
+            {confirmComplete && (
+                <div
+                    onClick={() => !completingRoute && setConfirmComplete(null)}
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 9999,
+                        background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(8px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '1.2rem',
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: '100%', maxWidth: '380px',
+                            background: 'linear-gradient(180deg, rgba(15,18,26,0.99), rgba(8,10,16,1))',
+                            border: '1px solid rgba(59,246,59,0.22)',
+                            borderRadius: '20px',
+                            padding: '1.5rem 1.3rem 1.3rem',
+                            boxShadow: '0 30px 80px -20px rgba(0,0,0,0.7)',
+                        }}
+                    >
+                        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                            <div style={{
+                                width: '56px', height: '56px', margin: '0 auto 0.75rem',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #3bf63b, #22c55e)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '1.7rem',
+                                boxShadow: '0 10px 26px -8px rgba(59,246,59,0.6)',
+                            }}>
+                                ✓
+                            </div>
+                            <h3 style={{ margin: '0 0 0.4rem', color: '#fff', fontSize: '1.05rem', fontWeight: 800 }}>
+                                ¿Finalizar el trayecto?
+                            </h3>
+                            <p style={{ margin: 0, color: '#9ca3af', fontSize: '0.78rem', lineHeight: 1.45 }}>
+                                Vas a marcar la ruta como completada. Se cerrará el GPS y se sumarán los kilómetros al vehículo. Esta acción no se puede deshacer.
+                            </p>
+                        </div>
+
+                        <div style={{
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '12px',
+                            padding: '0.75rem 0.9rem',
+                            marginBottom: '0.95rem',
+                        }}>
+                            <div style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>
+                                Trayecto
+                            </div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e5e7eb', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{confirmComplete.origen}</span>
+                                <span style={{ color: '#4b5563' }}>→</span>
+                                <span style={{ color: '#ef4444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{confirmComplete.destino}</span>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                            <button
+                                disabled={completingRoute}
+                                onClick={async () => {
+                                    setCompletingRoute(true);
+                                    try {
+                                        await completarRuta(confirmComplete);
+                                        setConfirmComplete(null);
+                                    } finally {
+                                        setCompletingRoute(false);
+                                    }
+                                }}
+                                style={{
+                                    padding: '0.95rem',
+                                    background: completingRoute
+                                        ? 'rgba(59,246,59,0.4)'
+                                        : 'linear-gradient(135deg, #3bf63b, #22c55e)',
+                                    color: '#041107',
+                                    border: 'none',
+                                    borderRadius: '14px',
+                                    fontWeight: 900, fontSize: '0.92rem',
+                                    cursor: completingRoute ? 'wait' : 'pointer',
+                                    boxShadow: '0 10px 24px -10px rgba(59,246,59,0.5)',
+                                }}
+                            >
+                                {completingRoute ? 'Cerrando trayecto…' : '✓ Sí, completar trayecto'}
+                            </button>
+                            <button
+                                disabled={completingRoute}
+                                onClick={() => setConfirmComplete(null)}
+                                style={{
+                                    padding: '0.7rem',
+                                    background: 'transparent',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '12px',
+                                    color: '#9ca3af',
+                                    fontWeight: 700, fontSize: '0.78rem',
+                                    cursor: completingRoute ? 'not-allowed' : 'pointer',
+                                }}
+                            >
+                                Cancelar
                             </button>
                         </div>
                     </div>
