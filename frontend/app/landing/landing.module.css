@@ -861,7 +861,13 @@
 
 .dashChartBars {
   display: flex;
-  align-items: flex-end;
+  /* CRITICAL: stretch (no flex-end) para que cada .dashBar ocupe los 60px
+     completos del padre en altura. Con flex-end, cada barra se colapsaba
+     a la altura de su contenido visible (rectangulo + label) — solo unos
+     pixeles — y el hover solo funcionaba si pasabas EXACTAMENTE por ahi.
+     Con stretch, toda la columna captura hover, incluido el espacio
+     "vacio" arriba donde no hay barra coloreada. */
+  align-items: stretch;
   justify-content: space-between;
   height: 60px;
   gap: 6px;
