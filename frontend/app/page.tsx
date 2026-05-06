@@ -160,7 +160,15 @@ export default function LandingPage() {
     setIsVisible(true);
 
     const updateScroll = () => {
-      setScrollY(window.scrollY);
+      const y = window.scrollY;
+      setScrollY(y);
+      // Actualizar la barra de progreso del navbar — sin re-renders React,
+      // solo mutamos un CSS var en el <main> con el porcentaje recorrido.
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = docHeight > 0 ? Math.min(100, (y / docHeight) * 100) : 0;
+      if (mainRef.current) {
+        mainRef.current.style.setProperty('--scroll-progress', `${pct}%`);
+      }
       rafRef.current = null;
     };
 
@@ -435,13 +443,24 @@ export default function LandingPage() {
               <div className={`${styles.dashCard} ${styles.dashCardChart} ${styles.scrollReveal}`} style={{ '--delay': '0.55s' } as React.CSSProperties}>
                 <span className={styles.dashCardLabel}>{t.landing.weeklyConsumption}</span>
                 <div className={styles.dashChartBars}>
-                  <div className={styles.dashBar} style={{ '--bar-h': '45%' } as React.CSSProperties}><span>{t.landing.dayL}</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '70%' } as React.CSSProperties}><span>{t.landing.dayM}</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '55%' } as React.CSSProperties}><span>{t.landing.dayX}</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '85%' } as React.CSSProperties}><span>{t.landing.dayJ}</span></div>
-                  <div className={`${styles.dashBar} ${styles.dashBarActive}`} style={{ '--bar-h': '65%' } as React.CSSProperties}><span>{t.landing.dayV}</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '30%' } as React.CSSProperties}><span>{t.landing.dayS}</span></div>
-                  <div className={styles.dashBar} style={{ '--bar-h': '20%' } as React.CSSProperties}><span>{t.landing.dayD}</span></div>
+                  {[
+                    { day: t.landing.dayL, h: 45 },
+                    { day: t.landing.dayM, h: 70 },
+                    { day: t.landing.dayX, h: 55 },
+                    { day: t.landing.dayJ, h: 85 },
+                    { day: t.landing.dayV, h: 65, active: true },
+                    { day: t.landing.dayS, h: 30 },
+                    { day: t.landing.dayD, h: 20 },
+                  ].map((b, i) => (
+                    <div
+                      key={i}
+                      className={`${styles.dashBar} ${b.active ? styles.dashBarActive : ''}`}
+                      style={{ '--bar-h': `${b.h}%` } as React.CSSProperties}
+                      data-pct={`${b.h}%`}
+                    >
+                      <span>{b.day}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
