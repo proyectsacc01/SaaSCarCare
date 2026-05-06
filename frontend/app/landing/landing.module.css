@@ -851,16 +851,24 @@
   display: block;
 }
 
+/* Cuando el hover está sobre una barra concreta, deshabilitar el lift del
+   card padre — sino el card sube 3px y el cursor "se cae" fuera de la barra,
+   perdiendo el hover. Con :has() detectamos la barra hovereada. */
+.dashCardChart:has(.dashBar:hover) {
+  transform: none !important;
+  animation-play-state: running !important;
+}
+
 .dashChartBars {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   height: 60px;
   gap: 6px;
-  /* Lift sutil del grupo entero al hacer hover dentro del chart */
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  /* IMPORTANTE: el chartBars NO debe levantarse en hover. El dashCard padre
+     ya hace lift -3px, sumar otro lift hace que las barras salten 5px y se
+     "escapen" del cursor — el hover de cada barra no se dispara. */
 }
-.dashChartBars:hover { transform: translateY(-2px); }
 
 .dashBar {
   flex: 1;
@@ -872,6 +880,10 @@
   justify-content: flex-end;
   position: relative;
   cursor: pointer;
+  /* Hit area garantizada: la barra captura hover en TODA su columna,
+     incluso el espacio vacío arriba del rectángulo coloreado. */
+  pointer-events: auto;
+  background: transparent;
   /* Cada barra entra con stagger al cargar el componente */
   animation: barRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
