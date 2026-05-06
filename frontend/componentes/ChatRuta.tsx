@@ -28,6 +28,7 @@ type AndroidTrackerBridge = {
     pickChatAudio?: () => void;
     pickChatMedia?: () => void;
     startRecording?: () => void;
+    stopRecording?: () => void;
     requestMicPermission?: () => void;
 };
 
@@ -69,6 +70,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const recorderChunksRef = useRef<Blob[]>([]);
     const recorderTimerRef = useRef<number | null>(null);
     const recorderStreamRef = useRef<MediaStream | null>(null);
+    const nativeRecordingRef = useRef(false);
     const [newMsgPulse, setNewMsgPulse] = useState(0);
 
     const quickReplies = rol === 'CONDUCTOR' ? QUICK_REPLIES_CONDUCTOR : QUICK_REPLIES_ADMIN;
@@ -135,6 +137,10 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     useEffect(() => {
         return () => {
             stopRecorderResources();
+            if (nativeRecordingRef.current) {
+                try { getAndroidTracker()?.stopRecording?.(); } catch { /* noop */ }
+                nativeRecordingRef.current = false;
+            }
             if (recorderRef.current && recorderRef.current.state !== "inactive") {
                 recorderRef.current.stop();
             }
@@ -147,16 +153,32 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         const handleNativeAudioSelected = (event: Event) => {
             const detail = (event as CustomEvent<{ base64?: string; type?: string }>).detail;
             if (!detail?.base64 || !detail?.type) {
+                nativeRecordingRef.current = false;
+                stopRecorderResources();
+                setIsRecording(false);
+                setRecordingSeconds(0);
                 toast.error("No se pudo recibir el audio nativo");
                 return;
             }
+            nativeRecordingRef.current = false;
+            stopRecorderResources();
             setIsRecording(false);
             setRecordingSeconds(0);
             setMediaPreview({ base64: detail.base64, type: detail.type });
         };
 
+        const handleNativeAudioRecordingStarted = () => {
+            nativeRecordingRef.current = true;
+            setMediaPreview(null);
+            setRecordingSeconds(0);
+            setIsRecording(true);
+            startRecordingTimer();
+        };
+
         const handleNativeAudioError = (event: Event) => {
             const detail = (event as CustomEvent<{ message?: string }>).detail;
+            nativeRecordingRef.current = false;
+            stopRecorderResources();
             setIsRecording(false);
             setRecordingSeconds(0);
             toast.error(detail?.message || "No se pudo capturar el audio");
@@ -176,12 +198,14 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             toast.error(detail?.message || "No se pudo seleccionar el archivo");
         };
 
+        window.addEventListener("native-chat-audio-recording-started", handleNativeAudioRecordingStarted as EventListener);
         window.addEventListener("native-chat-audio-selected", handleNativeAudioSelected as EventListener);
         window.addEventListener("native-chat-audio-error", handleNativeAudioError as EventListener);
         window.addEventListener("native-chat-media-selected", handleNativeMediaSelected as EventListener);
         window.addEventListener("native-chat-media-error", handleNativeMediaError as EventListener);
 
         return () => {
+            window.removeEventListener("native-chat-audio-recording-started", handleNativeAudioRecordingStarted as EventListener);
             window.removeEventListener("native-chat-audio-selected", handleNativeAudioSelected as EventListener);
             window.removeEventListener("native-chat-audio-error", handleNativeAudioError as EventListener);
             window.removeEventListener("native-chat-media-selected", handleNativeMediaSelected as EventListener);
@@ -233,6 +257,22 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         recorderStreamRef.current = null;
     };
 
+    const startRecordingTimer = () => {
+        if (typeof window === "undefined") return;
+        if (recorderTimerRef.current !== null) {
+            window.clearInterval(recorderTimerRef.current);
+        }
+        recorderTimerRef.current = window.setInterval(() => {
+            setRecordingSeconds((prev) => {
+                const next = prev + 1;
+                if (next >= MAX_AUDIO_SECONDS) {
+                    stopAudioRecording();
+                }
+                return next;
+            });
+        }, 1000);
+    };
+
     const formatRecordingTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -274,6 +314,20 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     };
 
     const stopAudioRecording = () => {
+        const bridge = getAndroidTracker();
+        if (nativeRecordingRef.current && bridge?.stopRecording) {
+            try {
+                bridge.stopRecording();
+                return;
+            } catch {
+                nativeRecordingRef.current = false;
+                stopRecorderResources();
+                setIsRecording(false);
+                setRecordingSeconds(0);
+                toast.error("No se pudo detener la grabación nativa");
+                return;
+            }
+        }
         if (!recorderRef.current) return;
         if (recorderRef.current.state !== "inactive") {
             recorderRef.current.stop();
@@ -290,18 +344,19 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         // existe siempre en la app, aunque sea una versión vieja.
         const inAndroidApp = !!bridge;
 
-        // Camino preferido: bridge nativo de la versión nueva — abre la grabadora
-        // del sistema directamente, NUNCA el explorador de archivos.
+        // Camino preferido en Android: grabación NATIVA integrada dentro de la app.
+        // No debe abrir la app externa de grabadora ni el explorador de archivos.
         if (bridge?.startRecording) {
-            setIsRecording(true);
-            setRecordingSeconds(0);
+            nativeRecordingRef.current = false;
             setMediaPreview(null);
             try {
                 bridge.startRecording();
                 return;
             } catch {
+                stopRecorderResources();
                 setIsRecording(false);
-                toast.error("No se pudo abrir la grabadora del sistema");
+                setRecordingSeconds(0);
+                toast.error("No se pudo iniciar la grabación nativa");
                 return;
             }
         }
@@ -353,6 +408,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             recorderRef.current = recorder;
             recorderStreamRef.current = stream;
             recorderChunksRef.current = [];
+            nativeRecordingRef.current = false;
             setRecordingSeconds(0);
             setIsRecording(true);
             setMediaPreview(null);
@@ -387,15 +443,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             };
 
             recorder.start(250);
-            recorderTimerRef.current = window.setInterval(() => {
-                setRecordingSeconds((prev) => {
-                    const next = prev + 1;
-                    if (next >= MAX_AUDIO_SECONDS) {
-                        stopAudioRecording();
-                    }
-                    return next;
-                });
-            }, 1000);
+            startRecordingTimer();
         } catch (err) {
             // Logueamos el error real para debug — sin esto era imposible saber
             // si el problema es permiso, codec, otro proceso usando el mic, etc.

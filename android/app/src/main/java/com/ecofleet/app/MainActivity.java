@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageDecoder;
+import android.media.MediaRecorder;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
@@ -28,6 +29,8 @@ import android.Manifest;
 import android.provider.MediaStore;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 
 public class MainActivity extends Activity {
@@ -41,7 +44,6 @@ public class MainActivity extends Activity {
     private static final int PROFILE_IMAGE_REQUEST = 1101;
     private static final int CHAT_AUDIO_REQUEST = 1102;
     private static final int NATIVE_PERMISSION_REQUEST = 1103;
-    private static final int RECORD_AUDIO_REQUEST = 1104;
     private static final int CHAT_MEDIA_REQUEST = 1105;
     private static final String ACTION_PROFILE_IMAGE = "profile_image";
     private static final String ACTION_CHAT_AUDIO = "chat_audio";
@@ -52,6 +54,10 @@ public class MainActivity extends Activity {
     // Guardamos la PermissionRequest pendiente del WebView para concederla
     // después de que el usuario otorgue el permiso nativo de RECORD_AUDIO.
     private PermissionRequest pendingWebPermissionRequest = null;
+    private MediaRecorder nativeAudioRecorder = null;
+    private File nativeAudioOutputFile = null;
+    private static final int MAX_CHAT_AUDIO_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_CHAT_AUDIO_DURATION_MS = 90_000;
 
     private static final String API_URL = BuildConfig.API_URL;
     private static final String WEB_URL = BuildConfig.WEB_URL;
@@ -203,20 +209,14 @@ public class MainActivity extends Activity {
                 // alternativa visible en el chooser cuando el accept incluye imágenes.
                 java.util.List<Intent> extras = new java.util.ArrayList<>();
                 boolean wantsImages = false;
-                boolean wantsAudio = false;
                 for (String m : mimes) {
                     if (m.startsWith("image/")) { wantsImages = true; break; }
-                    if (m.startsWith("audio/")) wantsAudio = true;
                 }
                 if (wantsImages) {
                     Intent gallery = new Intent(Intent.ACTION_PICK,
                             android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
                     gallery.setType("image/*");
                     extras.add(gallery);
-                }
-                if (wantsAudio) {
-                    Intent audioRecorder = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
-                    extras.add(audioRecorder);
                 }
 
                 Intent chooser = Intent.createChooser(contentIntent, "Adjuntar archivo");
@@ -401,17 +401,23 @@ public class MainActivity extends Activity {
             });
         }
 
-        // Lanza DIRECTAMENTE la grabadora de audio del sistema sin abrir
-        // ningún chooser ni explorador de archivos.
+        // Inicia una grabación de audio simple DENTRO de la app.
+        // No debe abrir la grabadora externa del sistema.
         @JavascriptInterface
         public void startRecording() {
             mContext.runOnUiThread(() -> {
                 if (!ensureNativePermissions(ACTION_RECORD_AUDIO)) {
                     return;
                 }
-                openDirectRecorder();
+                startNativeChatAudioRecording();
             });
         }
+
+        @JavascriptInterface
+        public void stopRecording() {
+            mContext.runOnUiThread(() -> stopNativeChatAudioRecording(false));
+        }
+
         @JavascriptInterface
         public void requestMicPermission() {
             mContext.runOnUiThread(() -> {
@@ -428,10 +434,13 @@ public class MainActivity extends Activity {
     private boolean ensureNativePermissions(String action) {
         java.util.List<String> missing = new java.util.ArrayList<>();
 
-        if (ACTION_CHAT_AUDIO.equals(action) || ACTION_RECORD_AUDIO.equals(action)) {
+        if (ACTION_RECORD_AUDIO.equals(action)) {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 missing.add(Manifest.permission.RECORD_AUDIO);
             }
+        }
+
+        if (ACTION_CHAT_AUDIO.equals(action)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 if (checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                     missing.add(Manifest.permission.READ_MEDIA_AUDIO);
@@ -488,22 +497,13 @@ public class MainActivity extends Activity {
         contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
         contentIntent.setType("audio/*");
 
-        java.util.List<Intent> extras = new java.util.ArrayList<>();
-        Intent audioRecorder = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
-        if (audioRecorder.resolveActivity(getPackageManager()) != null) {
-            extras.add(audioRecorder);
-        }
-
-        Intent chooser = Intent.createChooser(contentIntent, "Grabar o seleccionar audio");
-        if (!extras.isEmpty()) {
-            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, extras.toArray(new Intent[0]));
-        }
+        Intent chooser = Intent.createChooser(contentIntent, "Seleccionar audio");
 
         try {
             startActivityForResult(chooser, CHAT_AUDIO_REQUEST);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "No hay app para grabar o elegir audio", Toast.LENGTH_SHORT).show();
-            dispatchNativeError("native-chat-audio-error", "No hay app para grabar o elegir audio");
+            Toast.makeText(this, "No hay app para seleccionar audio", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-audio-error", "No hay app para seleccionar audio");
         }
     }
 
@@ -534,15 +534,121 @@ public class MainActivity extends Activity {
         }
     }
 
-    // Lanza DIRECTAMENTE la grabadora del sistema sin chooser ni explorador
-    private void openDirectRecorder() {
-        Intent recorderIntent = new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
-        try {
-            startActivityForResult(recorderIntent, RECORD_AUDIO_REQUEST);
-        } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "No hay grabadora de audio disponible", Toast.LENGTH_SHORT).show();
-            dispatchNativeError("native-chat-audio-error", "No hay grabadora de audio disponible");
+    private void startNativeChatAudioRecording() {
+        if (nativeAudioRecorder != null) {
+            return;
         }
+
+        try {
+            File outputFile = File.createTempFile("chat-audio-", ".m4a", getCacheDir());
+            MediaRecorder recorder = new MediaRecorder();
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+            recorder.setAudioEncodingBitRate(64_000);
+            recorder.setAudioSamplingRate(44_100);
+            recorder.setMaxDuration(MAX_CHAT_AUDIO_DURATION_MS);
+            recorder.setOutputFile(outputFile.getAbsolutePath());
+            recorder.setOnInfoListener((mr, what, extra) -> {
+                if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
+                    runOnUiThread(() -> stopNativeChatAudioRecording(false));
+                }
+            });
+            recorder.prepare();
+            recorder.start();
+
+            nativeAudioRecorder = recorder;
+            nativeAudioOutputFile = outputFile;
+            dispatchNativeEvent("native-chat-audio-recording-started", "{}");
+        } catch (Exception e) {
+            cleanupNativeChatAudioRecording(true);
+            Toast.makeText(this, "No se pudo iniciar la grabación", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-audio-error", e.getMessage() != null ? e.getMessage() : "No se pudo iniciar la grabación");
+        }
+    }
+
+    private void stopNativeChatAudioRecording(boolean discard) {
+        MediaRecorder recorder = nativeAudioRecorder;
+        File audioFile = nativeAudioOutputFile;
+
+        nativeAudioRecorder = null;
+        nativeAudioOutputFile = null;
+
+        if (recorder == null) {
+            if (discard && audioFile != null && audioFile.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                audioFile.delete();
+            }
+            return;
+        }
+
+        boolean stoppedOk = false;
+        try {
+            recorder.stop();
+            stoppedOk = true;
+        } catch (RuntimeException e) {
+            if (!discard) {
+                dispatchNativeError("native-chat-audio-error", "Audio demasiado corto. Graba al menos un instante antes de detener.");
+            }
+        } finally {
+            try {
+                recorder.reset();
+            } catch (Exception ignored) { }
+            recorder.release();
+        }
+
+        if (discard) {
+            if (audioFile != null && audioFile.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                audioFile.delete();
+            }
+            return;
+        }
+
+        if (!stoppedOk || audioFile == null || !audioFile.exists()) {
+            if (audioFile != null && audioFile.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                audioFile.delete();
+            }
+            return;
+        }
+
+        try {
+            byte[] bytes = readFileBytes(audioFile);
+            if (bytes.length <= 0) {
+                throw new IllegalStateException("No se pudo generar el audio");
+            }
+            if (bytes.length > MAX_CHAT_AUDIO_BYTES) {
+                throw new IllegalStateException("Audio demasiado grande (máx. 2MB)");
+            }
+
+            String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+            dispatchNativeEvent(
+                    "native-chat-audio-selected",
+                    "{\"base64\":" + quoteJs(base64) + ",\"type\":" + quoteJs("audio/mp4") + "}"
+            );
+        } catch (Exception e) {
+            Toast.makeText(this, "No se pudo preparar el audio", Toast.LENGTH_SHORT).show();
+            dispatchNativeError("native-chat-audio-error", e.getMessage() != null ? e.getMessage() : "No se pudo preparar el audio");
+        } finally {
+            //noinspection ResultOfMethodCallIgnored
+            audioFile.delete();
+        }
+    }
+
+    private void cleanupNativeChatAudioRecording(boolean deleteFile) {
+        if (nativeAudioRecorder != null) {
+            try {
+                nativeAudioRecorder.reset();
+            } catch (Exception ignored) { }
+            nativeAudioRecorder.release();
+            nativeAudioRecorder = null;
+        }
+        if (deleteFile && nativeAudioOutputFile != null && nativeAudioOutputFile.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            nativeAudioOutputFile.delete();
+        }
+        nativeAudioOutputFile = null;
     }
 
     private void dispatchNativeEvent(String eventName, String detailJson) {
@@ -573,6 +679,18 @@ public class MainActivity extends Activity {
                 throw new IllegalStateException("No se pudo abrir el archivo seleccionado");
             }
 
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+            return outputStream.toByteArray();
+        }
+    }
+
+    private byte[] readFileBytes(File file) throws Exception {
+        try (InputStream inputStream = new FileInputStream(file);
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = inputStream.read(buffer)) != -1) {
@@ -706,6 +824,12 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onDestroy() {
+        cleanupNativeChatAudioRecording(true);
+        super.onDestroy();
+    }
+
+    @Override
     public void onBackPressed() {
         if (mWebView.canGoBack()) {
             mWebView.goBack();
@@ -747,9 +871,11 @@ public class MainActivity extends Activity {
             if (ACTION_PROFILE_IMAGE.equals(pendingNativeAction)) {
                 dispatchNativeError("native-profile-image-error", "Permiso denegado para seleccionar imágenes");
             } else if (ACTION_CHAT_AUDIO.equals(pendingNativeAction)) {
-                dispatchNativeError("native-chat-audio-error", "Permiso denegado para grabar o seleccionar audio");
+                dispatchNativeError("native-chat-audio-error", "Permiso denegado para seleccionar audio");
             } else if (ACTION_CHAT_MEDIA.equals(pendingNativeAction)) {
                 dispatchNativeError("native-chat-media-error", "Permiso denegado para seleccionar imágenes o videos");
+            } else if (ACTION_RECORD_AUDIO.equals(pendingNativeAction)) {
+                dispatchNativeError("native-chat-audio-error", "Permiso denegado para grabar audio");
             } else if ("mic_permission".equals(pendingNativeAction)) {
                 dispatchNativeEvent("mic-permission-denied", "{}");
             }
@@ -766,7 +892,7 @@ public class MainActivity extends Activity {
         } else if (ACTION_CHAT_MEDIA.equals(action)) {
             openNativeChatMediaPicker();
         } else if (ACTION_RECORD_AUDIO.equals(action)) {
-            openDirectRecorder();
+            startNativeChatAudioRecording();
         } else if ("mic_permission".equals(action)) {
             dispatchNativeEvent("mic-permission-granted", "{}");
         }
@@ -788,10 +914,6 @@ public class MainActivity extends Activity {
         }
         if (requestCode == CHAT_MEDIA_REQUEST) {
             handleChatMediaResult(resultCode, data);
-            return;
-        }
-        if (requestCode == RECORD_AUDIO_REQUEST) {
-            handleChatAudioResult(resultCode, data);
             return;
         }
         if (requestCode != FILECHOOSER_REQUEST) return;
