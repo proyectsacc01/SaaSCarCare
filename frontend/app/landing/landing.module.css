@@ -558,7 +558,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  perspective: 1200px;
+  perspective: 1600px;
+  perspective-origin: center 42%;
 }
 
 /* ========================================
@@ -578,25 +579,27 @@
   /* Combina pose base (rotación inicial) + tilt del cursor + flotación.
      Al mover el mouse, el dashboard se inclina hacia donde apuntas. */
   transform:
-    rotateY(calc(-5deg + var(--tilt-y)))
-    rotateX(calc(2deg + var(--tilt-x)));
+    rotateY(calc(-2deg + var(--tilt-y)))
+    rotateX(calc(1deg + var(--tilt-x)))
+    translateZ(0);
+  transform-origin: center center;
   transform-style: preserve-3d;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
   position: relative;
-  animation: dashFloat 6s ease-in-out infinite;
+  animation: dashFloat 7.5s ease-in-out infinite;
 }
 
 .dashCardsWrapPrecision {
   animation: none !important;
-  transform: rotateY(0deg) rotateX(0deg) translateY(0) !important;
+  transform: rotateY(0deg) rotateX(0deg) translateY(0) translateZ(0) !important;
 }
 
 @keyframes dashFloat {
   0%, 100% {
-    transform: rotateY(calc(-5deg + var(--tilt-y))) rotateX(calc(2deg + var(--tilt-x))) translateY(0);
+    transform: rotateY(calc(-2deg + var(--tilt-y))) rotateX(calc(1deg + var(--tilt-x))) translateY(0) translateZ(0);
   }
   50% {
-    transform: rotateY(calc(-5deg + var(--tilt-y))) rotateX(calc(2deg + var(--tilt-x))) translateY(-8px);
+    transform: rotateY(calc(-2deg + var(--tilt-y))) rotateX(calc(1deg + var(--tilt-x))) translateY(-4px) translateZ(0);
   }
 }
 
@@ -2503,8 +2506,8 @@
   }
 
   @keyframes dashFloatTablet {
-    0%, 100% { transform: rotateY(-3deg) rotateX(2deg) translateY(0); }
-    50% { transform: rotateY(-3deg) rotateX(2deg) translateY(-6px); }
+    0%, 100% { transform: rotateY(-1.5deg) rotateX(0.8deg) translateY(0) translateZ(0); }
+    50% { transform: rotateY(-1.5deg) rotateX(0.8deg) translateY(-4px) translateZ(0); }
   }
 }
 

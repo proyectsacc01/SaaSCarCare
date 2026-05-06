@@ -155,6 +155,14 @@ function getMsUntilNextLocalDay(date = new Date()) {
   return nextDay.getTime() - date.getTime();
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function easeTiltAxis(value: number) {
+  return Math.sign(value) * Math.pow(Math.abs(value), 1.35);
+}
+
 export default function LandingPage() {
   const router = useRouter();
   const t = useTranslation();
@@ -165,9 +173,13 @@ export default function LandingPage() {
 
   // Refs for scroll-triggered animations
   const heroVisualRef = useRef<HTMLDivElement>(null);
+  const dashCardsWrapRef = useRef<HTMLDivElement>(null);
   const downloadVisualRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const rafRef = useRef<number | null>(null);
+  const tiltRafRef = useRef<number | null>(null);
+  const tiltCurrentRef = useRef({ x: 0, y: 0 });
+  const tiltTargetRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     setIsVisible(true);
@@ -209,6 +221,14 @@ export default function LandingPage() {
     syncActiveWeekDay();
 
     return () => window.clearTimeout(timerId);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (tiltRafRef.current !== null) {
+        cancelAnimationFrame(tiltRafRef.current);
+      }
+    };
   }, []);
 
   // Intersection Observer for scroll-triggered animations
@@ -285,12 +305,42 @@ export default function LandingPage() {
     active: index === activeWeekDayIndex,
   }));
 
+  const applyDashboardTilt = (tiltX: number, tiltY: number) => {
+    if (!heroVisualRef.current) return;
+    heroVisualRef.current.style.setProperty('--tilt-x', `${tiltX.toFixed(2)}deg`);
+    heroVisualRef.current.style.setProperty('--tilt-y', `${tiltY.toFixed(2)}deg`);
+  };
+
+  const animateDashboardTilt = () => {
+    const current = tiltCurrentRef.current;
+    const target = tiltTargetRef.current;
+
+    current.x += (target.x - current.x) * 0.16;
+    current.y += (target.y - current.y) * 0.16;
+
+    applyDashboardTilt(current.x, current.y);
+
+    if (Math.abs(target.x - current.x) < 0.02 && Math.abs(target.y - current.y) < 0.02) {
+      current.x = target.x;
+      current.y = target.y;
+      applyDashboardTilt(current.x, current.y);
+      tiltRafRef.current = null;
+      return;
+    }
+
+    tiltRafRef.current = requestAnimationFrame(animateDashboardTilt);
+  };
+
+  const setDashboardTiltTarget = (tiltX: number, tiltY: number) => {
+    tiltTargetRef.current = { x: tiltX, y: tiltY };
+    if (tiltRafRef.current === null) {
+      tiltRafRef.current = requestAnimationFrame(animateDashboardTilt);
+    }
+  };
+
   const lockDashboardForPrecisionHover = () => {
     setIsDashboardPrecisionMode(true);
-    if (heroVisualRef.current) {
-      heroVisualRef.current.style.setProperty('--tilt-x', '0deg');
-      heroVisualRef.current.style.setProperty('--tilt-y', '0deg');
-    }
+    setDashboardTiltTarget(0, 0);
   };
 
   const unlockDashboardPrecisionHover = () => {
@@ -392,21 +442,27 @@ export default function LandingPage() {
           }}
           onMouseMove={(e) => {
             if (isDashboardPrecisionMode) return;
-            // Tilt 3D suave: el dashboard sigue al cursor con perspectiva.
-            // Sin re-render React: actualizamos vars CSS directamente.
-            const r = e.currentTarget.getBoundingClientRect();
-            const x = (e.clientX - r.left) / r.width - 0.5;
-            const y = (e.clientY - r.top) / r.height - 0.5;
-            e.currentTarget.style.setProperty('--tilt-x', `${y * -8}deg`);
-            e.currentTarget.style.setProperty('--tilt-y', `${x * 8}deg`);
+            const bounds = dashCardsWrapRef.current?.getBoundingClientRect();
+            if (!bounds) return;
+
+            const px = clampNumber((e.clientX - bounds.left) / bounds.width, 0, 1);
+            const py = clampNumber((e.clientY - bounds.top) / bounds.height, 0, 1);
+            const centerX = px * 2 - 1;
+            const centerY = py * 2 - 1;
+            const easedX = easeTiltAxis(centerX);
+            const easedY = easeTiltAxis(centerY);
+
+            setDashboardTiltTarget(easedY * -3.2, easedX * 4.2);
           }}
-          onMouseLeave={(e) => {
+          onMouseLeave={() => {
             setIsDashboardPrecisionMode(false);
-            e.currentTarget.style.setProperty('--tilt-x', `0deg`);
-            e.currentTarget.style.setProperty('--tilt-y', `0deg`);
+            setDashboardTiltTarget(0, 0);
           }}
         >
-          <div className={`${styles.dashCardsWrap} ${isDashboardPrecisionMode ? styles.dashCardsWrapPrecision : ''}`}>
+          <div
+            ref={dashCardsWrapRef}
+            className={`${styles.dashCardsWrap} ${isDashboardPrecisionMode ? styles.dashCardsWrapPrecision : ''}`}
+          >
 
             {/* Main map card - large */}
             <div className={`${styles.dashCard} ${styles.dashCardMap} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
