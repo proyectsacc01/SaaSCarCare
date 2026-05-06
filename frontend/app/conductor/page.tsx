@@ -1766,7 +1766,7 @@ export default function ConductorDashboard() {
                                     { label: 'En progreso', value: rutasEnProgresoCount, color: '#f59e0b', icon: '⚡' },
                                     { label: 'Tiempo activo', value: elapsedSeconds > 0 ? formatElapsed(elapsedSeconds) : '—', color: '#a78bfa', icon: '⏱' },
                                     { label: 'Combustible', value: `${litrosCombustible.toFixed(1)} L`, color: '#f97316', icon: '⛽' },
-                                    { label: 'Dinero combustible', value: `€${dineroCombustible.toFixed(2)}`, color: '#14b8a6', icon: '💶' },
+                                    { label: 'Gasto combustible', value: `€${dineroCombustible.toFixed(2)}`, color: '#14b8a6', icon: '💶' },
                                 ].map((s, i) => (
                                     <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '1rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
                                         <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '40px', height: '40px', background: `radial-gradient(circle, ${s.color}15 0%, transparent 70%)` }} />

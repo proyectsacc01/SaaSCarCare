@@ -144,11 +144,24 @@ function AnimatedStat({ value }: { value: string }) {
   return <span ref={ref}>{display}</span>;
 }
 
+function getCurrentLandingWeekDayIndex(date = new Date()) {
+  const jsDay = date.getDay();
+  return jsDay === 0 ? 6 : jsDay - 1;
+}
+
+function getMsUntilNextLocalDay(date = new Date()) {
+  const nextDay = new Date(date);
+  nextDay.setHours(24, 0, 0, 0);
+  return nextDay.getTime() - date.getTime();
+}
+
 export default function LandingPage() {
   const router = useRouter();
   const t = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
+  const [activeWeekDayIndex, setActiveWeekDayIndex] = useState(() => getCurrentLandingWeekDayIndex());
+  const [isDashboardPrecisionMode, setIsDashboardPrecisionMode] = useState(false);
 
   // Refs for scroll-triggered animations
   const heroVisualRef = useRef<HTMLDivElement>(null);
@@ -183,6 +196,19 @@ export default function LandingPage() {
       window.removeEventListener('scroll', handleScroll);
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    let timerId: number;
+
+    const syncActiveWeekDay = () => {
+      setActiveWeekDayIndex(getCurrentLandingWeekDayIndex());
+      timerId = window.setTimeout(syncActiveWeekDay, getMsUntilNextLocalDay() + 1000);
+    };
+
+    syncActiveWeekDay();
+
+    return () => window.clearTimeout(timerId);
   }, []);
 
   // Intersection Observer for scroll-triggered animations
@@ -245,6 +271,31 @@ export default function LandingPage() {
       color: "#22c55e"
     }
   ];
+
+  const weeklyBars = [
+    { day: t.landing.dayL, h: 45 },
+    { day: t.landing.dayM, h: 70 },
+    { day: t.landing.dayX, h: 55 },
+    { day: t.landing.dayJ, h: 85 },
+    { day: t.landing.dayV, h: 65 },
+    { day: t.landing.dayS, h: 30 },
+    { day: t.landing.dayD, h: 20 },
+  ].map((bar, index) => ({
+    ...bar,
+    active: index === activeWeekDayIndex,
+  }));
+
+  const lockDashboardForPrecisionHover = () => {
+    setIsDashboardPrecisionMode(true);
+    if (heroVisualRef.current) {
+      heroVisualRef.current.style.setProperty('--tilt-x', '0deg');
+      heroVisualRef.current.style.setProperty('--tilt-y', '0deg');
+    }
+  };
+
+  const unlockDashboardPrecisionHover = () => {
+    setIsDashboardPrecisionMode(false);
+  };
 
   const stats = [
     { number: "6", label: t.landing.statModules },
@@ -340,6 +391,7 @@ export default function LandingPage() {
             transform: `translateY(${scrollY * -0.08}px)`,
           }}
           onMouseMove={(e) => {
+            if (isDashboardPrecisionMode) return;
             // Tilt 3D suave: el dashboard sigue al cursor con perspectiva.
             // Sin re-render React: actualizamos vars CSS directamente.
             const r = e.currentTarget.getBoundingClientRect();
@@ -349,11 +401,12 @@ export default function LandingPage() {
             e.currentTarget.style.setProperty('--tilt-y', `${x * 8}deg`);
           }}
           onMouseLeave={(e) => {
+            setIsDashboardPrecisionMode(false);
             e.currentTarget.style.setProperty('--tilt-x', `0deg`);
             e.currentTarget.style.setProperty('--tilt-y', `0deg`);
           }}
         >
-          <div className={styles.dashCardsWrap}>
+          <div className={`${styles.dashCardsWrap} ${isDashboardPrecisionMode ? styles.dashCardsWrapPrecision : ''}`}>
 
             {/* Main map card - large */}
             <div className={`${styles.dashCard} ${styles.dashCardMap} ${styles.scrollReveal}`} style={{ '--delay': '0s' } as React.CSSProperties}>
@@ -388,7 +441,11 @@ export default function LandingPage() {
             </div>
 
             {/* Stats cards row */}
-            <div className={styles.dashStatsRow}>
+            <div
+              className={styles.dashStatsRow}
+              onMouseEnter={lockDashboardForPrecisionHover}
+              onMouseLeave={unlockDashboardPrecisionHover}
+            >
               <div className={`${styles.dashCard} ${styles.dashCardStat} ${styles.scrollReveal}`} style={{ '--delay': '0.15s' } as React.CSSProperties}>
                 <div className={styles.dashStatIcon}>
                   <CarIcon />
@@ -419,7 +476,11 @@ export default function LandingPage() {
             </div>
 
             {/* Bottom row - activity + chart */}
-            <div className={styles.dashBottomRow}>
+            <div
+              className={styles.dashBottomRow}
+              onMouseEnter={lockDashboardForPrecisionHover}
+              onMouseLeave={unlockDashboardPrecisionHover}
+            >
               <div className={`${styles.dashCard} ${styles.dashCardActivity} ${styles.scrollReveal}`} style={{ '--delay': '0.45s' } as React.CSSProperties}>
                 <span className={styles.dashCardLabel}>{t.landing.recentActivity}</span>
                 <div className={styles.dashActivityList}>
@@ -443,15 +504,7 @@ export default function LandingPage() {
               <div className={`${styles.dashCard} ${styles.dashCardChart} ${styles.scrollReveal}`} style={{ '--delay': '0.55s' } as React.CSSProperties}>
                 <span className={styles.dashCardLabel}>{t.landing.weeklyConsumption}</span>
                 <div className={styles.dashChartBars}>
-                  {[
-                    { day: t.landing.dayL, h: 45 },
-                    { day: t.landing.dayM, h: 70 },
-                    { day: t.landing.dayX, h: 55 },
-                    { day: t.landing.dayJ, h: 85 },
-                    { day: t.landing.dayV, h: 65, active: true },
-                    { day: t.landing.dayS, h: 30 },
-                    { day: t.landing.dayD, h: 20 },
-                  ].map((b, i) => (
+                  {weeklyBars.map((b, i) => (
                     <div
                       key={i}
                       className={`${styles.dashBar} ${b.active ? styles.dashBarActive : ''}`}

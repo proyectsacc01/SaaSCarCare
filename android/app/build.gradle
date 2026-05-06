@@ -17,8 +17,8 @@ android {
         applicationId "com.ecofleet.app"
         minSdk 24
         targetSdk 35
-        versionCode 30
-        versionName "1.1.0"
+        versionCode 31
+        versionName "1.2.0"
 
         // URL del frontend según build type. Sobrescribilas si desplegás en otro dominio.
         buildConfigField "String", "WEB_URL", "\"https://saa-s-car-care-85l6.vercel.app\""
