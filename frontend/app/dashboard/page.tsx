@@ -509,20 +509,34 @@ export default function Dashboard() {
   }, [rutas, repostajes, datosManual, factorEmisionPromedioFlota, mesActual, nombresMeses, vehiculosPorId]);
 
   // KPIs calculados
+  const consumoTotal = datosGrafico.reduce((acc, dato) => acc + dato.consumo, 0);
   const mesesConDatos = datosGrafico.filter(d => d.consumo > 0).length;
+
+  const consumoMedio = mesesConDatos > 0
+    ? Math.round(consumoTotal / mesesConDatos)
+    : 63;
 
   const emisionesTotales = datosGrafico.reduce((acc, dato) => acc + (dato.emisiones || 0), 0);
   const emisionesMedias = mesesConDatos > 0
     ? emisionesTotales / mesesConDatos
     : 63 * factorEmisionPromedioFlota;
-     
+      
   const mesesConDatosDisplay = mesesConDatos > 0 ? mesesConDatos : 4;
+
+  const consumoMesActual = datosGrafico[mesActual]?.consumo || 0;
+  const prediccionMesActual = (datosGrafico[mesActual]?.prediccion || 0) > 0
+    ? datosGrafico[mesActual]?.prediccion
+    : 660;
 
   const emisionesMesActual = datosGrafico[mesActual]?.emisiones || 0;
 
   const prediccionEmisionesMesActual = (datosGrafico[mesActual]?.prediccionEmisiones || 0) > 0
     ? datosGrafico[mesActual]?.prediccionEmisiones
     : 660 * factorEmisionPromedioFlota;
+
+  const ahorroPotencial = prediccionMesActual > consumoMesActual
+    ? Math.round(prediccionMesActual - consumoMesActual)
+    : 0;
 
   const ahorroPotencialEmisiones = prediccionEmisionesMesActual > emisionesMesActual
     ? prediccionEmisionesMesActual - emisionesMesActual
@@ -1386,41 +1400,81 @@ export default function Dashboard() {
           {activeTab === 'estadisticas' && (
             <div className={styles.rutasContainer} style={{ gridTemplateColumns: "1fr", gap: "2rem" }}>
               {/* KPIs */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
-                <div className={styles.card} style={{ position: "relative", overflow: "hidden" }}>
-                  <div style={{ position: "absolute", top: 0, right: 0, padding: "1rem", opacity: 0.1 }}>
-                    <svg width="60" height="60" fill="#22c55e" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" /></svg>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
+                  <div className={styles.card} style={{ position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", top: 0, right: 0, padding: "1rem", opacity: 0.1 }}>
+                      <svg width="60" height="60" fill="#22c55e" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" /></svg>
+                    </div>
+                    <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.consThisMonth}</h3>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                      {consumoMesActual > 0 ? `${consumoMesActual} L` : '—'}
+                    </div>
+                    {ahorroPotencial > 0 && (
+                      <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>
+                        {ahorroPotencial}L {t.dashboard.underPred}
+                      </span>
+                    )}
+                    {consumoMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>{t.dashboard.addWithBtn}</span>}
                   </div>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsThisMonth}</h3>
-                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {emisionesMesActual > 0 ? formatEmissionValue(emisionesMesActual, locale) : '—'}
-                  </div>
-                  {ahorroPotencialEmisiones > 0 && (
-                    <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>
-                      {formatEmissionValue(ahorroPotencialEmisiones, locale)} {t.dashboard.underPred}
+
+                  <div className={styles.card}>
+                    <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.monthlyAvg}</h3>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                      {consumoMedio} L
+                    </div>
+                    <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
+                      {t.dashboard.basedOn} {mesesConDatosDisplay} mes{mesesConDatosDisplay > 1 ? 'es' : ''}
                     </span>
-                  )}
-                  {emisionesMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>{t.dashboard.addWithBtn}</span>}
+                  </div>
+
+                  <div className={styles.card}>
+                    <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.prediction} {nombresMeses[mesActual]}</h3>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                      {prediccionMesActual} L
+                    </div>
+                    <span style={{ color: "#8884d8", fontSize: "0.9rem" }}>
+                      {t.dashboard.movAvg3m}
+                    </span>
+                  </div>
                 </div>
 
-                <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsMonthlyAvg}</h3>
-                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {formatEmissionValue(emisionesMedias, locale)}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
+                  <div className={styles.card} style={{ position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", top: 0, right: 0, padding: "1rem", opacity: 0.1 }}>
+                      <svg width="60" height="60" fill="#22c55e" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" /></svg>
+                    </div>
+                    <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsThisMonth}</h3>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                      {emisionesMesActual > 0 ? formatEmissionValue(emisionesMesActual, locale) : '—'}
+                    </div>
+                    {ahorroPotencialEmisiones > 0 && (
+                      <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>
+                        {formatEmissionValue(ahorroPotencialEmisiones, locale)} {t.dashboard.underPred}
+                      </span>
+                    )}
+                    {emisionesMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>{t.dashboard.addWithBtn}</span>}
                   </div>
-                  <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
-                    {t.dashboard.basedOn} {mesesConDatosDisplay} mes{mesesConDatosDisplay > 1 ? 'es' : ''}
-                  </span>
-                </div>
 
-                <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsPrediction} {nombresMeses[mesActual]}</h3>
-                  <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {formatEmissionValue(prediccionEmisionesMesActual, locale)}
+                  <div className={styles.card}>
+                    <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsMonthlyAvg}</h3>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                      {formatEmissionValue(emisionesMedias, locale)}
+                    </div>
+                    <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
+                      {t.dashboard.basedOn} {mesesConDatosDisplay} mes{mesesConDatosDisplay > 1 ? 'es' : ''}
+                    </span>
                   </div>
-                  <span style={{ color: "#8884d8", fontSize: "0.9rem" }}>
-                    {t.dashboard.movAvg3m}
-                  </span>
+
+                  <div className={styles.card}>
+                    <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsPrediction} {nombresMeses[mesActual]}</h3>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
+                      {formatEmissionValue(prediccionEmisionesMesActual, locale)}
+                    </div>
+                    <span style={{ color: "#8884d8", fontSize: "0.9rem" }}>
+                      {t.dashboard.movAvg3m}
+                    </span>
+                  </div>
                 </div>
               </div>
 
