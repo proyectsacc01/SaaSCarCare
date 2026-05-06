@@ -890,20 +890,11 @@
      incluso el espacio vacío arriba del rectángulo coloreado. */
   pointer-events: auto;
   background: transparent;
-  /* Cada barra entra con stagger al cargar el componente */
-  animation: barRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-}
-.dashBar:nth-child(1) { animation-delay: 0.05s; }
-.dashBar:nth-child(2) { animation-delay: 0.12s; }
-.dashBar:nth-child(3) { animation-delay: 0.19s; }
-.dashBar:nth-child(4) { animation-delay: 0.26s; }
-.dashBar:nth-child(5) { animation-delay: 0.33s; }
-.dashBar:nth-child(6) { animation-delay: 0.40s; }
-.dashBar:nth-child(7) { animation-delay: 0.47s; }
-
-@keyframes barRise {
-  from { opacity: 0; transform: scaleY(0); transform-origin: bottom; }
-  to   { opacity: 1; transform: scaleY(1); transform-origin: bottom; }
+  /* CRITICAL: NADA de transform en el .dashBar. Su padre (.dashCardsWrap)
+     tiene rotateY/rotateX + dashFloat anidado con cardFloat — si encima
+     el hijo tambien tiene transform animado, el bounding box queda en
+     constante movimiento y el hit-test del hover se rompe. La animacion
+     de entrada va aplicada al ::before, no al contenedor. */
 }
 
 .dashBar::before {
@@ -920,6 +911,21 @@
   transform-origin: bottom;
   position: relative;
   z-index: 1;
+  /* Animacion de entrada con stagger — solo el rectangulo coloreado se anima,
+     el contenedor padre queda quieto para que el hit-test sea estable. */
+  animation: barRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.dashBar:nth-child(1)::before { animation-delay: 0.05s; }
+.dashBar:nth-child(2)::before { animation-delay: 0.12s; }
+.dashBar:nth-child(3)::before { animation-delay: 0.19s; }
+.dashBar:nth-child(4)::before { animation-delay: 0.26s; }
+.dashBar:nth-child(5)::before { animation-delay: 0.33s; }
+.dashBar:nth-child(6)::before { animation-delay: 0.40s; }
+.dashBar:nth-child(7)::before { animation-delay: 0.47s; }
+
+@keyframes barRise {
+  from { opacity: 0; transform: scaleY(0); transform-origin: bottom; }
+  to   { opacity: 1; transform: scaleY(1); transform-origin: bottom; }
 }
 
 /* Hover: la barra se ilumina, crece y muestra un tooltip con el % */
