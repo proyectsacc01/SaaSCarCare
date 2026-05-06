@@ -628,6 +628,9 @@ export default function RutaTracking() {
                             {(() => {
                                 const progreso = calcularProgreso(ruta.distanciaEstimadaKm, ruta.distanciaRestanteKm);
                                 const eta = calcularETA(ruta.distanciaRestanteKm, ruta.velocidadActualKmh);
+                                const kmTotalesReales = ruta.distanciaRecorridaKm != null && ruta.distanciaRecorridaKm > 0
+                                    ? Math.max(ruta.distanciaEstimadaKm ?? 0, ruta.distanciaRecorridaKm)
+                                    : ruta.distanciaEstimadaKm;
                                 return (
                                     <div className={styles.card} style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -653,16 +656,16 @@ export default function RutaTracking() {
                                             <span>SALIDA: {ruta.origen}</span>
                                             <span>ETA: {eta}</span>
                                         </div>
-                                        {ruta.distanciaEstimadaKm != null && ruta.distanciaEstimadaKm > 0 && (
+                                        {kmTotalesReales != null && kmTotalesReales > 0 && (
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.7rem', color: '#374151' }}>
                                                 <span>
                                                     {/* Preferimos los KM RECORRIDOS reales (acumulados desde GPS).
                                                         Caemos al cálculo estimado-restante solo si todavía no llegó GPS. */}
                                                     {ruta.distanciaRecorridaKm != null
                                                         ? ruta.distanciaRecorridaKm.toFixed(1)
-                                                        : (ruta.distanciaEstimadaKm - (ruta.distanciaRestanteKm ?? 0)).toFixed(1)} km recorridos
+                                                        : Math.max(0, (ruta.distanciaEstimadaKm ?? 0) - (ruta.distanciaRestanteKm ?? 0)).toFixed(1)} km recorridos
                                                 </span>
-                                                <span>{ruta.distanciaEstimadaKm.toFixed(1)} km totales</span>
+                                                <span>{kmTotalesReales.toFixed(1)} km totales</span>
                                             </div>
                                         )}
                                     </div>

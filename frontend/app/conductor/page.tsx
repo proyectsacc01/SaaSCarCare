@@ -916,6 +916,12 @@ export default function ConductorDashboard() {
         return ruta.distanciaRecorridaKm ?? 0;
     };
 
+    const getRouteTotalKm = (ruta: Ruta) => {
+        const estimada = ruta.distanciaEstimadaKm ?? 0;
+        const real = ruta.distanciaRecorridaKm ?? 0;
+        return real > 0 ? Math.max(estimada, real) : estimada;
+    };
+
     const repostajesDelConductor = repostajes.filter((r) => r.conductorId && r.conductorId === driverUser?.id);
     const litrosCombustible = repostajesDelConductor.reduce((acc, r) => acc + (r.litros || 0), 0);
     const dineroCombustible = repostajesDelConductor.reduce((acc, r) => acc + (r.costeTotal || 0), 0);
@@ -1205,7 +1211,7 @@ export default function ConductorDashboard() {
                                             </div>
                                             <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
                                                 <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
-                                                    {rutaActiva.distanciaEstimadaKm}<span style={{ fontSize: '0.55rem', color: '#6b7280', marginLeft: '2px' }}>km</span>
+                                                    {getRouteTotalKm(rutaActiva).toFixed(1)}<span style={{ fontSize: '0.55rem', color: '#6b7280', marginLeft: '2px' }}>km</span>
                                                 </div>
                                                 <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Distancia</div>
                                             </div>

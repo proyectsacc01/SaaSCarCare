@@ -6,19 +6,33 @@ import com.ecofleet.model.Vehiculo;
 import com.ecofleet.repository.ConductorRepository;
 import com.ecofleet.repository.RutaRepository;
 import com.ecofleet.repository.VehiculoRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.time.Instant;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/rutas")
 @CrossOrigin(origins = "*")
 public class RutaController {
+
+    private static final String OSRM_ROUTE_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(4))
+            .build();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Autowired
     private RutaRepository rutaRepository;
@@ -69,7 +83,7 @@ public class RutaController {
         ruta.setDistanciaRestanteKm(null);
         ruta.setDesviado(null);
         ruta.setInicioDetencion(null);
-        recalcularDistanciaEstimada(ruta);
+        recalcularDistanciaEstimada(ruta, ruta.getDistanciaEstimadaKm());
         aplicarAsignacionConductor(ruta, ruta.getConductorId(), usuarioId);
         return rutaRepository.save(ruta);
     }
@@ -99,7 +113,7 @@ public class RutaController {
                         if (rutaActualizada.getLongitudOrigen() != null) ruta.setLongitudOrigen(rutaActualizada.getLongitudOrigen());
                         if (rutaActualizada.getLatitudDestino() != null) ruta.setLatitudDestino(rutaActualizada.getLatitudDestino());
                         if (rutaActualizada.getLongitudDestino() != null) ruta.setLongitudDestino(rutaActualizada.getLongitudDestino());
-                        recalcularDistanciaEstimada(ruta);
+                        recalcularDistanciaEstimada(ruta, rutaActualizada.getDistanciaEstimadaKm());
                         if (rutaActualizada.getConductorId() != null || rutaActualizada.getConductorNombre() != null) {
                             aplicarAsignacionConductor(ruta, rutaActualizada.getConductorId(), usuarioId);
                         }
@@ -118,17 +132,28 @@ public class RutaController {
                     
                     if (rutaActualizada.getEstado() != null) {
                         String estadoAnterior = ruta.getEstado();
-                        ruta.setEstado(normalizarEstado(rutaActualizada.getEstado()));
+                        String estadoNormalizado = normalizarEstado(rutaActualizada.getEstado());
+
+                        // Si la ruta vuelve a EN_CURSO desde un estado no activo,
+                        // limpiamos la línea base del GPS para NO puentear kilómetros
+                        // fantasma entre la última posición vieja y la nueva real.
+                        if ("EN_CURSO".equals(estadoNormalizado)
+                                && !"EN_CURSO".equals(normalizarEstado(estadoAnterior))
+                                && !"DETENIDO".equals(normalizarEstado(estadoAnterior))) {
+                            resetearLineaBaseGPS(ruta);
+                        }
+
+                        ruta.setEstado(estadoNormalizado);
 
                         // Resetear detención al reanudar manualmente
-                        if ("EN_CURSO".equals(normalizarEstado(rutaActualizada.getEstado()))) {
+                        if ("EN_CURSO".equals(estadoNormalizado)) {
                             ruta.setInicioDetencion(null);
                         }
 
                         // ─── AUTO-UPDATE KILOMETRAJE DEL VEHÍCULO AL COMPLETAR ───────────
                         // Solo si la transición ES a COMPLETADA (evitar doble conteo)
-                        if ("COMPLETADA".equals(rutaActualizada.getEstado())
-                                && !"COMPLETADA".equals(estadoAnterior)
+                        if ("COMPLETADA".equals(estadoNormalizado)
+                                && !"COMPLETADA".equals(normalizarEstado(estadoAnterior))
                                 && ruta.getVehiculoId() != null) {
 
                             // Política de conteo de km al completar:
@@ -197,6 +222,24 @@ public class RutaController {
         System.out.println("[RutaController] 📱 GPS RECIBIDO de Android: " + gps);
         return rutaRepository.findById(id)
                 .map(ruta -> {
+                    String estadoTelemetria = normalizarEstado(ruta.getEstado());
+                    boolean rutaEnSeguimiento = "EN_CURSO".equals(estadoTelemetria) || "DETENIDO".equals(estadoTelemetria);
+                    String timestampActual = Instant.now().toString();
+
+                    if (!rutaEnSeguimiento) {
+                        if (ruta.getConductorId() != null && !ruta.getConductorId().isBlank()) {
+                            conductorRepository.findById(ruta.getConductorId()).ifPresent(c -> {
+                                c.setLatitudActual(gps.getLatitud());
+                                c.setLongitudActual(gps.getLongitud());
+                                c.setUltimaActualizacionGPS(timestampActual);
+                                conductorRepository.save(c);
+                            });
+                        }
+                        return normalizarEstadoRuta(ruta);
+                    }
+
+                    boolean distanciaRestanteCalculadaConRuta = false;
+
                     // Guardar posición anterior para calcular velocidad
                     Double latitudAnterior = ruta.getLatitudActual();
                     Double longitudAnterior = ruta.getLongitudActual();
@@ -207,8 +250,30 @@ public class RutaController {
                     ruta.setLongitudActual(gps.getLongitud());
 
                     // Guardar timestamp actual
-                    String timestampActual = Instant.now().toString();
                     ruta.setUltimaActualizacionGPS(timestampActual);
+
+                    // Primera posición real del tramo activo: actualizar la
+                    // distancia total esperada usando la ubicación ACTUAL del
+                    // conductor, no el origen planificado. Si ya había km
+                    // acumulados (reanudar), se respeta lo recorrido y se suma
+                    // la distancia vial restante hasta el destino.
+                    if ((latitudAnterior == null || longitudAnterior == null || timestampAnterior == null)
+                            && ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
+                        Double kmRestantesRutaReal = calcularDistanciaRutaRealKm(
+                                gps.getLatitud(),
+                                gps.getLongitud(),
+                                ruta.getLatitudDestino(),
+                                ruta.getLongitudDestino()
+                        );
+                        if (kmRestantesRutaReal != null && kmRestantesRutaReal > 0) {
+                            double kmAcumulados = ruta.getDistanciaRecorridaKm() != null
+                                    ? ruta.getDistanciaRecorridaKm()
+                                    : 0.0;
+                            ruta.setDistanciaRestanteKm(redondearKm(kmRestantesRutaReal));
+                            ruta.setDistanciaEstimadaKm(redondearKm(kmAcumulados + kmRestantesRutaReal));
+                            distanciaRestanteCalculadaConRuta = true;
+                        }
+                    }
 
                     // Calcular distancia recorrida desde última posición
                     double distanciaRecorrida = 0;
@@ -336,7 +401,8 @@ public class RutaController {
                     }
 
                     // Calcular distancia restante al destino
-                    if (ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
+                    if (!distanciaRestanteCalculadaConRuta
+                            && ruta.getLatitudDestino() != null && ruta.getLongitudDestino() != null) {
                         double distanciaRestante = calcularDistancia(
                             gps.getLatitud(), gps.getLongitud(),
                             ruta.getLatitudDestino(), ruta.getLongitudDestino()
@@ -468,10 +534,26 @@ public class RutaController {
         };
     }
 
-    private void recalcularDistanciaEstimada(Ruta ruta) {
+    private void recalcularDistanciaEstimada(Ruta ruta, Double distanciaSugeridaKm) {
         if (ruta == null) return;
+        if (distanciaSugeridaKm != null && distanciaSugeridaKm > 0) {
+            ruta.setDistanciaEstimadaKm(redondearKm(distanciaSugeridaKm));
+        }
+
         if (ruta.getLatitudOrigen() == null || ruta.getLongitudOrigen() == null
                 || ruta.getLatitudDestino() == null || ruta.getLongitudDestino() == null) {
+            return;
+        }
+
+        Double kmRutaReal = calcularDistanciaRutaRealKm(
+                ruta.getLatitudOrigen(),
+                ruta.getLongitudOrigen(),
+                ruta.getLatitudDestino(),
+                ruta.getLongitudDestino()
+        );
+
+        if (kmRutaReal != null && kmRutaReal > 0) {
+            ruta.setDistanciaEstimadaKm(redondearKm(kmRutaReal));
             return;
         }
 
@@ -483,10 +565,62 @@ public class RutaController {
         );
 
         // Factor conservador para aproximar recorrido vial en caso de no usar
-        // proveedor de rutas en backend. El frontend intenta usar OSRM; backend
-        // garantiza que no quede 0 ni editable manualmente.
+        // proveedor de rutas. Solo usamos esto como último fallback.
         double kmEstimados = Math.round((kmRecta * 1.18) * 10.0) / 10.0;
         ruta.setDistanciaEstimadaKm(Math.max(0.1, kmEstimados));
+    }
+
+    private void resetearLineaBaseGPS(Ruta ruta) {
+        ruta.setLatitudActual(null);
+        ruta.setLongitudActual(null);
+        ruta.setUltimaActualizacionGPS(null);
+        ruta.setVelocidadActualKmh(null);
+        ruta.setDistanciaRestanteKm(null);
+        ruta.setDesviado(false);
+        ruta.setInicioDetencion(null);
+    }
+
+    private Double calcularDistanciaRutaRealKm(double latOrigen, double lonOrigen, double latDestino, double lonDestino) {
+        try {
+            String url = String.format(
+                    Locale.US,
+                    "%s/%.6f,%.6f;%.6f,%.6f?overview=false",
+                    OSRM_ROUTE_BASE_URL,
+                    lonOrigen, latOrigen,
+                    lonDestino, latDestino
+            );
+
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(6))
+                    .header("User-Agent", "SaaS-CarCare/1.0")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return null;
+            }
+
+            JsonNode json = OBJECT_MAPPER.readTree(response.body());
+            JsonNode routes = json.path("routes");
+            if (!routes.isArray() || routes.isEmpty()) {
+                return null;
+            }
+
+            double meters = routes.get(0).path("distance").asDouble(-1);
+            if (!Double.isFinite(meters) || meters <= 0) {
+                return null;
+            }
+
+            return meters / 1000.0;
+        } catch (Exception e) {
+            System.err.println("[RutaController] No se pudo calcular distancia vial real: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private double redondearKm(double km) {
+        return Math.round(km * 10.0) / 10.0;
     }
 
     // Clase interna para recibir coordenadas GPS
