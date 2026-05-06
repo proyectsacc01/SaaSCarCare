@@ -248,18 +248,48 @@ public class RutaController {
 
                     // ═══ ACUMULAR DISTANCIA RECORRIDA REAL ═══
                     // Sumamos la distancia entre cada par de GPS para tener el km
-                    // verdadero al completar. Filtramos jitter (saltos > 1km en
-                    // <30s = error GPS) y movimiento sub-precisión.
-                    if (distanciaRecorrida > 0) {
+                    // verdadero al completar. Estrategia anti-jitter SIN cap fijo
+                    // de distancia (el cap viejo de 1km filtraba movimiento real
+                    // a velocidad de carretera con GPS poco frecuente).
+                    //
+                    // Filtramos así:
+                    //  1. Distancia menor que la precisión del GPS → ruido posicional
+                    //  2. Velocidad implícita > 250 km/h → salto GPS imposible
+                    //     (puede pasar por error de fix o cambio de torre celular)
+                    //
+                    // Esto cuenta CORRECTAMENTE recorridos a 100, 120 km/h aunque
+                    // el GPS llegue cada 60s o más.
+                    if (distanciaRecorrida > 0 && timestampAnterior != null) {
                         double precisionM = gps.getPrecision() != null && gps.getPrecision() > 0
                                 ? gps.getPrecision()
                                 : 15.0;
                         double umbralKm = Math.max(0.005, (precisionM * 1.5) / 1000.0);
-                        if (distanciaRecorrida >= umbralKm && distanciaRecorrida < 1.0) {
-                            double acumulada = ruta.getDistanciaRecorridaKm() != null
-                                    ? ruta.getDistanciaRecorridaKm()
-                                    : 0.0;
-                            ruta.setDistanciaRecorridaKm(acumulada + distanciaRecorrida);
+
+                        if (distanciaRecorrida >= umbralKm) {
+                            try {
+                                Instant a = Instant.parse(timestampAnterior);
+                                Instant b = Instant.parse(timestampActual);
+                                double seg = (b.toEpochMilli() - a.toEpochMilli()) / 1000.0;
+                                if (seg > 0) {
+                                    double velocidadImplicita = (distanciaRecorrida / seg) * 3600.0;
+                                    if (velocidadImplicita <= 250.0) {
+                                        double acumulada = ruta.getDistanciaRecorridaKm() != null
+                                                ? ruta.getDistanciaRecorridaKm()
+                                                : 0.0;
+                                        ruta.setDistanciaRecorridaKm(acumulada + distanciaRecorrida);
+                                    } else {
+                                        System.out.printf("[RutaController] ⚠ Salto GPS descartado: %.2f km en %.1fs (%.0f km/h implícita)%n",
+                                                distanciaRecorrida, seg, velocidadImplicita);
+                                    }
+                                }
+                            } catch (Exception ignored) {
+                                // Si los timestamps no parsean, sumamos defensivamente
+                                // para no perder distancia real (asumimos válida).
+                                double acumulada = ruta.getDistanciaRecorridaKm() != null
+                                        ? ruta.getDistanciaRecorridaKm()
+                                        : 0.0;
+                                ruta.setDistanciaRecorridaKm(acumulada + distanciaRecorrida);
+                            }
                         }
                     }
 
