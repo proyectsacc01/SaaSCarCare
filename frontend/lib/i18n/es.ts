@@ -286,12 +286,15 @@ const es = {
     routeMarked: "Ruta marcada como",
     errorUpdState: "Error al actualizar estado",
     consThisMonth: "Consumo Este Mes",
+    emissionsThisMonth: "Emisiones Este Mes",
     underPred: "bajo predicción",
     addWithBtn: "Añade datos con el botón +",
     monthlyAvg: "Media Mensual",
+    emissionsMonthlyAvg: "Media Mensual CO₂",
     basedOn: "Basado en",
     noDataYet: "Sin datos aún",
     prediction: "Predicción",
+    emissionsPrediction: "Predicción CO₂",
     movAvg3m: "Media móvil 3 meses",
     needsHist: "Necesita historial previo",
     analysisPred: "Análisis de Consumo y Predicción",
@@ -835,4 +838,3 @@ type DeepStringify<T> = {
 
 export type TranslationKeys = DeepStringify<typeof es>;
 export default es as TranslationKeys;
-

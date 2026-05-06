@@ -214,6 +214,34 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-producti
 
 const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
+const EMISSION_FACTORS_KG_CO2_PER_LITER: Record<string, number> = {
+  gasolina: 2.31,
+  diesel: 2.68,
+  hibrido: 2.31,
+  electrico: 0,
+};
+
+function normalizeFuelType(tipoCombustible?: string) {
+  return (tipoCombustible ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function getEmissionFactorKgCO2PerLiter(tipoCombustible?: string) {
+  const normalized = normalizeFuelType(tipoCombustible);
+  return EMISSION_FACTORS_KG_CO2_PER_LITER[normalized] ?? EMISSION_FACTORS_KG_CO2_PER_LITER.gasolina;
+}
+
+function formatEmissionValue(kgCO2: number, locale: string) {
+  if (!Number.isFinite(kgCO2) || kgCO2 <= 0) return '0 kg CO₂';
+  if (kgCO2 >= 1000) {
+    return `${(kgCO2 / 1000).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} t CO₂`;
+  }
+  return `${Math.round(kgCO2).toLocaleString(locale)} kg CO₂`;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const { t, locale } = useI18n();
@@ -346,6 +374,7 @@ export default function Dashboard() {
 
   const [editandoMes, setEditandoMes] = useState<number | null>(null);
   const [inputConsumo, setInputConsumo] = useState('');
+  const vehiculosPorId = useMemo(() => new Map(vehiculos.map((vehiculo) => [vehiculo.id, vehiculo])), [vehiculos]);
 
   const guardarDatoManual = (mesIndex: number, valor: number) => {
     const nuevo = [...datosManual];
@@ -360,16 +389,47 @@ export default function Dashboard() {
   const nombresMeses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
   const mesActual = new Date().getMonth();
 
+  const factorEmisionPromedioFlota = useMemo(() => {
+    let litrosReales = 0;
+    let emisionesReales = 0;
+
+    repostajes.forEach((rep) => {
+      const litros = Number(rep.litros) || 0;
+      if (litros <= 0) return;
+      const vehiculo = vehiculosPorId.get(rep.vehiculoId);
+      const factor = getEmissionFactorKgCO2PerLiter(vehiculo?.tipoCombustible);
+      litrosReales += litros;
+      emisionesReales += litros * factor;
+    });
+
+    if (litrosReales > 0) return emisionesReales / litrosReales;
+
+    const factoresCombustion = vehiculos
+      .map((vehiculo) => getEmissionFactorKgCO2PerLiter(vehiculo.tipoCombustible))
+      .filter((factor) => factor > 0);
+
+    if (factoresCombustion.length > 0) {
+      return factoresCombustion.reduce((acc, factor) => acc + factor, 0) / factoresCombustion.length;
+    }
+
+    return EMISSION_FACTORS_KG_CO2_PER_LITER.gasolina;
+  }, [repostajes, vehiculos, vehiculosPorId]);
+
   const datosGrafico = useMemo(() => {
     const añoActual = new Date().getFullYear();
     const consumoPorMes = new Array(12).fill(0);
+    const emisionesPorMes = new Array(12).fill(0);
 
     // 1. Datos reales desde repostajes
     repostajes.forEach(rep => {
       if (!rep.fecha) return;
       const d = new Date(rep.fecha);
       if (d.getFullYear() === añoActual) {
-        consumoPorMes[d.getMonth()] += rep.litros || 0;
+        const litros = Number(rep.litros) || 0;
+        consumoPorMes[d.getMonth()] += litros;
+        const vehiculo = vehiculosPorId.get(rep.vehiculoId);
+        const factor = getEmissionFactorKgCO2PerLiter(vehiculo?.tipoCombustible);
+        emisionesPorMes[d.getMonth()] += litros * factor;
       }
     });
 
@@ -382,25 +442,35 @@ export default function Dashboard() {
         if (consumoPorMes[d.getMonth()] === 0) {
           // SOLO km reales (GPS). Sin GPS → 0 km.
           const kmRuta = r.distanciaRecorridaKm ?? 0;
-          consumoPorMes[d.getMonth()] += (kmRuta / 100) * 8;
+          const litrosEstimados = (kmRuta / 100) * 8;
+          consumoPorMes[d.getMonth()] += litrosEstimados;
+          const vehiculo = vehiculosPorId.get(r.vehiculoId);
+          const factor = getEmissionFactorKgCO2PerLiter(vehiculo?.tipoCombustible);
+          emisionesPorMes[d.getMonth()] += litrosEstimados * factor;
         }
       }
     });
 
     // 3. Datos manuales (sobreescriben si el usuario los puso)
     datosManual.forEach((val, i) => {
-      if (val > 0) consumoPorMes[i] = val;
+      if (val > 0) {
+        consumoPorMes[i] = val;
+        emisionesPorMes[i] = val * factorEmisionPromedioFlota;
+      }
     });
 
     // 4. Generar predicción (media móvil de 3 meses anteriores con datos)
     return nombresMeses.map((mes, i) => {
       const consumo = Math.round(consumoPorMes[i] * 10) / 10;
+      const emisiones = Math.round(emisionesPorMes[i] * 10) / 10;
 
       // Predicción: promedio de los últimos 3 meses con datos
       const mesesAnteriores: number[] = [];
+      const emisionesMesesAnteriores: number[] = [];
       for (let j = 1; j <= 3; j++) {
         if (i - j >= 0 && consumoPorMes[i - j] > 0) {
           mesesAnteriores.push(consumoPorMes[i - j]);
+          emisionesMesesAnteriores.push(emisionesPorMes[i - j]);
         }
       }
 
@@ -409,42 +479,54 @@ export default function Dashboard() {
         prediccion = mesesAnteriores.reduce((a, b) => a + b, 0) / mesesAnteriores.length;
       }
 
+      let prediccionEmisiones = 0;
+      if (emisionesMesesAnteriores.length > 0) {
+        prediccionEmisiones = emisionesMesesAnteriores.reduce((a, b) => a + b, 0) / emisionesMesesAnteriores.length;
+      }
+
       // Para el mes actual: proyectar el consumo parcial al mes completo
       if (i === mesActual && consumo > 0) {
         const diaActual = new Date().getDate();
         const diasEnMes = new Date(new Date().getFullYear(), i + 1, 0).getDate();
         const proyeccion = (consumo / Math.max(1, diaActual)) * diasEnMes;
         if (proyeccion > prediccion) prediccion = proyeccion;
+
+        const factorMesActual = emisiones > 0 ? emisiones / consumo : factorEmisionPromedioFlota;
+        const proyeccionEmisiones = proyeccion * factorMesActual;
+        if (proyeccionEmisiones > prediccionEmisiones) prediccionEmisiones = proyeccionEmisiones;
       }
 
       return {
         mes,
         consumo,
+        emisiones,
         prediccion: Math.round(prediccion * 10) / 10,
+        prediccionEmisiones: Math.round(prediccionEmisiones * 10) / 10,
         esMesActual: i === mesActual,
         esManual: datosManual[i] > 0,
       };
     });
-  }, [rutas, repostajes, datosManual, mesActual, nombresMeses]);
+  }, [rutas, repostajes, datosManual, factorEmisionPromedioFlota, mesActual, nombresMeses, vehiculosPorId]);
 
   // KPIs calculados
-  const consumoTotal = datosGrafico.reduce((a, d) => a + d.consumo, 0);
   const mesesConDatos = datosGrafico.filter(d => d.consumo > 0).length;
-  
-  // Usar valores del usuario como fallback si no hay datos (Demo mode)
-  const consumoMedio = mesesConDatos > 0 
-    ? Math.round(consumoTotal / mesesConDatos) 
-    : 63; 
-    
+
+  const emisionesTotales = datosGrafico.reduce((acc, dato) => acc + (dato.emisiones || 0), 0);
+  const emisionesMedias = mesesConDatos > 0
+    ? emisionesTotales / mesesConDatos
+    : 63 * factorEmisionPromedioFlota;
+     
   const mesesConDatosDisplay = mesesConDatos > 0 ? mesesConDatos : 4;
 
-  const consumoMesActual = datosGrafico[mesActual]?.consumo || 0;
-  const prediccionMesActual = (datosGrafico[mesActual]?.prediccion || 0) > 0 
-    ? datosGrafico[mesActual]?.prediccion 
-    : 660;
+  const emisionesMesActual = datosGrafico[mesActual]?.emisiones || 0;
 
-  const ahorroPotencial = prediccionMesActual > consumoMesActual
-    ? Math.round(prediccionMesActual - consumoMesActual) : 0;
+  const prediccionEmisionesMesActual = (datosGrafico[mesActual]?.prediccionEmisiones || 0) > 0
+    ? datosGrafico[mesActual]?.prediccionEmisiones
+    : 660 * factorEmisionPromedioFlota;
+
+  const ahorroPotencialEmisiones = prediccionEmisionesMesActual > emisionesMesActual
+    ? prediccionEmisionesMesActual - emisionesMesActual
+    : 0;
 
   const [nuevoVehiculo, setNuevoVehiculo] = useState<Partial<Vehiculo>>({
     marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true
@@ -1309,22 +1391,22 @@ export default function Dashboard() {
                   <div style={{ position: "absolute", top: 0, right: 0, padding: "1rem", opacity: 0.1 }}>
                     <svg width="60" height="60" fill="#22c55e" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.39-2.1 1.39-1.6 0-2.23-.72-2.32-1.64H8.04c.1 1.7 1.36 2.66 2.86 2.97V19h2.34v-1.67c1.52-.29 2.72-1.16 2.73-2.77-.01-2.2-1.9-2.96-3.66-3.42z" /></svg>
                   </div>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.consThisMonth}</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsThisMonth}</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {consumoMesActual > 0 ? `${consumoMesActual} L` : '—'}
+                    {emisionesMesActual > 0 ? formatEmissionValue(emisionesMesActual, locale) : '—'}
                   </div>
-                  {ahorroPotencial > 0 && (
+                  {ahorroPotencialEmisiones > 0 && (
                     <span style={{ color: "#22c55e", background: "rgba(34, 197, 94, 0.1)", padding: "2px 8px", borderRadius: "12px", fontSize: "0.8rem", fontWeight: "600" }}>
-                      {ahorroPotencial}L {t.dashboard.underPred}
+                      {formatEmissionValue(ahorroPotencialEmisiones, locale)} {t.dashboard.underPred}
                     </span>
                   )}
-                  {consumoMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>{t.dashboard.addWithBtn}</span>}
+                  {emisionesMesActual === 0 && <span style={{ color: "#4b5563", fontSize: "0.8rem" }}>{t.dashboard.addWithBtn}</span>}
                 </div>
 
                 <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.monthlyAvg}</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsMonthlyAvg}</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {consumoMedio} L
+                    {formatEmissionValue(emisionesMedias, locale)}
                   </div>
                   <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
                     {t.dashboard.basedOn} {mesesConDatosDisplay} mes{mesesConDatosDisplay > 1 ? 'es' : ''}
@@ -1332,9 +1414,9 @@ export default function Dashboard() {
                 </div>
 
                 <div className={styles.card}>
-                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.prediction} {nombresMeses[mesActual]}</h3>
+                  <h3 style={{ color: "#94a3b8", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "1px" }}>{t.dashboard.emissionsPrediction} {nombresMeses[mesActual]}</h3>
                   <div style={{ fontSize: "2.5rem", fontWeight: "800", color: "#fff", margin: "0.5rem 0" }}>
-                    {prediccionMesActual} L
+                    {formatEmissionValue(prediccionEmisionesMesActual, locale)}
                   </div>
                   <span style={{ color: "#8884d8", fontSize: "0.9rem" }}>
                     {t.dashboard.movAvg3m}
