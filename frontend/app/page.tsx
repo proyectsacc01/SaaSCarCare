@@ -101,6 +101,49 @@ const AndroidIcon = () => (
 
 
 
+/**
+ * Cuenta de 0 al número final cuando entra en viewport. Si el "número" no es
+ * numérico (ej: "24/7", "∞"), se muestra tal cual con un fade.
+ * Usa requestAnimationFrame con easeOutCubic para una curva natural.
+ */
+function AnimatedStat({ value }: { value: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [display, setDisplay] = useState<string>(value);
+  const numericTarget = parseFloat(value);
+  const suffix = value.replace(/^[\d.]+/, '');
+  const isNumeric = !Number.isNaN(numericTarget) && /^[\d.]+/.test(value);
+
+  useEffect(() => {
+    if (!isNumeric) { setDisplay(value); return; }
+    setDisplay('0' + suffix);
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        observer.disconnect();
+        const start = performance.now();
+        const duration = 1400;
+        const tick = (now: number) => {
+          const t = Math.min(1, (now - start) / duration);
+          const eased = 1 - Math.pow(1 - t, 3);
+          const current = numericTarget * eased;
+          const decimals = numericTarget % 1 === 0 ? 0 : 1;
+          setDisplay(current.toFixed(decimals) + suffix);
+          if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      },
+      { threshold: 0.4 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return <span ref={ref}>{display}</span>;
+}
+
 export default function LandingPage() {
   const router = useRouter();
   const t = useTranslation();
@@ -272,19 +315,34 @@ export default function LandingPage() {
           <div className={styles.heroStats}>
             {stats.map((stat, index) => (
               <div key={index} className={styles.statItem}>
-                <span className={styles.statNumber}>{stat.number}</span>
+                <span className={styles.statNumber}>
+                  <AnimatedStat value={stat.number} />
+                </span>
                 <span className={styles.statLabel}>{stat.label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Hero Visual - 3D Dashboard with Parallax */}
+        {/* Hero Visual - 3D Dashboard con tilt parallax al mover el mouse */}
         <div
           className={styles.heroVisual}
           ref={heroVisualRef}
           style={{
             transform: `translateY(${scrollY * -0.08}px)`,
+          }}
+          onMouseMove={(e) => {
+            // Tilt 3D suave: el dashboard sigue al cursor con perspectiva.
+            // Sin re-render React: actualizamos vars CSS directamente.
+            const r = e.currentTarget.getBoundingClientRect();
+            const x = (e.clientX - r.left) / r.width - 0.5;
+            const y = (e.clientY - r.top) / r.height - 0.5;
+            e.currentTarget.style.setProperty('--tilt-x', `${y * -8}deg`);
+            e.currentTarget.style.setProperty('--tilt-y', `${x * 8}deg`);
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.setProperty('--tilt-x', `0deg`);
+            e.currentTarget.style.setProperty('--tilt-y', `0deg`);
           }}
         >
           <div className={styles.dashCardsWrap}>
