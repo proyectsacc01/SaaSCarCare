@@ -737,12 +737,21 @@
   cursor: pointer;
   transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.32s ease,
-              box-shadow 0.32s ease;
+              box-shadow 0.32s ease,
+              background 0.32s ease;
+  /* CRITICAL: anular la animacion cardFloat que viene heredada de .dashCard.
+     Los tres stat cards estan en grid con delays distintos por :nth-child,
+     y el bounding box en movimiento rompia el hit-test del hover —
+     especialmente el 3er card (98%) que tenia mayor offset acumulado.
+     Sin animation, el bbox queda quieto y los tres responden igual. */
+  animation: none !important;
+  transform: none;
 }
 .dashCardStat:hover {
-  transform: translateY(-3px) scale(1.03);
-  border-color: rgba(59, 246, 59, 0.4) !important;
-  box-shadow: 0 12px 36px -10px rgba(59, 246, 59, 0.35) !important;
+  transform: translateY(-3px) scale(1.03) !important;
+  border-color: rgba(59, 246, 59, 0.45) !important;
+  box-shadow: 0 14px 40px -10px rgba(59, 246, 59, 0.4) !important;
+  background: rgba(14, 22, 44, 0.95) !important;
 }
 
 .dashStatIcon {
