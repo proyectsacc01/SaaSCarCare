@@ -74,8 +74,6 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const [newMsgPulse, setNewMsgPulse] = useState(0);
     const [micPermissionDeniedDesktop, setMicPermissionDeniedDesktop] = useState(false);
     const [isBrave, setIsBrave] = useState(false);
-    const [isNotSecure, setIsNotSecure] = useState(false);
-    const [testingMic, setTestingMic] = useState(false);
 
     const quickReplies = rol === 'CONDUCTOR' ? QUICK_REPLIES_CONDUCTOR : QUICK_REPLIES_ADMIN;
 
@@ -217,13 +215,12 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         };
     }, []);
 
-    // ── Detección de Brave y HTTPS ──────────────────────────────────
+    // ── Detección de Brave ──────────────────────────────────────────
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        // navigator.brave existe solo en Brave
+        // navigator.brave existe solo en Brave. No es estándar, pero
+        // es la forma más fiable de detectarlo.
         setIsBrave(!!(navigator as any).brave);
-        // getUserMedia requiere contexto seguro (HTTPS o localhost)
-        setIsNotSecure(!window.isSecureContext);
     }, []);
 
     // ── Verificación proactiva del permiso de micrófono ──────────────
@@ -373,55 +370,9 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
     };
 
-    // ── Prueba rápida de acceso al micrófono ──────────────────────
-    // Útil para que el usuario pueda verificar el permiso sin empezar
-    // una grabación. Si funciona, actualiza el estado y cierra el aviso.
-    const testMicAccess = async () => {
-        if (testingMic) return;
-        if (typeof navigator === 'undefined') return;
-        if (!navigator.mediaDevices?.getUserMedia) {
-            toast.error("Tu navegador no soporta grabación de audio");
-            return;
-        }
-        setTestingMic(true);
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // Permiso concedido — paramos el stream de prueba inmediatamente
-            stream.getTracks().forEach((track) => track.stop());
-            setMicPermissionDeniedDesktop(false);
-            toast.success("Micrófono disponible. Ya podés grabar audio.", { duration: 4000 });
-        } catch {
-            toast.error("El navegador sigue bloqueando el micrófono. Revisá los pasos indicados arriba.", { duration: 6000 });
-        } finally {
-            setTestingMic(false);
-        }
-    };
-
-    // ── Limpieza completa del estado de grabación ──────────────────
-    // Asegura que no queden streams, timers ni refs colgados antes de
-    // empezar una grabación nueva o al recuperarse de un error.
-    const resetRecorderState = () => {
-        stopRecorderResources();
-        if (recorderRef.current && recorderRef.current.state !== "inactive") {
-            try { recorderRef.current.stop(); } catch { /* ya detenido */ }
-        }
-        recorderRef.current = null;
-        recorderChunksRef.current = [];
-        if (recorderTimerRef.current !== null) {
-            window.clearInterval(recorderTimerRef.current);
-            recorderTimerRef.current = null;
-        }
-        nativeRecordingRef.current = false;
-        setIsRecording(false);
-        setRecordingSeconds(0);
-    };
-
     const startAudioRecording = async () => {
         if (sending) return;
         if (typeof window === "undefined") return;
-
-        // Limpiar cualquier grabación anterior colgada
-        resetRecorderState();
 
         const bridge = getAndroidTracker();
 
@@ -699,98 +650,39 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                 {micPermissionDeniedDesktop && (
                     <div style={{
                         padding: '0.55rem 0.9rem',
+                        display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
                         background: 'rgba(239,68,68,0.08)',
                         borderBottom: '1px solid rgba(239,68,68,0.15)',
                         fontSize: '0.72rem', color: '#fca5a5', lineHeight: 1.45,
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.45rem' }}>
-                            <span style={{ fontSize: '0.85rem', flexShrink: 0, marginTop: '1px' }}>⚠️</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <span style={{ fontWeight: 700 }}>Micrófono bloqueado</span>
-                                {isNotSecure ? (
-                                    <span>
-                                        &nbsp;— La página no está en un contexto seguro (HTTPS).
-                                        El navegador exige HTTPS para acceder al micrófono.
-                                        Si estás en desarrollo local, usá <strong>localhost</strong> en vez de IP o HTTP.
-                                    </span>
-                                ) : isBrave ? (
-                                    <span>
-                                        &nbsp;— Brave Shields impide acceder al micrófono.
-                                        Hacé clic en el icono <strong>🦁</strong> de la barra de direcciones
-                                        y desactivá <strong>"Shields"</strong> para este sitio. Luego recargá la página.
-                                    </span>
-                                ) : (
-                                    <span>
-                                        &nbsp;— El navegador no permite usar el micrófono.
-                                        Hacé clic en el icono <strong>🔒</strong> de la barra de direcciones,
-                                        buscá <strong>"Micrófono"</strong> y seleccioná <strong>"Permitir"</strong>.
-                                    </span>
-                                )}
-                            </div>
-                            <button
-                                onClick={() => setMicPermissionDeniedDesktop(false)}
-                                style={{
-                                    background: 'rgba(255,255,255,0.06)', border: 'none',
-                                    borderRadius: '6px', width: '22px', height: '22px',
-                                    color: '#fca5a5', cursor: 'pointer', fontSize: '0.65rem',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    flexShrink: 0, marginTop: '1px',
-                                }}
-                                title="Ocultar aviso"
-                            >✕</button>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                            <button
-                                onClick={testMicAccess}
-                                disabled={testingMic}
-                                style={{
-                                    padding: '0.35rem 0.7rem',
-                                    borderRadius: '8px',
-                                    border: '1px solid rgba(252,165,165,0.25)',
-                                    background: testingMic ? 'rgba(252,165,165,0.08)' : 'rgba(252,165,165,0.12)',
-                                    color: '#fca5a5',
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    cursor: testingMic ? 'not-allowed' : 'pointer',
-                                    opacity: testingMic ? 0.6 : 1,
-                                }}
-                            >
-                                {testingMic ? 'Probando...' : '🔍 Probar nuevamente'}
-                            </button>
-                            {isBrave && (
-                                <button
-                                    onClick={() => {
-                                        setMicPermissionDeniedDesktop(false);
-                                        toast.info("Desactivá Brave Shields (🦁) en la barra de direcciones y recargá la página.", { duration: 8000 });
-                                    }}
-                                    style={{
-                                        padding: '0.35rem 0.7rem',
-                                        borderRadius: '8px',
-                                        border: '1px solid rgba(255,255,255,0.1)',
-                                        background: 'rgba(255,255,255,0.05)',
-                                        color: '#94a3b8',
-                                        fontSize: '0.7rem',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    Entendido
-                                </button>
+                        <span style={{ fontSize: '0.85rem', flexShrink: 0, marginTop: '1px' }}>⚠️</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontWeight: 700 }}>Micrófono bloqueado</span>
+                            {isBrave ? (
+                                <span>
+                                    &nbsp;— Brave Shields impide acceder al micrófono.
+                                    Haz clic en el icono <strong>🦁</strong> de la barra de direcciones
+                                    y desactiva <strong>"Shields"</strong> para este sitio. Luego recarga.
+                                </span>
+                            ) : (
+                                <span>
+                                    &nbsp;— El navegador no permite usar el micrófono.
+                                    Haz clic en el icono <strong>🔒</strong> de la barra de direcciones,
+                                    busca <strong>"Micrófono"</strong> y selecciona <strong>"Permitir"</strong>.
+                                </span>
                             )}
                         </div>
-                    </div>
-                )}
-
-                {/* ═══ Aviso de HTTPS ═══ */}
-                {isNotSecure && !micPermissionDeniedDesktop && (
-                    <div style={{
-                        padding: '0.45rem 0.9rem',
-                        background: 'rgba(245,158,11,0.08)',
-                        borderBottom: '1px solid rgba(245,158,11,0.15)',
-                        fontSize: '0.68rem', color: '#fbbf24', lineHeight: 1.45,
-                        display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    }}>
-                        <span>⚠️</span>
-                        <span>El micrófono requiere HTTPS. Usá <strong>localhost</strong> en desarrollo o accedé por <strong>HTTPS</strong>.</span>
+                        <button
+                            onClick={() => setMicPermissionDeniedDesktop(false)}
+                            style={{
+                                background: 'rgba(255,255,255,0.06)', border: 'none',
+                                borderRadius: '6px', width: '22px', height: '22px',
+                                color: '#fca5a5', cursor: 'pointer', fontSize: '0.65rem',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexShrink: 0, marginTop: '1px',
+                            }}
+                            title="Ocultar aviso"
+                        >✕</button>
                     </div>
                 )}
 
