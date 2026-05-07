@@ -63,12 +63,28 @@ public class ConductorController {
         String empresaId = (String) request.getAttribute("userId");
         List<Conductor> conductores = conductorRepository.findByEmpresaIdAndActivoTrue(empresaId);
 
-        List<Map<String, String>> result = conductores.stream()
-                .map(c -> Map.of(
-                        "id", c.getId(),
-                        "nombre", c.getNombre() != null ? c.getNombre() : "",
-                        "email", c.getEmail() != null ? c.getEmail() : ""
-                ))
+        Map<String, String> rutasActivasPorConductor = rutaRepository.findByUsuarioId(empresaId).stream()
+                .filter(ruta -> {
+                    String estado = normalizarEstadoRuta(ruta.getEstado());
+                    return "EN_CURSO".equals(estado) || "DETENIDO".equals(estado);
+                })
+                .filter(ruta -> trimToNull(ruta.getConductorId()) != null)
+                .collect(Collectors.toMap(
+                        ruta -> trimToNull(ruta.getConductorId()),
+                        Ruta::getId,
+                        (actual, ignorada) -> actual
+                ));
+
+        List<Map<String, Object>> result = conductores.stream()
+                .map(c -> {
+                    Map<String, Object> item = new java.util.HashMap<>();
+                    item.put("id", c.getId());
+                    item.put("nombre", c.getNombre() != null ? c.getNombre() : "");
+                    item.put("email", c.getEmail() != null ? c.getEmail() : "");
+                    item.put("disponible", !rutasActivasPorConductor.containsKey(c.getId()));
+                    item.put("rutaActivaId", rutasActivasPorConductor.get(c.getId()));
+                    return item;
+                })
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
@@ -458,6 +474,22 @@ public class ConductorController {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizarEstadoRuta(String estado) {
+        String limpio = trimToNull(estado);
+        if (limpio == null) {
+            return "PLANIFICADA";
+        }
+
+        limpio = limpio.toUpperCase().replace(' ', '_');
+        return switch (limpio) {
+            case "ENCURSO", "EN_CURSO" -> "EN_CURSO";
+            case "DETENIDA", "PAUSADA", "PAUSADO", "STOPPED" -> "DETENIDO";
+            case "COMPLETADO" -> "COMPLETADA";
+            case "PLANEADA" -> "PLANIFICADA";
+            default -> limpio;
+        };
     }
 
     private String asString(Object value) {

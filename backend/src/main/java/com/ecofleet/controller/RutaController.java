@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.List;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/rutas")
@@ -104,6 +105,7 @@ public class RutaController {
                     validarAccesoRuta(ruta, usuarioId, role, conductorId);
 
                     if (!"CONDUCTOR".equals(role)) {
+                        String conductorAnteriorId = normalizarId(ruta.getConductorId());
                         if (rutaActualizada.getOrigen() != null) ruta.setOrigen(rutaActualizada.getOrigen());
                         if (rutaActualizada.getDestino() != null) ruta.setDestino(rutaActualizada.getDestino());
                         if (rutaActualizada.getDistanciaEstimadaKm() != null) ruta.setDistanciaEstimadaKm(rutaActualizada.getDistanciaEstimadaKm());
@@ -116,6 +118,14 @@ public class RutaController {
                         recalcularDistanciaEstimada(ruta, rutaActualizada.getDistanciaEstimadaKm());
                         if (rutaActualizada.getConductorId() != null || rutaActualizada.getConductorNombre() != null) {
                             aplicarAsignacionConductor(ruta, rutaActualizada.getConductorId(), usuarioId);
+                            String conductorNuevoId = normalizarId(ruta.getConductorId());
+                            boolean conductorCambio = !Objects.equals(conductorAnteriorId, conductorNuevoId);
+                            if (conductorCambio && !"COMPLETADA".equals(normalizarEstado(ruta.getEstado()))) {
+                                // El GPS histórico de ruta pertenece al conductor anterior.
+                                // Si reasignamos, limpiamos esa línea base para NO seguir
+                                // mostrando/mezclando la señal vieja ni puentear km fantasma.
+                                resetearLineaBaseGPS(ruta);
+                            }
                         }
                     }
 
@@ -574,6 +584,14 @@ public class RutaController {
         ruta.setDistanciaRestanteKm(null);
         ruta.setDesviado(false);
         ruta.setInicioDetencion(null);
+    }
+
+    private String normalizarId(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void acumularDistanciaRecorrida(Ruta ruta, double distanciaKm) {

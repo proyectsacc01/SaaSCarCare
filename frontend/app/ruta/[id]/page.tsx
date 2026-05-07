@@ -1,7 +1,6 @@
 "use client";
 
-import { useTranslation } from "@/lib/i18n";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
@@ -37,6 +36,35 @@ interface Ruta {
     distanciaRestanteKm?: number;
     ultimaActualizacionGPS?: string;
     inicioDetencion?: string;
+    signalSource?: 'route' | 'presence';
+}
+
+interface Conductor {
+    id: string;
+    nombre: string;
+    email: string;
+    disponible?: boolean;
+    rutaActivaId?: string | null;
+}
+
+interface ConductorUbicacion {
+    id: string;
+    nombre: string;
+    email: string;
+    latitudActual?: number;
+    longitudActual?: number;
+    ultimaActualizacionGPS?: string;
+    compartiendoUbicacion?: boolean;
+}
+
+type AndroidTrackerBridge = {
+    startTracking?: (rutaId: string) => void;
+    stopTracking?: () => void;
+};
+
+function getAndroidTracker(): AndroidTrackerBridge | null {
+    if (typeof window === 'undefined') return null;
+    return (window as Window & { AndroidTracker?: AndroidTrackerBridge }).AndroidTracker ?? null;
 }
 
 function normalizeRouteState(estado?: string) {
@@ -93,14 +121,24 @@ function calcularProgreso(distanciaTotal?: number, distanciaRestante?: number): 
     return Math.max(0, Math.min(100, progreso));
 }
 
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+    const R = 6371;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos((a.lat * Math.PI) / 180) *
+            Math.cos((b.lat * Math.PI) / 180) *
+            Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
 const API_URL = typeof window !== 'undefined' && window.location.hostname === '10.0.2.2'
     ? ''
     : (process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app");
 const DASHBOARD_ROUTE = "/dashboard";
 
 export default function RutaTracking() {
-  const t = useTranslation();
-
     const router = useRouter();
     const params = useParams();
     const id = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -110,6 +148,10 @@ export default function RutaTracking() {
     const [error, setError] = useState<string | null>(null); // null = sin error, string = mensaje de error
     const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
     const [, setIsCalculatingRoute] = useState(false);
+    const [conductores, setConductores] = useState<Conductor[]>([]);
+    const [conductoresUbicaciones, setConductoresUbicaciones] = useState<ConductorUbicacion[]>([]);
+    const [selectedConductorId, setSelectedConductorId] = useState('');
+    const [guardandoConductor, setGuardandoConductor] = useState(false);
 
     // useRef para mantener referencias correctamente entre renders
     const isMountedRef = useRef(true);
@@ -126,6 +168,79 @@ export default function RutaTracking() {
         if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }, []);
+
+    const mezclarRutaConGpsConductor = useCallback((data: Ruta): Ruta => {
+        if (!data.conductorId) {
+            return { ...data, signalSource: 'route' };
+        }
+
+        const presencia = conductoresUbicaciones.find((c) => c.id === data.conductorId);
+        const tienePresenciaUtil = !!presencia
+            && presencia.compartiendoUbicacion !== false
+            && presencia.latitudActual != null
+            && presencia.longitudActual != null;
+
+        if (!tienePresenciaUtil) {
+            return { ...data, signalSource: 'route' };
+        }
+
+        const routeTs = data.ultimaActualizacionGPS ? new Date(data.ultimaActualizacionGPS).getTime() : 0;
+        const presenceTs = presencia?.ultimaActualizacionGPS ? new Date(presencia.ultimaActualizacionGPS).getTime() : 0;
+
+        if (routeTs >= presenceTs) {
+            return { ...data, signalSource: 'route' };
+        }
+
+        const distanciaRestantePresencia =
+            data.latitudDestino != null && data.longitudDestino != null && presencia?.latitudActual != null && presencia.longitudActual != null
+                ? haversineKm(
+                    { lat: presencia.latitudActual, lng: presencia.longitudActual },
+                    { lat: data.latitudDestino, lng: data.longitudDestino }
+                )
+                : data.distanciaRestanteKm;
+
+        return {
+            ...data,
+            latitudActual: presencia?.latitudActual ?? data.latitudActual,
+            longitudActual: presencia?.longitudActual ?? data.longitudActual,
+            ultimaActualizacionGPS: presencia?.ultimaActualizacionGPS ?? data.ultimaActualizacionGPS,
+            velocidadActualKmh: routeTs >= presenceTs ? data.velocidadActualKmh : undefined,
+            distanciaRestanteKm: distanciaRestantePresencia,
+            signalSource: 'presence',
+        };
+    }, [conductoresUbicaciones]);
+
+    const cargarConductores = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/conductores`, { headers: getAuthHeaders() });
+            if (res.ok) {
+                const data: Conductor[] = await res.json();
+                setConductores(data);
+                return;
+            }
+            if (res.status === 403) {
+                setConductores([]);
+            }
+        } catch {
+            // silencioso: un conductor no debería romper la vista por no poder editar
+        }
+    }, [getAuthHeaders]);
+
+    const cargarUbicacionesConductores = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/conductores/locations`, { headers: getAuthHeaders() });
+            if (res.ok) {
+                const data: ConductorUbicacion[] = await res.json();
+                setConductoresUbicaciones(data);
+                return;
+            }
+            if (res.status === 403) {
+                setConductoresUbicaciones([]);
+            }
+        } catch {
+            // silencioso
+        }
+    }, [getAuthHeaders]);
 
     const calcularRutaDinamica = useCallback(async (currentLat: number, currentLng: number, destLat: number, destLng: number) => {
         try {
@@ -192,7 +307,7 @@ export default function RutaTracking() {
             console.log('[RutaTracking] Cargando datos de ruta:', id);
             const res = await fetch(`${API_URL}/api/rutas/${id}`, {
                 signal: abortControllerRef.current.signal,
-                headers: getAuthHeaders() as any
+                headers: getAuthHeaders()
             });
 
             if (!res.ok) {
@@ -204,48 +319,49 @@ export default function RutaTracking() {
 
             const data = await res.json();
             data.estado = normalizeRouteState(data.estado);
+            const rutaConSenal = mezclarRutaConGpsConductor(data);
 
             // Si no hay datos, no es una ruta válida
             if (!data || !data.id) {
                 throw new Error('NOT_FOUND');
             }
 
-            console.log('[RutaTracking] Datos recibidos - Estado:', data.estado, '- GPS:', !!(data.latitudActual && data.longitudActual));
+            console.log('[RutaTracking] Datos recibidos - Estado:', rutaConSenal.estado, '- GPS:', !!(rutaConSenal.latitudActual && rutaConSenal.longitudActual));
 
             // Calcular ruta según el estado
-            if (data.estado === 'EN_CURSO' || data.estado === 'DETENIDO') {
-                if (data.latitudActual && data.longitudActual && data.latitudDestino && data.longitudDestino) {
+            if (rutaConSenal.estado === 'EN_CURSO' || rutaConSenal.estado === 'DETENIDO') {
+                if (rutaConSenal.latitudActual && rutaConSenal.longitudActual && rutaConSenal.latitudDestino && rutaConSenal.longitudDestino) {
                     console.log('[RutaTracking] ✅ GPS REAL detectado');
                     await calcularRutaDinamica(
-                        data.latitudActual,
-                        data.longitudActual,
-                        data.latitudDestino,
-                        data.longitudDestino
+                        rutaConSenal.latitudActual,
+                        rutaConSenal.longitudActual,
+                        rutaConSenal.latitudDestino,
+                        rutaConSenal.longitudDestino
                     );
                 } else {
                     console.log('[RutaTracking] ⏳ Esperando GPS...');
                     setRouteCoordinates([]);
                 }
-            } else if (data.estado === 'PLANIFICADA' && data.latitudOrigen && data.longitudOrigen && data.latitudDestino && data.longitudDestino) {
+            } else if (rutaConSenal.estado === 'PLANIFICADA' && rutaConSenal.latitudOrigen && rutaConSenal.longitudOrigen && rutaConSenal.latitudDestino && rutaConSenal.longitudDestino) {
                 await calcularRutaDinamica(
-                    data.latitudOrigen,
-                    data.longitudOrigen,
-                    data.latitudDestino,
-                    data.longitudDestino
+                    rutaConSenal.latitudOrigen,
+                    rutaConSenal.longitudOrigen,
+                    rutaConSenal.latitudDestino,
+                    rutaConSenal.longitudDestino
                 );
             }
 
             if (isMountedRef.current) {
-                if (previousStateRef.current && previousStateRef.current !== 'EN_CURSO' && data.estado === 'EN_CURSO') {
+                if (previousStateRef.current && previousStateRef.current !== 'EN_CURSO' && rutaConSenal.estado === 'EN_CURSO') {
                     console.log('🚀 ¡RUTA INICIADA!');
                 }
-                previousStateRef.current = data.estado;
-                setRuta(data);
+                previousStateRef.current = rutaConSenal.estado;
+                setRuta(rutaConSenal);
                 setError(null); // Limpiar cualquier error previo
                 setLoading(false);
             }
-        } catch (err: any) {
-            if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+            if (err instanceof Error && err.name === 'AbortError') {
                 // Ignorar errores de abort, son normales al cancelar requests
                 return;
             }
@@ -254,7 +370,7 @@ export default function RutaTracking() {
 
             if (isMountedRef.current) {
                 // Solo establecer error si es un error real (no abort)
-                if (err.message === 'NOT_FOUND') {
+                if (err instanceof Error && err.message === 'NOT_FOUND') {
                     setError('Ruta no encontrada');
                 } else {
                     // Para otros errores, no mostrar "no encontrada" inmediatamente
@@ -264,7 +380,68 @@ export default function RutaTracking() {
                 setLoading(false);
             }
         }
-    }, [id, calcularRutaDinamica, getAuthHeaders]);
+    }, [id, calcularRutaDinamica, getAuthHeaders, mezclarRutaConGpsConductor]);
+
+    useEffect(() => {
+        void cargarConductores();
+        void cargarUbicacionesConductores();
+
+        const intervalId = window.setInterval(() => {
+            void cargarUbicacionesConductores();
+        }, 5000);
+
+        return () => window.clearInterval(intervalId);
+    }, [cargarConductores, cargarUbicacionesConductores]);
+
+    useEffect(() => {
+        setSelectedConductorId(ruta?.conductorId || '');
+    }, [ruta?.conductorId]);
+
+    const conductorSeleccionado = useMemo(
+        () => conductores.find((conductor) => conductor.id === selectedConductorId) ?? null,
+        [conductores, selectedConductorId]
+    );
+
+    const conductoresAsignables = useMemo(
+        () => conductores.filter((conductor) => conductor.disponible !== false || conductor.id === ruta?.conductorId),
+        [conductores, ruta?.conductorId]
+    );
+
+    const gpsConductorSeleccionado = useMemo(
+        () => conductoresUbicaciones.find((conductor) => conductor.id === selectedConductorId) ?? null,
+        [conductoresUbicaciones, selectedConductorId]
+    );
+
+    const guardarAsignacionConductor = useCallback(async () => {
+        if (!ruta || guardandoConductor) return;
+
+        setGuardandoConductor(true);
+        try {
+            const res = await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    conductorId: selectedConductorId,
+                    conductorNombre: conductorSeleccionado?.nombre || '',
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            await cargarUbicacionesConductores();
+            await cargarDatos();
+            toast.success(selectedConductorId
+                ? 'Conductor reasignado correctamente'
+                : 'Ruta sin conductor asignado');
+        } catch (err) {
+            console.error('[RutaTracking] Error reasignando conductor:', err);
+            toast.error('No se pudo actualizar el conductor de la ruta');
+        } finally {
+            setGuardandoConductor(false);
+        }
+    }, [ruta, guardandoConductor, getAuthHeaders, selectedConductorId, conductorSeleccionado?.nombre, cargarUbicacionesConductores, cargarDatos]);
 
     useEffect(() => {
         isMountedRef.current = true;
@@ -608,7 +785,7 @@ export default function RutaTracking() {
                                         {ruta.estado === 'DETENIDO'
                                             ? '⏸ DETENIDO'
                                             : (ruta.latitudActual && ruta.longitudActual)
-                                                ? '📡 GPS ACTIVO'
+                                                ? (ruta.signalSource === 'presence' ? '📍 GPS DEL CONDUCTOR' : '📡 GPS ACTIVO')
                                                 : '⏳ ESPERANDO GPS'}
                                     </span>
                                 )}
@@ -657,14 +834,15 @@ export default function RutaTracking() {
                             </div>
 
                             {/* Botón para Android */}
-                            {typeof window !== 'undefined' && (window as any).AndroidTracker ? (
+                            {getAndroidTracker() ? (
                                 <button
                                     onClick={async () => {
+                                        const tracker = getAndroidTracker();
                                         if (ruta?.estado === 'EN_CURSO' || ruta?.estado === 'DETENIDO') {
-                                            (window as any).AndroidTracker.stopTracking();
+                                            tracker?.stopTracking?.();
                                             toast.success('📱 Tracking GPS detenido');
                                         } else {
-                                            (window as any).AndroidTracker.startTracking(id);
+                                            if (id) tracker?.startTracking?.(id);
                                             toast.success('📱 Tracking GPS iniciado');
                                         }
                                     }}
@@ -710,7 +888,14 @@ export default function RutaTracking() {
                                         animation: 'pulse 2s infinite'
                                     }}></div>
                                     <div>
-                                        <div style={{ fontWeight: '700' }}>📡 GPS ACTIVO</div>
+                                        <div style={{ fontWeight: '700' }}>
+                                            {ruta.signalSource === 'presence' ? '📍 GPS DEL CONDUCTOR' : '📡 GPS ACTIVO'}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                                            {ruta.signalSource === 'presence'
+                                                ? 'Usando señal compartida del conductor asignado'
+                                                : 'Usando señal directa de la ruta'}
+                                        </div>
                                         <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>
                                             {ruta.latitudActual.toFixed(6)}, {ruta.longitudActual.toFixed(6)}
                                         </div>
@@ -769,6 +954,84 @@ export default function RutaTracking() {
 
                         {/* Sidebar Stats */}
                         <div className="ruta-sidebar-column">
+                            {conductores.length > 0 && (
+                                <div className={styles.card} style={{ background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.95))', marginBottom: '1rem' }}>
+                                    <h3 className={styles.cardTitle} style={{ fontSize: '1rem', marginBottom: '1rem' }}>
+                                        Reasignar conductor
+                                    </h3>
+
+                                    <div style={{ display: 'grid', gap: '0.8rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: '700', letterSpacing: '0.04em' }}>
+                                                Conductor disponible
+                                            </label>
+                                            <select
+                                                value={selectedConductorId}
+                                                onChange={(e) => setSelectedConductorId(e.target.value)}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '0.85rem 0.95rem',
+                                                    borderRadius: '12px',
+                                                    border: '1px solid rgba(255,255,255,0.08)',
+                                                    background: 'rgba(0,0,0,0.28)',
+                                                    color: '#e2e8f0',
+                                                    fontSize: '0.92rem',
+                                                    outline: 'none'
+                                                }}
+                                            >
+                                                <option value="">Sin asignar</option>
+                                                {conductoresAsignables.map((conductor) => (
+                                                    <option key={conductor.id} value={conductor.id}>
+                                                        {conductor.nombre} · {conductor.email}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div style={{ padding: '0.85rem 0.95rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                            {selectedConductorId ? (
+                                                gpsConductorSeleccionado?.latitudActual != null && gpsConductorSeleccionado.longitudActual != null ? (
+                                                    <>
+                                                        <div style={{ fontSize: '0.78rem', color: '#22c55e', fontWeight: '800', marginBottom: '0.2rem' }}>
+                                                            Señal GPS detectada para el conductor seleccionado
+                                                        </div>
+                                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.45 }}>
+                                                            Al guardar, la ruta intentará usar esta señal del conductor mientras llega telemetría directa de su trayecto.
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div style={{ fontSize: '0.78rem', color: '#f59e0b', fontWeight: '800', marginBottom: '0.2rem' }}>
+                                                            Sin señal GPS reciente
+                                                        </div>
+                                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.45 }}>
+                                                            Podés reasignar igual, pero el mapa esperará a que el conductor nuevo comparta ubicación.
+                                                        </div>
+                                                    </>
+                                                )
+                                            ) : (
+                                                <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.45 }}>
+                                                    La ruta quedará sin conductor asignado hasta que selecciones uno nuevo.
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            className={styles.submitButton}
+                                            type="button"
+                                            disabled={guardandoConductor || selectedConductorId === (ruta.conductorId || '')}
+                                            onClick={guardarAsignacionConductor}
+                                            style={{
+                                                opacity: guardandoConductor || selectedConductorId === (ruta.conductorId || '') ? 0.6 : 1,
+                                                cursor: guardandoConductor || selectedConductorId === (ruta.conductorId || '') ? 'not-allowed' : 'pointer'
+                                            }}
+                                        >
+                                            {guardandoConductor ? 'Guardando conductor…' : 'Guardar asignación'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className={styles.card} style={{ background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.95))' }}>
                                 <h3 className={styles.cardTitle} style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
@@ -934,18 +1197,19 @@ export default function RutaTracking() {
                                         }}
                                         onClick={async () => {
                                             const nuevoEstado = (ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') ? 'PLANIFICADA' : 'EN_CURSO';
+                                            const tracker = getAndroidTracker();
 
-                                            if (typeof window !== 'undefined' && (window as any).AndroidTracker) {
+                                            if (tracker) {
                                                 if (nuevoEstado === 'EN_CURSO') {
-                                                    (window as any).AndroidTracker.startTracking(id);
+                                                    if (id) tracker.startTracking?.(id);
                                                 } else {
-                                                    (window as any).AndroidTracker.stopTracking();
+                                                    tracker.stopTracking?.();
                                                 }
                                             }
 
                                             await fetch(`${API_URL}/api/rutas/${id}`, {
                                                 method: 'PUT',
-                                                headers: getAuthHeaders() as any,
+                                                headers: getAuthHeaders(),
                                                 body: JSON.stringify({ estado: nuevoEstado })
                                             });
                                             setRuta({ ...ruta, estado: nuevoEstado, inicioDetencion: undefined });
