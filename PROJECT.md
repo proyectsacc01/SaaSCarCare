@@ -1,0 +1,3 @@
+# CarCare Tracker — Project Overview
+
+SaaS de gestión de flotas con 3 módulos desplegables: **frontend** (Next 16, panel admin + conductor), **backend** (Spring Boot + MongoDB, API multi-tenant) y **Android** (WebView shell + bridge GPS nativo). El frontend es page-centric con archivos grandes (~2k líneas). El backend sigue capas Spring clásicas pero varios controllers tienen lógica pesada. Android no tiene UI de negocio propia; carga el frontend del conductor dentro de un WebView. Puntos débiles: duplicación de rutas proxy/api, helpers repetidos entre páginas, y documentación de entorno desactualizada contra el código real.

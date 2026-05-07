@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import styles from "./GasPriceWorldMap.module.css";
 import {
   FUEL_PRICES,
-  ISO2_TO_ISO3,
   getPriceColor,
   getChangeColor,
   type CountryFuelPrice,
@@ -49,11 +49,10 @@ interface GasPriceWorldMapProps {
 const GEOJSON_URL =
   "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
 
-// Build lookup: ISO3 → price data
-const iso3ToPriceMap = new Map<string, CountryFuelPrice>();
+// Build lookup: ISO2 → price data (GeoJSON uses ISO3166-1-Alpha-2)
+const iso2ToPriceMap = new Map<string, CountryFuelPrice>();
 FUEL_PRICES.forEach((fp) => {
-  const iso3 = ISO2_TO_ISO3[fp.code];
-  if (iso3) iso3ToPriceMap.set(iso3, fp);
+  iso2ToPriceMap.set(fp.code, fp);
 });
 
 // ── Map zoom reset helper ──
@@ -124,8 +123,8 @@ export default function GasPriceWorldMap({ t, locale }: GasPriceWorldMapProps) {
   const styleFeature = useCallback(
     (feature: GeoJSON.Feature | undefined) => {
       if (!feature?.properties) return { fillColor: "#1e293b", fillOpacity: 0.6, weight: 0.3, color: "rgba(255,255,255,0.08)" };
-      const iso3 = feature.properties.ISO_A3 || feature.properties.ADM0_A3;
-      const priceData = iso3ToPriceMap.get(iso3);
+      const iso2 = feature.properties["ISO3166-1-Alpha-2"];
+      const priceData = iso2 ? iso2ToPriceMap.get(iso2) : undefined;
       if (!priceData) return { fillColor: "#1e293b", fillOpacity: 0.5, weight: 0.3, color: "rgba(255,255,255,0.08)" };
       const price = fuelType === "gasoline" ? priceData.gasoline : priceData.diesel;
       return {
@@ -141,15 +140,31 @@ export default function GasPriceWorldMap({ t, locale }: GasPriceWorldMapProps) {
   // Feature event handlers
   const onEachFeature = useCallback(
     (feature: GeoJSON.Feature, layer: L.Layer) => {
-      const iso3 = feature.properties?.ISO_A3 || feature.properties?.ADM0_A3;
-      const priceData = iso3ToPriceMap.get(iso3);
+      const iso2 = feature.properties?.["ISO3166-1-Alpha-2"];
+      const countryName = feature.properties?.name || "";
+      const priceData = iso2 ? iso2ToPriceMap.get(iso2) : undefined;
 
       layer.on({
         mouseover: (e: L.LeafletMouseEvent) => {
           const target = e.target as L.Path;
           target.setStyle({ weight: 2, color: "rgba(255,255,255,0.5)", fillOpacity: 0.9 });
           target.bringToFront();
-          if (priceData) setHoveredCountry(priceData);
+          if (priceData) {
+            setHoveredCountry(priceData);
+          } else if (countryName) {
+            // Show country name even without price data
+            setHoveredCountry({
+              code: iso2 || "??",
+              name: countryName,
+              nameEs: countryName,
+              flag: "",
+              region: "",
+              gasoline: 0,
+              diesel: 0,
+              change7d: 0,
+              lastUpdated: "",
+            });
+          }
         },
         mousemove: (e: L.LeafletMouseEvent) => {
           setTooltipPos({ x: e.originalEvent.clientX + 15, y: e.originalEvent.clientY - 10 });
@@ -298,46 +313,55 @@ export default function GasPriceWorldMap({ t, locale }: GasPriceWorldMapProps) {
         </>
       )}
 
-      {/* Tooltip */}
-      {hoveredCountry && (
+      {/* Tooltip — rendered via portal to avoid overflow clipping */}
+      {hoveredCountry && typeof document !== "undefined" && createPortal(
         <div
           className={styles.tooltip}
           style={{ left: tooltipPos.x, top: tooltipPos.y }}
         >
           <div className={styles.tooltipCountry}>
-            <span className={styles.tooltipFlag}>{hoveredCountry.flag}</span>
+            {hoveredCountry.flag && <span className={styles.tooltipFlag}>{hoveredCountry.flag}</span>}
             <div>
               <div className={styles.tooltipName}>
                 {locale === "es" ? hoveredCountry.nameEs : hoveredCountry.name}
               </div>
-              <div className={styles.tooltipRegion}>{hoveredCountry.region}</div>
+              {hoveredCountry.region && <div className={styles.tooltipRegion}>{hoveredCountry.region}</div>}
             </div>
           </div>
-          <div className={styles.tooltipPrice}>
-            <span className={styles.tooltipPriceValue}>${getPrice(hoveredCountry).toFixed(3)}</span>
-            <span className={styles.tooltipPriceUnit}>{t.gasMap.usdPerLiter}</span>
-          </div>
-          <div className={styles.tooltipMeta}>
-            <div className={styles.tooltipMetaRow}>
-              <span className={styles.tooltipMetaLabel}>{t.gasMap.weeklyChange}</span>
-              <span className={styles.tooltipMetaValue} style={{ color: getChangeColor(hoveredCountry.change7d) }}>
-                {hoveredCountry.change7d > 0 ? "+" : ""}{hoveredCountry.change7d.toFixed(1)}%
-              </span>
+          {getPrice(hoveredCountry) > 0 ? (
+            <>
+              <div className={styles.tooltipPrice}>
+                <span className={styles.tooltipPriceValue}>${getPrice(hoveredCountry).toFixed(3)}</span>
+                <span className={styles.tooltipPriceUnit}>{t.gasMap.usdPerLiter}</span>
+              </div>
+              <div className={styles.tooltipMeta}>
+                <div className={styles.tooltipMetaRow}>
+                  <span className={styles.tooltipMetaLabel}>{t.gasMap.weeklyChange}</span>
+                  <span className={styles.tooltipMetaValue} style={{ color: getChangeColor(hoveredCountry.change7d) }}>
+                    {hoveredCountry.change7d > 0 ? "+" : ""}{hoveredCountry.change7d.toFixed(1)}%
+                  </span>
+                </div>
+                <div className={styles.tooltipMetaRow}>
+                  <span className={styles.tooltipMetaLabel}>{t.gasMap.gasoline}</span>
+                  <span className={styles.tooltipMetaValue} style={{ color: "#f59e0b" }}>
+                    ${hoveredCountry.gasoline.toFixed(3)}
+                  </span>
+                </div>
+                <div className={styles.tooltipMetaRow}>
+                  <span className={styles.tooltipMetaLabel}>{t.gasMap.diesel}</span>
+                  <span className={styles.tooltipMetaValue} style={{ color: "#60a5fa" }}>
+                    ${hoveredCountry.diesel.toFixed(3)}
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: "0.8rem", color: "#64748b", fontStyle: "italic" }}>
+              {t.gasMap.noData}
             </div>
-            <div className={styles.tooltipMetaRow}>
-              <span className={styles.tooltipMetaLabel}>{t.gasMap.gasoline}</span>
-              <span className={styles.tooltipMetaValue} style={{ color: "#f59e0b" }}>
-                ${hoveredCountry.gasoline.toFixed(3)}
-              </span>
-            </div>
-            <div className={styles.tooltipMetaRow}>
-              <span className={styles.tooltipMetaLabel}>{t.gasMap.diesel}</span>
-              <span className={styles.tooltipMetaValue} style={{ color: "#60a5fa" }}>
-                ${hoveredCountry.diesel.toFixed(3)}
-              </span>
-            </div>
-          </div>
-        </div>
+          )}
+        </div>,
+        document.body
       )}
 
       {/* Rankings */}
