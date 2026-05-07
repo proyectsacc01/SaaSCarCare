@@ -439,7 +439,7 @@ export default function ConductorRutaInicioPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.55rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: "0.55rem" }}>
           <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "0.65rem", textAlign: "center" }}>
             <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#3bf63b" }}>{distanciaKm.toFixed(1)}</div>
             <div style={{ fontSize: "0.5rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginTop: "2px" }}>km</div>
@@ -462,7 +462,7 @@ export default function ConductorRutaInicioPage() {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.55rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.55rem" }}>
           <button
             onClick={recentrarEnConductor}
             disabled={!currentPos}

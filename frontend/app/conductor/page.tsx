@@ -993,7 +993,7 @@ export default function ConductorDashboard() {
 
     return (
         <BackgroundMeteors>
-            <main style={{
+            <main className="driver-page" style={{
                 // Altura FIJA al viewport dinámico. Sin esto, cuando el contenido
                 // crece (form de repostaje, lista larga…), main crecía con él y el
                 // overflow:auto del scroll interno dejaba de actuar — el usuario
@@ -1019,7 +1019,7 @@ export default function ConductorDashboard() {
                 </div>
 
                 {/* HEADER */}
-                <header style={{
+                <header className="driver-header" style={{
                     padding: '0.85rem 1.2rem',
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -1056,7 +1056,7 @@ export default function ConductorDashboard() {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div className="driver-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <button
                             onClick={toggleOnline}
                             style={{
@@ -1111,7 +1111,7 @@ export default function ConductorDashboard() {
                 </header>
 
                 {/* SCROLLABLE CONTENT */}
-                <div style={{
+                <div className="driver-scroll" style={{
                     flex: 1,
                     // Sin minHeight:0, los flex items por default tienen
                     // min-height:auto y crecen al contenido en vez de scrollear.
@@ -1131,7 +1131,7 @@ export default function ConductorDashboard() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
 
                             {/* STATS STRIP */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.7rem' }}>
+                            <div className="driver-home-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.7rem' }}>
                                 {[
                                     { label: `Hoy · ${completadasHoy.length}`, value: kmHoyReales > 0 ? `${kmHoyReales.toFixed(0)}` : '0', sub: 'km', color: '#3bf63b' },
                                     { label: 'Pendientes', value: rutasPendientes.length, sub: 'rutas', color: '#f59e0b' },
@@ -1201,7 +1201,7 @@ export default function ConductorDashboard() {
                                         </div>
 
                                         {/* Mini stats — incluye velocidad real cuando hay GPS */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '1.1rem' }}>
+                                        <div className="driver-active-mini-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '1.1rem' }}>
                                             <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: liveGps && liveGps.speed > 1 ? '1px solid rgba(59,246,59,0.25)' : '1px solid rgba(255,255,255,0.04)' }}>
                                                 <div style={{ fontSize: '0.95rem', fontWeight: '900', color: liveGps ? '#3bf63b' : '#6b7280', lineHeight: 1.1 }}>
                                                     {liveGps ? Math.round(liveGps.speed) : '—'}
@@ -1237,7 +1237,7 @@ export default function ConductorDashboard() {
                                         )}
 
                                         {/* Actions */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                                        <div className="driver-active-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                                             <button
                                                 onClick={() => router.push(`/conductor/iniciar/${rutaActiva.id}`)}
                                                 style={{ padding: '0.8rem 0.4rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', color: '#60a5fa', fontWeight: '700', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
@@ -1407,7 +1407,7 @@ export default function ConductorDashboard() {
                                                     </div>
                                                 )}
 
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                                                <div className="driver-refuel-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                                     <div>
                                                         <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Litros</label>
                                                         <input type="number" step="0.1" min="0.1" placeholder="45.0"
@@ -1543,7 +1543,7 @@ export default function ConductorDashboard() {
                     {activeTab === 'historial' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {/* Resumen del periodo */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.7rem' }}>
+                            <div className="driver-history-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.7rem' }}>
                                 <div style={{ background: 'rgba(59,246,59,0.06)', border: '1px solid rgba(59,246,59,0.15)', borderRadius: '14px', padding: '0.9rem', textAlign: 'center' }}>
                                     <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#3bf63b', lineHeight: 1 }}>{rutasHistorialFiltradas.length}</div>
                                     <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>Rutas</div>
@@ -1555,7 +1555,7 @@ export default function ConductorDashboard() {
                             </div>
 
                             {/* Filtros por período */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
+                            <div className="driver-history-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
                                 {([
                                     { id: 'hoy', label: 'Hoy' },
                                     { id: 'semana', label: '7d' },
@@ -1765,7 +1765,7 @@ export default function ConductorDashboard() {
                             </div>
 
                             {/* Stats */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                            <div className="driver-profile-stats" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                 {[
                                     { label: 'Completadas', value: rutasCompletadas.length, color: '#3bf63b', icon: '✓' },
                                     { label: 'KM Reales', value: `${kmTotalAcumulado.toFixed(0)}`, color: '#60a5fa', icon: '🛣' },
@@ -1784,7 +1784,7 @@ export default function ConductorDashboard() {
                             </div>
 
                             {/* Quick Actions */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                            <div className="driver-profile-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                 <button
                                     onClick={openProfilePicker}
                                     style={{ padding: '0.9rem', background: 'rgba(96,165,250,0.07)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: '14px', color: '#60a5fa', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
@@ -1826,7 +1826,7 @@ export default function ConductorDashboard() {
                                     >{showEmpresaForm ? 'Cancelar' : 'Cambiar'}</button>
                                 </div>
                                 {showEmpresaForm && (
-                                    <form onSubmit={cambiarEmpresa} style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <form className="driver-company-form" onSubmit={cambiarEmpresa} style={{ display: 'flex', gap: '0.5rem' }}>
                                         <input
                                             type="email"
                                             required
@@ -2016,6 +2016,46 @@ export default function ConductorDashboard() {
                 }
                 * { -webkit-tap-highlight-color: transparent; }
                 input, select { font-family: inherit; }
+                @media (max-width: 720px) {
+                    .driver-header {
+                        gap: 0.75rem !important;
+                        align-items: flex-start !important;
+                    }
+                    .driver-header-actions {
+                        width: 100%;
+                        justify-content: space-between !important;
+                    }
+                    .driver-scroll {
+                        padding: 0.9rem 0.85rem calc(110px + env(safe-area-inset-bottom, 0px)) !important;
+                    }
+                    .driver-home-stats,
+                    .driver-active-mini-stats,
+                    .driver-active-actions {
+                        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                    }
+                    .driver-refuel-grid,
+                    .driver-profile-actions {
+                        grid-template-columns: 1fr !important;
+                    }
+                    .driver-company-form {
+                        flex-direction: column !important;
+                    }
+                }
+                @media (max-width: 480px) {
+                    .driver-home-stats,
+                    .driver-active-mini-stats,
+                    .driver-active-actions,
+                    .driver-history-summary,
+                    .driver-profile-stats {
+                        grid-template-columns: 1fr !important;
+                    }
+                    .driver-history-filters {
+                        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                    }
+                    .driver-header-actions {
+                        gap: 0.5rem !important;
+                    }
+                }
             `}</style>
 
             {/* ─── MODAL: Llamar a la central ─────────────────────────────

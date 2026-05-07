@@ -421,6 +421,11 @@ export default function RutaTracking() {
                     box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
                 }
 
+                @media (max-width: 1100px) {
+                    .ruta-main-grid { grid-template-columns: 1fr; gap: 1.25rem; }
+                    .ruta-map-box { height: 420px; }
+                }
+
                 /* ── MÓVIL ── */
                 @media (max-width: 768px) {
                     .ruta-header {

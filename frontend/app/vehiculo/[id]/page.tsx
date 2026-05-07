@@ -600,13 +600,62 @@ export default function VehiculoDetalle() {
   return (
     <BackgroundMeteors>
       <main style={{ height: "100%", width: "100%", overflowY: "auto", position: "relative", zIndex: 20, paddingBottom: "100px" }}>
+        <style>{`
+          .vehiculo-header-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            width: 100%;
+            flex-wrap: wrap;
+          }
+          .vehiculo-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            background: #0d1117;
+            padding: 0.35rem;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            width: 100%;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          .vehiculo-tabs::-webkit-scrollbar {
+            display: none;
+          }
+          .vehiculo-tab-button {
+            flex: 0 0 auto;
+            white-space: nowrap;
+          }
+          .vehiculo-sparepart-row {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+            gap: 0.5rem;
+            align-items: end;
+          }
+          @media (max-width: 640px) {
+            .vehiculo-header-main > button {
+              width: 100%;
+            }
+            .vehiculo-tab-button {
+              font-size: 0.8rem !important;
+              padding: 0.55rem 0.95rem !important;
+            }
+            .vehiculo-card-metrics,
+            .vehiculo-sparepart-row {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
         <div className={styles.container}>
           <header className={styles.header}>
             <button
               onClick={() => router.push(DASHBOARD_ROUTE)}
               style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", padding: "0.5rem 1rem", borderRadius: "8px", color: "white", cursor: "pointer", marginBottom: "1rem" }}
             >← {t.vehicle.backToDashboard}</button>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+            <div className="vehiculo-header-main">
               <div className={styles.title}>
                 <h1>{vehiculo.marca} {vehiculo.modelo}</h1>
                 <p className={styles.subtitle}>{t.vehicle.plate || t.vehicle.licensePlate}: {vehiculo.matricula}</p>
@@ -720,8 +769,9 @@ export default function VehiculoDetalle() {
           </div>
 
           {/* ── Tabs ──────────────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', background: '#0d1117', padding: '0.35rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', width: 'fit-content' }}>
+          <div className="vehiculo-tabs">
             <button
+              className="vehiculo-tab-button"
               onClick={() => setActiveTab('mantenimientos')}
               style={{
                 padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -734,6 +784,7 @@ export default function VehiculoDetalle() {
               🔧 {t.tabs.maintenance} ({mantenimientos.length})
             </button>
             <button
+              className="vehiculo-tab-button"
               onClick={() => setActiveTab('repostajes')}
               style={{
                 padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -746,6 +797,7 @@ export default function VehiculoDetalle() {
               ⛽ {t.tabs.refueling} ({repostajes.length})
             </button>
             <button
+              className="vehiculo-tab-button"
               onClick={() => setActiveTab('documentos')}
               style={{
                 padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -758,6 +810,7 @@ export default function VehiculoDetalle() {
               📄 {t.tabs.documents} ({documentos.length})
             </button>
             <button
+              className="vehiculo-tab-button"
               onClick={() => setActiveTab('programaciones')}
               style={{
                 padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -770,6 +823,7 @@ export default function VehiculoDetalle() {
               📅 {t.tabs.schedules} ({programaciones.length})
             </button>
             <button
+              className="vehiculo-tab-button"
               onClick={abrirEdicion}
               style={{
                 padding: '0.6rem 1.25rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
@@ -874,7 +928,7 @@ export default function VehiculoDetalle() {
 
                     <h4 style={{ marginTop: "1.5rem", marginBottom: "1rem", color: "var(--accent)" }}>{t.maintenance.spareParts}</h4>
                     {nuevoMantenimiento.repuestos?.map((rep, index) => (
-                      <div key={index} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", alignItems: "end" }}>
+                      <div key={index} className="vehiculo-sparepart-row" style={{ marginBottom: "0.5rem" }}>
                         <div className={styles.formGroup} style={{ flex: 2 }}>
                           <label className={styles.label}>{t.maintenance.partName}</label>
                           <input className={styles.input} type="text" placeholder={t.maintenance.partPlaceholder || "Filtro de aceite"}
@@ -930,7 +984,7 @@ export default function VehiculoDetalle() {
                             <span style={{ fontSize: "0.7rem", color: "#444", fontFamily: 'monospace' }}>#{m.id?.slice(-6).toUpperCase()}</span>
                           </div>
                           <h4 className={styles.cardTitle} style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>{m.descripcion}</h4>
-                          <div style={{ display: 'flex', gap: '0.8rem', color: "#9ca3af", fontSize: "0.8rem" }}>
+                          <div style={{ display: 'flex', gap: '0.8rem', color: "#9ca3af", fontSize: "0.8rem", flexWrap: 'wrap' }}>
                             <span>📅 {new Date(m.fecha).toLocaleDateString(locale)}</span>
                             <span>🏭 {m.taller?.nombre || t.vehiclePage.officialWorkshop}</span>
                           </div>
@@ -939,7 +993,7 @@ export default function VehiculoDetalle() {
                           style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', cursor: 'pointer', color: "#ef4444", width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.5rem', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="vehiculo-card-metrics" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.5rem', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <div>
                           <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>{t.metrics.mileage}</span>
                           <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#fff' }}>{m.kilometrajeRealizado?.toLocaleString(locale)} <span style={{ fontSize: '0.75rem', color: '#4b5563' }}>KM</span></span>
@@ -1141,7 +1195,7 @@ export default function VehiculoDetalle() {
                           style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', cursor: 'pointer', color: "#ef4444", width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginTop: '1rem', background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="vehiculo-card-metrics" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginTop: '1rem', background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <div>
                           <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>{t.refueling.liters}</span>
                           <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#f59e0b' }}>{r.litros?.toLocaleString(locale, { maximumFractionDigits: 1 })} <span style={{ fontSize: '0.7rem', color: '#4b5563' }}>L</span></span>
@@ -1315,7 +1369,7 @@ export default function VehiculoDetalle() {
                           style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', cursor: 'pointer', color: '#ef4444', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1rem', background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div className="vehiculo-card-metrics" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1rem', background: 'rgba(0,0,0,0.3)', padding: '0.875rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
                         <div>
                           <span style={{ display: 'block', fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>{t.documents.issueDate}</span>
                           <span style={{ fontSize: '0.95rem', fontWeight: '700', color: '#fff' }}>{doc.fechaEmision ? new Date(doc.fechaEmision).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span>

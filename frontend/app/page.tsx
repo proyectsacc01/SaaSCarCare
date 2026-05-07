@@ -381,11 +381,13 @@ export default function LandingPage() {
               {t.landing.primaryCta}
             </WavyButton>
           </div>
-          {/* Botón CTA móvil */}
-          <button
-            className={styles.navCtaMobile}
-            onClick={() => router.push('/login')}
-          >{t.auth.login}</button>
+          <div className={styles.navMobileActions}>
+            <LanguageSwitcher />
+            <button
+              className={styles.navCtaMobile}
+              onClick={() => router.push('/login')}
+            >{t.auth.login}</button>
+          </div>
         </div>
       </nav>
 

@@ -4,6 +4,7 @@
 .mainContainer {
     display: flex;
     min-height: 100vh;
+    min-height: 100dvh;
     width: 100%;
     background: #0f172a;
     /* Slate 900 */
@@ -252,6 +253,9 @@
 .labelRow {
     display: flex;
     justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
 }
 
 .forgotLink {
@@ -460,6 +464,31 @@
 }
 
 /* Responsive adjustments */
+@media (max-width: 768px) {
+    .row {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .formPanel {
+        justify-content: flex-start;
+        padding: 1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .formContent {
+        max-width: 100%;
+    }
+
+    .header {
+        margin-bottom: 2rem;
+    }
+
+    .googleBtn {
+        font-size: 0.9rem;
+        padding: 0.85rem 0.9rem;
+    }
+}
+
 @media (max-width: 640px) {
     .formPanel {
         padding: 1.5rem;
@@ -467,5 +496,13 @@
 
     .title {
         font-size: 1.75rem;
+    }
+
+    .subtitle {
+        line-height: 1.5;
+    }
+
+    .oauthDivider {
+        margin: 1.25rem 0;
     }
 }

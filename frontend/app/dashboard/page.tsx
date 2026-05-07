@@ -945,7 +945,7 @@ export default function Dashboard() {
               <h1>{t.dashboard.title}</h1>
               <p className={styles.subtitle}>{t.dashboard.subtitle}</p>
             </div>
-            <div className={styles.status} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
+            <div className={styles.headerActions}>
               <AlertasPanel
                 apiUrl={API_URL}
                 getAuthHeaders={getAuthHeaders}

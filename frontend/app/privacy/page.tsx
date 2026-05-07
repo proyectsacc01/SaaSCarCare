@@ -15,22 +15,23 @@ export default function PrivacyPolicyPage() {
         background: "#0d1117",
         color: "#e2e8f0",
         minHeight: "100vh",
-        padding: "3rem 1.5rem",
+        padding: "clamp(1.25rem, 4vw, 3rem) clamp(1rem, 4vw, 1.5rem)",
         fontFamily: "Segoe UI, Roboto, Arial, sans-serif",
         lineHeight: 1.7,
       }}
     >
       <article
         style={{
-          maxWidth: "780px",
+          maxWidth: "min(780px, 100%)",
           margin: "0 auto",
           background: "#0f1923",
-          padding: "2.5rem 2rem",
+          padding: "clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem)",
           borderRadius: "16px",
           border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 24px 60px -28px rgba(0,0,0,0.55)",
         }}
       >
-        <header style={{ marginBottom: "2rem", borderBottom: "2px solid #3bf63b", paddingBottom: "1rem" }}>
+        <header style={{ marginBottom: "clamp(1.5rem, 4vw, 2rem)", borderBottom: "2px solid #3bf63b", paddingBottom: "1rem" }}>
           <a
             href="/conductor"
             style={{
@@ -50,7 +51,7 @@ export default function PrivacyPolicyPage() {
           <p style={{ color: "#3bf63b", fontWeight: 700, letterSpacing: "2px", fontSize: "0.8rem", textTransform: "uppercase", margin: "0 0 0.5rem" }}>
             ./CarCare Tracker
           </p>
-          <h1 style={{ fontSize: "2rem", color: "#fff", margin: "0.5rem 0" }}>Política de Privacidad</h1>
+          <h1 style={{ fontSize: "clamp(1.75rem, 5vw, 2rem)", color: "#fff", margin: "0.5rem 0" }}>Política de Privacidad</h1>
           <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", margin: 0 }}>Última actualización: {updated}</p>
         </header>
 
@@ -183,7 +184,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section style={{ marginBottom: "2rem" }}>
       <h2 style={{ fontSize: "1.15rem", color: "#3bf63b", fontWeight: 700, marginBottom: "0.6rem" }}>{title}</h2>
-      <div style={{ color: "rgba(255,255,255,0.78)", fontSize: "0.95rem" }}>{children}</div>
+      <div style={{ color: "rgba(255,255,255,0.78)", fontSize: "clamp(0.92rem, 2.5vw, 0.95rem)" }}>{children}</div>
     </section>
   );
 }
