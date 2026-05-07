@@ -4,6 +4,7 @@ import { useTranslation } from "@/lib/i18n";
 import { formatDriverAvailabilityLabel } from "@/lib/status-labels";
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import ChatRuta from "@/componentes/ChatRuta";
@@ -131,6 +132,26 @@ function openExternal(url: string) {
     window.open(url, '_blank', 'noopener,noreferrer');
 }
 
+const HistoryRouteMap = dynamic(() => import("@/componentes/MapTracking"), {
+    ssr: false,
+    loading: () => (
+        <div style={{
+            height: "100%",
+            minHeight: "220px",
+            borderRadius: "16px",
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#6b7280",
+            fontSize: "0.8rem",
+        }}>
+            Cargando mapa del trayecto...
+        </div>
+    )
+});
+
 export default function ConductorDashboard() {
   const t = useTranslation();
 
@@ -206,6 +227,7 @@ export default function ConductorDashboard() {
     // Modal de confirmación al completar una ruta. Evita que el conductor
     // marque por error la ruta como terminada y pierda km/datos.
     const [confirmComplete, setConfirmComplete] = useState<Ruta | null>(null);
+    const [selectedHistoryRoute, setSelectedHistoryRoute] = useState<Ruta | null>(null);
     const [completingRoute, setCompletingRoute] = useState(false);
     const trackedRouteIdRef = useRef<string | null>(null);
 
@@ -920,6 +942,11 @@ export default function ConductorDashboard() {
         const estimada = ruta.distanciaEstimadaKm ?? 0;
         const real = ruta.distanciaRecorridaKm ?? 0;
         return real > 0 ? Math.max(estimada, real) : estimada;
+    };
+
+    const getVehicleSummary = (vehiculoId?: string) => {
+        if (!vehiculoId) return null;
+        return vehiculos.find((vehiculo) => vehiculo.id === vehiculoId) ?? null;
     };
 
     const repostajesDelConductor = repostajes.filter((r) => r.conductorId && r.conductorId === driverUser?.id);
@@ -1637,10 +1664,28 @@ export default function ConductorDashboard() {
                                             </div>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                                                 {items.map(r => (
-                                                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '0.9rem 1rem', borderLeft: '3px solid rgba(59,246,59,0.5)' }}>
+                                                    <button
+                                                        key={r.id}
+                                                        type="button"
+                                                        onClick={() => setSelectedHistoryRoute(r)}
+                                                        style={{
+                                                            width: '100%',
+                                                            background: 'rgba(255,255,255,0.02)',
+                                                            border: '1px solid rgba(255,255,255,0.05)',
+                                                            borderRadius: '14px',
+                                                            padding: '0.9rem 1rem',
+                                                            borderLeft: '3px solid rgba(59,246,59,0.5)',
+                                                            textAlign: 'left',
+                                                            cursor: 'pointer',
+                                                            transition: 'border-color 0.2s ease, transform 0.15s ease, background 0.2s ease',
+                                                        }}
+                                                    >
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                                                             <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: 800, background: 'rgba(59,246,59,0.1)', padding: '0.18rem 0.5rem', borderRadius: '99px' }}>✓ COMPLETADA</span>
-                                                            <span style={{ fontSize: '0.55rem', color: '#374151', fontFamily: 'monospace' }}>#{r.id?.slice(-6).toUpperCase()}</span>
+                                                            <span style={{ fontSize: '0.55rem', color: '#374151', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                                <span>#{r.id?.slice(-6).toUpperCase()}</span>
+                                                                <span style={{ color: '#6b7280', fontFamily: 'system-ui, sans-serif' }}>Ver detalle ›</span>
+                                                            </span>
                                                         </div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', marginBottom: '0.35rem' }}>
                                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '42%' }}>{r.origen}</span>
@@ -1651,7 +1696,7 @@ export default function ConductorDashboard() {
                                                             <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: 600 }}>{getRouteKm(r).toFixed(1)} km</span>
                                                             {r.fecha && <span style={{ fontSize: '0.6rem', color: '#4b5563' }}>{new Date(r.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>}
                                                         </div>
-                                                    </div>
+                                                    </button>
                                                 ))}
                                             </div>
                                         </div>
@@ -2217,6 +2262,126 @@ export default function ConductorDashboard() {
                     </div>
                 </div>
             )}
+
+            {selectedHistoryRoute && (() => {
+                const routeKm = getRouteKm(selectedHistoryRoute);
+                const vehicle = getVehicleSummary(selectedHistoryRoute.vehiculoId);
+                const plannedKm = selectedHistoryRoute.distanciaEstimadaKm ?? 0;
+                const routeDate = selectedHistoryRoute.fecha
+                    ? new Date(selectedHistoryRoute.fecha)
+                    : null;
+                const hasRouteMap = !!(
+                    selectedHistoryRoute.latitudOrigen != null &&
+                    selectedHistoryRoute.longitudOrigen != null &&
+                    selectedHistoryRoute.latitudDestino != null &&
+                    selectedHistoryRoute.longitudDestino != null
+                );
+
+                return (
+                    <div
+                        onClick={() => setSelectedHistoryRoute(null)}
+                        style={{
+                            position: 'fixed', inset: 0, zIndex: 9998,
+                            background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '1rem',
+                        }}
+                    >
+                        <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                width: '100%',
+                                maxWidth: '720px',
+                                maxHeight: 'min(92dvh, 920px)',
+                                overflowY: 'auto',
+                                background: 'linear-gradient(180deg, rgba(15,18,26,0.99), rgba(8,10,16,1))',
+                                border: '1px solid rgba(59,246,59,0.18)',
+                                borderRadius: '22px',
+                                padding: '1.2rem',
+                                boxShadow: '0 30px 80px -20px rgba(0,0,0,0.75)',
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+                                <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#3bf63b', fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+                                        Historial del trayecto
+                                    </div>
+                                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#fff', lineHeight: 1.35 }}>
+                                        {selectedHistoryRoute.origen} <span style={{ color: '#4b5563' }}>→</span> <span style={{ color: '#ef4444' }}>{selectedHistoryRoute.destino}</span>
+                                    </h3>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 0.85rem', marginTop: '0.55rem', fontSize: '0.72rem', color: '#6b7280' }}>
+                                        <span>#{selectedHistoryRoute.id?.slice(-6).toUpperCase()}</span>
+                                        {routeDate && <span>{routeDate.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })} · {routeDate.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                        <span style={{ color: '#3bf63b', fontWeight: 700 }}>COMPLETADA</span>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedHistoryRoute(null)}
+                                    style={{
+                                        width: '38px', height: '38px', flexShrink: 0,
+                                        borderRadius: '50%', border: '1px solid rgba(255,255,255,0.08)',
+                                        background: 'rgba(255,255,255,0.04)', color: '#9ca3af',
+                                        cursor: 'pointer', fontSize: '1rem'
+                                    }}
+                                >✕</button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                                <div style={{ background: 'rgba(59,246,59,0.06)', border: '1px solid rgba(59,246,59,0.15)', borderRadius: '14px', padding: '0.95rem' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>Km recorridos GPS</div>
+                                    <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#3bf63b', lineHeight: 1.1 }}>{routeKm.toFixed(1)} <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>km</span></div>
+                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>Solo cuenta lo recorrido realmente por el conductor</div>
+                                </div>
+                                <div style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: '14px', padding: '0.95rem' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>Km planificados</div>
+                                    <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#60a5fa', lineHeight: 1.1 }}>{plannedKm.toFixed(1)} <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>km</span></div>
+                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>Referencia de la ruta asignada</div>
+                                </div>
+                                <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '14px', padding: '0.95rem' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>Vehículo</div>
+                                    <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#e5e7eb', lineHeight: 1.2 }}>
+                                        {vehicle ? `${vehicle.matricula} · ${vehicle.marca} ${vehicle.modelo}` : `ID ${selectedHistoryRoute.vehiculoId?.slice(-8) || '—'}`}
+                                    </div>
+                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>{vehicle ? vehicle.tipoCombustible : 'Vehículo asociado a la ruta'}</div>
+                                </div>
+                            </div>
+
+                            {routeKm <= 0 && (
+                                <div style={{ marginBottom: '1rem', padding: '0.85rem 0.95rem', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d', fontSize: '0.76rem', lineHeight: 1.45 }}>
+                                    Esta ruta no tiene km GPS reales guardados. Por eso no suma al historial real ni a métricas derivadas. Si la completaste sin telemetría válida, el sistema NO inventa kilómetros.
+                                </div>
+                            )}
+
+                            <div style={{ display: 'grid', gap: '0.9rem' }}>
+                                <div style={{ height: 'min(300px, 38dvh)', minHeight: '220px' }}>
+                                    {hasRouteMap ? (
+                                        <HistoryRouteMap
+                                            origin={[selectedHistoryRoute.latitudOrigen!, selectedHistoryRoute.longitudOrigen!]}
+                                            destination={[selectedHistoryRoute.latitudDestino!, selectedHistoryRoute.longitudDestino!]}
+                                            current={null}
+                                            routeCoordinates={[]}
+                                        />
+                                    ) : (
+                                        <div style={{ height: '100%', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '1rem', color: '#6b7280', fontSize: '0.78rem' }}>
+                                            Esta ruta no tiene coordenadas suficientes para mostrar el mapa del trayecto.
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.95rem' }}>
+                                    <div style={{ fontSize: '0.68rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '0.45rem' }}>Registro contado en historial</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 0.9rem', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                                        <span><strong style={{ color: '#fff' }}>Km reales:</strong> {routeKm.toFixed(1)} km</span>
+                                        <span><strong style={{ color: '#fff' }}>Km plan:</strong> {plannedKm.toFixed(1)} km</span>
+                                        <span><strong style={{ color: '#fff' }}>Contabiliza en perfil:</strong> {routeKm.toFixed(1)} km</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* ─── MODAL: Confirmar completar ruta ─────────────────────── */}
             {confirmComplete && (
