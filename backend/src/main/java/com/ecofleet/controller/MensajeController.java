@@ -34,16 +34,37 @@ public class MensajeController {
     private RutaRepository rutaRepository;
 
     @GetMapping("/{rutaId}")
-    public List<Mensaje> obtenerMensajes(@PathVariable String rutaId) {
+    public Object obtenerMensajes(@PathVariable String rutaId, HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        if (usuarioId == null) {
+            return java.util.Collections.emptyList();
+        }
+
+        // Tenant isolation: verify this route belongs to the requesting user's company
+        Optional<Ruta> ruta = rutaRepository.findById(rutaId);
+        if (ruta.isEmpty() || !usuarioId.equals(ruta.get().getUsuarioId())) {
+            return java.util.Collections.emptyList();
+        }
+
         return mensajeRepository.findByRutaIdOrderByTimestampAsc(rutaId);
     }
 
     @PostMapping
-    public Mensaje enviarMensaje(@RequestBody Mensaje mensaje, HttpServletRequest request) {
+    public Object enviarMensaje(@RequestBody Mensaje mensaje, HttpServletRequest request) {
         String usuarioId = (String) request.getAttribute("userId");
-        if (usuarioId != null) {
-            mensaje.setUsuarioId(usuarioId);
+        if (usuarioId == null) {
+            return java.util.Collections.singletonMap("error", "No autenticado");
         }
+
+        // Tenant isolation: verify the target route belongs to the sender's company
+        if (mensaje.getRutaId() != null) {
+            Optional<Ruta> ruta = rutaRepository.findById(mensaje.getRutaId());
+            if (ruta.isEmpty() || !usuarioId.equals(ruta.get().getUsuarioId())) {
+                return java.util.Collections.singletonMap("error", "No autorizado para esta ruta");
+            }
+        }
+
+        mensaje.setUsuarioId(usuarioId);
 
         Mensaje guardado = mensajeRepository.save(mensaje);
 

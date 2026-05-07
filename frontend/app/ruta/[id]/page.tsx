@@ -568,6 +568,7 @@ export default function RutaTracking() {
                     height: min(680px, 72dvh);
                     display: flex;
                     min-width: 0;
+                    margin-top: 2rem;
                 }
 
                 @media (max-width: 1100px) {
@@ -578,6 +579,7 @@ export default function RutaTracking() {
                     }
                     .ruta-chat-shell {
                         height: min(620px, 68dvh);
+                        margin-top: 1.25rem;
                     }
                 }
 
@@ -634,6 +636,7 @@ export default function RutaTracking() {
                     .ruta-chat-shell {
                         min-height: 360px;
                         height: min(560px, 62dvh);
+                        margin-top: 1rem;
                     }
                 }
                 @media (max-width: 560px) {
@@ -1090,11 +1093,12 @@ export default function RutaTracking() {
                                     Asegúrese de que el conductor mantenga el dispositivo en un lugar con visibilidad satelital óptima para evitar errores de geolocalización.
                                 </p>
                             </div>
-
-                            <div className="ruta-chat-shell">
-                                <ChatRuta rutaId={id as string} rol="ADMIN" fillParent />
-                            </div>
                         </div>
+                    </div>
+
+                    {/* Chat — full width below the grid */}
+                    <div className="ruta-chat-shell">
+                        <ChatRuta rutaId={id as string} rol="ADMIN" fillParent />
                     </div>
                 </div>
             </main>
