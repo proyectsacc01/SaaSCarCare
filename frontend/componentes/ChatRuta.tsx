@@ -72,6 +72,8 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const recorderStreamRef = useRef<MediaStream | null>(null);
     const nativeRecordingRef = useRef(false);
     const [newMsgPulse, setNewMsgPulse] = useState(0);
+    const [micPermissionDeniedDesktop, setMicPermissionDeniedDesktop] = useState(false);
+    const [isBrave, setIsBrave] = useState(false);
 
     const quickReplies = rol === 'CONDUCTOR' ? QUICK_REPLIES_CONDUCTOR : QUICK_REPLIES_ADMIN;
 
@@ -211,6 +213,40 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             window.removeEventListener("native-chat-media-selected", handleNativeMediaSelected as EventListener);
             window.removeEventListener("native-chat-media-error", handleNativeMediaError as EventListener);
         };
+    }, []);
+
+    // ── Detección de Brave ──────────────────────────────────────────
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        // navigator.brave existe solo en Brave. No es estándar, pero
+        // es la forma más fiable de detectarlo.
+        setIsBrave(!!(navigator as any).brave);
+    }, []);
+
+    // ── Verificación proactiva del permiso de micrófono ──────────────
+    // Solo en desktop browser (no Android WebView). Si el permiso está
+    // denegado, mostramos un aviso antes de que el usuario intente grabar.
+    useEffect(() => {
+        if (typeof navigator === 'undefined') return;
+        if (!navigator.permissions?.query) return;
+        // En Android WebView el permiso se maneja con el bridge nativo
+        if (getAndroidTracker()) return;
+
+        navigator.permissions.query({ name: 'microphone' as PermissionName })
+            .then((status) => {
+                setMicPermissionDeniedDesktop(status.state === 'denied');
+                // Escuchar cambios por si el usuario cambia el permiso
+                // mientras la página está abierta (ej: Brave Shields)
+                status.addEventListener('change', () => {
+                    setMicPermissionDeniedDesktop(status.state === 'denied');
+                });
+            })
+            .catch(() => {
+                // Permissions API no soportada para micrófono (Firefox,
+                // Safari). En ese caso no podemos saber el estado hasta
+                // que getUserMedia falle — confiamos en el catch de
+                // startAudioRecording.
+            });
     }, []);
 
     const scrollToBottom = () => {
@@ -457,7 +493,11 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
             } else if (name === "NotAllowedError" || name === "SecurityError") {
                 // El usuario denegó el permiso, o el navegador (Brave Shields,
                 // privacy mode, etc) está bloqueando la API.
-                toast.error("Permiso de micrófono bloqueado por el navegador. Revisa Shields/permisos del sitio.", { duration: 7000 });
+                if (isBrave) {
+                    toast.error("Brave Shields bloquea el micrófono. Haz clic en el icono 🦁 de la barra de direcciones y desactiva \"Shields\" para este sitio.", { duration: 9000 });
+                } else {
+                    toast.error("Permiso de micrófono denegado. Abre Configuración del sitio (icono 🔒 en la barra de direcciones) y permite \"Micrófono\".", { duration: 9000 });
+                }
             } else if (name === "NotReadableError" || name === "TrackStartError") {
                 toast.error("Otro programa está usando el micrófono. Cierra videollamadas o grabadoras y reintenta.", { duration: 7000 });
             } else if (name === "NotFoundError" || name === "OverconstrainedError") {
@@ -605,6 +645,46 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                         #{rutaId?.slice(-6).toUpperCase()}
                     </div>
                 </div>
+
+                {/* ═══ Aviso de micrófono bloqueado ═══ */}
+                {micPermissionDeniedDesktop && (
+                    <div style={{
+                        padding: '0.55rem 0.9rem',
+                        display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+                        background: 'rgba(239,68,68,0.08)',
+                        borderBottom: '1px solid rgba(239,68,68,0.15)',
+                        fontSize: '0.72rem', color: '#fca5a5', lineHeight: 1.45,
+                    }}>
+                        <span style={{ fontSize: '0.85rem', flexShrink: 0, marginTop: '1px' }}>⚠️</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontWeight: 700 }}>Micrófono bloqueado</span>
+                            {isBrave ? (
+                                <span>
+                                    &nbsp;— Brave Shields impide acceder al micrófono.
+                                    Haz clic en el icono <strong>🦁</strong> de la barra de direcciones
+                                    y desactiva <strong>"Shields"</strong> para este sitio. Luego recarga.
+                                </span>
+                            ) : (
+                                <span>
+                                    &nbsp;— El navegador no permite usar el micrófono.
+                                    Haz clic en el icono <strong>🔒</strong> de la barra de direcciones,
+                                    busca <strong>"Micrófono"</strong> y selecciona <strong>"Permitir"</strong>.
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setMicPermissionDeniedDesktop(false)}
+                            style={{
+                                background: 'rgba(255,255,255,0.06)', border: 'none',
+                                borderRadius: '6px', width: '22px', height: '22px',
+                                color: '#fca5a5', cursor: 'pointer', fontSize: '0.65rem',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                flexShrink: 0, marginTop: '1px',
+                            }}
+                            title="Ocultar aviso"
+                        >✕</button>
+                    </div>
+                )}
 
                 {/* Messages — wrapper relative para botón flotante */}
                 <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
