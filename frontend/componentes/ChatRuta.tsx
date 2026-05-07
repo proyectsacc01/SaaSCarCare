@@ -33,10 +33,10 @@ type AndroidTrackerBridge = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
-const MAX_AUDIO_SIZE = 2 * 1024 * 1024; // 2MB
-const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB ya procesada
-const MAX_VIDEO_SIZE = 8 * 1024 * 1024; // 8MB
-const MAX_AUDIO_SECONDS = 90;
+const MAX_AUDIO_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_VIDEO_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_AUDIO_SECONDS = 300; // 5 minutos
 
 // Mensajes rápidos preestablecidos según el rol — para que el conductor no tenga que tipear
 // mientras maneja, y la central tenga respuestas comunes a un toque
@@ -334,9 +334,9 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     };
 
     const getSizeErrorForType = (type: string) => {
-        if (type.startsWith("audio/")) return "Audio demasiado grande (máx. 2MB)";
-        if (type.startsWith("image/")) return "Imagen demasiado grande (máx. 4MB)";
-        if (type.startsWith("video/")) return "Video demasiado grande (máx. 8MB)";
+        if (type.startsWith("audio/")) return "Audio demasiado grande (máx. 5MB)";
+        if (type.startsWith("image/")) return "Imagen demasiado grande (máx. 5MB)";
+        if (type.startsWith("video/")) return "Video demasiado grande (máx. 10MB)";
         return "Archivo demasiado grande";
     };
 
@@ -465,7 +465,7 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                 }
 
                 if (blob.size > MAX_AUDIO_SIZE) {
-                    toast.error("Audio demasiado grande (máx. 2MB)");
+                    toast.error("Audio demasiado grande (máx. 5MB)");
                     return;
                 }
 

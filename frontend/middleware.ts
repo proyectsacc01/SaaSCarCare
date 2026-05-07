@@ -10,7 +10,7 @@ const FIREWALL_CONFIG = {
     // Rate limiting: máximo de peticiones por IP en ventana de tiempo
     rateLimit: {
         windowMs: 60 * 1000,      // Ventana de 1 minuto
-        maxRequests: 60,           // Máximo 60 peticiones por minuto (general)
+        maxRequests: 200,          // Máximo 200 peticiones por minuto (chat pollea cada 3s)
         maxLoginAttempts: 5,       // Máximo 5 intentos de login por minuto
     },
 
@@ -49,7 +49,7 @@ const FIREWALL_CONFIG = {
         'X-Frame-Options': 'DENY',
         'X-XSS-Protection': '1; mode=block',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
+        'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(self)',
         'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     },
 }
