@@ -2,7 +2,7 @@
   position: relative;
   width: 100%;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
+  background: #111a27;
   border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }

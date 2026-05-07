@@ -287,7 +287,7 @@ export default function GasPriceWorldMap({ t, locale }: GasPriceWorldMapProps) {
               scrollWheelZoom={true}
               dragging={true}
               zoomControl={true}
-              style={{ height: "480px", width: "100%", borderRadius: "12px", background: "#0f172a" }}
+              style={{ height: "480px", width: "100%", borderRadius: "12px", background: "#0d1117" }}
               attributionControl={false}
             >
               <MapBoundsReset />
