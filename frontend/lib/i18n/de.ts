@@ -831,6 +831,30 @@ const de: TranslationKeys = {
     COMBUSTIBLE_BAJO_title: "Kraftstoff niedrig",
     COMBUSTIBLE_BAJO_desc: "Der Kraftstoffstand liegt unter dem Minimum",
   },
+
+  gasMap: {
+    title: "Kraftstoffpreise Weltweit",
+    subtitle: "Interaktive Karte der Benzin- und Dieselpreise nach Land",
+    gasoline: "Benzin",
+    diesel: "Diesel",
+    refresh: "Aktualisieren",
+    loading: "Preiskarte wird geladen...",
+    globalAvg: "Globaler Durchschnitt",
+    cheapest: "Am Günstigsten",
+    expensive: "Am Teuersten",
+    countries: "Länder",
+    usdPerLiter: "USD/Liter",
+    weeklyChange: "Wochenänderung",
+    region: "Region",
+    lastUpdated: "Aktualisiert",
+    source: "Quellen",
+    topExpensive: "Am Teuersten",
+    topCheapest: "Am Günstigsten",
+    noData: "Keine Daten",
+    cheap: "Günstig",
+    mid: "Mittel",
+    pricey: "Teuer",
+  },
 } as const;
 
 export default de;

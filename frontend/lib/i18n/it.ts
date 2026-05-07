@@ -813,6 +813,30 @@ const it: TranslationKeys = {
     COMBUSTIBLE_BAJO_title: "Carburante basso",
     COMBUSTIBLE_BAJO_desc: "Il livello del carburante è sotto la soglia minima",
   },
+
+  gasMap: {
+    title: "Prezzo del Carburante nel Mondo",
+    subtitle: "Mappa interattiva dei prezzi di benzina e diesel per paese",
+    gasoline: "Benzina",
+    diesel: "Diesel",
+    refresh: "Aggiorna",
+    loading: "Caricamento mappa prezzi...",
+    globalAvg: "Media Globale",
+    cheapest: "Più Economico",
+    expensive: "Più Costoso",
+    countries: "Paesi",
+    usdPerLiter: "USD/Litro",
+    weeklyChange: "Var. settimanale",
+    region: "Regione",
+    lastUpdated: "Aggiornato",
+    source: "Fonti",
+    topExpensive: "I Più Costosi",
+    topCheapest: "I Più Economici",
+    noData: "Nessun dato",
+    cheap: "Economico",
+    mid: "Medio",
+    pricey: "Costoso",
+  },
 } as const;
 
 export default it;

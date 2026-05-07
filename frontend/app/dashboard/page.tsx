@@ -210,6 +210,24 @@ const MapTrackingGlobal = dynamic(() => import("@/componentes/MapTrackingGlobal"
   )
 });
 
+// Dynamic import para el mapa de precios de combustible mundial (evitar SSR)
+const GasPriceWorldMap = dynamic(() => import("@/componentes/GasPriceWorldMap"), {
+  ssr: false,
+  loading: () => (
+    <div style={{
+      height: "400px",
+      background: "rgba(0,0,0,0.3)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "20px",
+      color: "#888"
+    }}>
+      Cargando mapa de precios...
+    </div>
+  )
+});
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 
 const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -1678,6 +1696,9 @@ export default function Dashboard() {
           {/* ═══════════════════ TAB: COSTES & ROI ═══════════════════ */}
           {activeTab === 'costes' && (
             <div className={styles.rutasContainer} style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
+              {/* ── Mapa de Precios de Combustible Mundial ── */}
+              <GasPriceWorldMap t={t} locale={locale} />
+
               {flotaKpis ? (
                 <>
                   {/* ── KPI Cards globales ── */}

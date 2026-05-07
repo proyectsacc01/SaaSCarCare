@@ -813,6 +813,30 @@ const en: TranslationKeys = {
     COMBUSTIBLE_BAJO_title: "Low fuel",
     COMBUSTIBLE_BAJO_desc: "Fuel level is below the minimum threshold",
   },
+
+  gasMap: {
+    title: "Global Fuel Prices",
+    subtitle: "Interactive gasoline and diesel price map by country",
+    gasoline: "Gasoline",
+    diesel: "Diesel",
+    refresh: "Refresh",
+    loading: "Loading price map...",
+    globalAvg: "Global Avg",
+    cheapest: "Cheapest",
+    expensive: "Most Expensive",
+    countries: "Countries",
+    usdPerLiter: "USD/Liter",
+    weeklyChange: "Weekly change",
+    region: "Region",
+    lastUpdated: "Updated",
+    source: "Sources",
+    topExpensive: "Most Expensive",
+    topCheapest: "Cheapest",
+    noData: "No data",
+    cheap: "Cheap",
+    mid: "Mid",
+    pricey: "Expensive",
+  },
 } as const;
 
 export default en;

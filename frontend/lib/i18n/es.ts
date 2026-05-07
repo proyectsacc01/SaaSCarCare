@@ -829,6 +829,31 @@ const es = {
     COMBUSTIBLE_BAJO_title: "Combustible bajo",
     COMBUSTIBLE_BAJO_desc: "El nivel de combustible está por debajo del mínimo",
   },
+
+  // ── Gas Price Map ──
+  gasMap: {
+    title: "Precio del Combustible en el Mundo",
+    subtitle: "Mapa interactivo de precios de gasolina y diésel por país",
+    gasoline: "Gasolina",
+    diesel: "Diésel",
+    refresh: "Actualizar",
+    loading: "Cargando mapa de precios...",
+    globalAvg: "Media Global",
+    cheapest: "Más Barato",
+    expensive: "Más Caro",
+    countries: "Países",
+    usdPerLiter: "USD/Litro",
+    weeklyChange: "Var. semanal",
+    region: "Región",
+    lastUpdated: "Actualizado",
+    source: "Fuentes",
+    topExpensive: "Los Más Caros",
+    topCheapest: "Los Más Baratos",
+    noData: "Sin datos",
+    cheap: "Barato",
+    mid: "Medio",
+    pricey: "Caro",
+  },
 } as const;
 
 // Recursively widen string literals to string so other locales don't need to match exact values
