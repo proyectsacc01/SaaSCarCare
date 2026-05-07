@@ -540,11 +540,50 @@ export default function MapTrackingGlobal({
     };
 
     return (
-        <div style={{ display: "flex", height: "100%", gap: 12 }}>
+        <div className="tracking-global-shell">
             {/* Interpolación CSS: cuando el truck cambia de posición, el wrapper
                 de Leaflet anima la transición del transform — en vez de saltar.
                 Resultado: movimiento fluido aunque el GPS llegue cada N segundos. */}
             <style>{`
+                .tracking-global-shell {
+                    display: flex;
+                    height: 100%;
+                    gap: 12px;
+                    min-height: 0;
+                }
+                .tracking-global-sidebar {
+                    width: 230px;
+                    flex-shrink: 0;
+                    display: flex;
+                    flex-direction: column;
+                    background: rgba(6,6,12,0.97);
+                    border-radius: 14px;
+                    border: 1px solid rgba(255,255,255,0.07);
+                    overflow: hidden;
+                    min-height: 0;
+                }
+                .tracking-global-sidebar-header {
+                    padding: 12px 14px;
+                    border-bottom: 1px solid rgba(255,255,255,0.06);
+                }
+                .tracking-global-sidebar-list {
+                    flex: 1;
+                    overflow-y: auto;
+                    padding: 6px;
+                    min-height: 0;
+                }
+                .tracking-global-route-card,
+                .tracking-global-idle-card {
+                    scroll-snap-align: start;
+                }
+                .tracking-global-map {
+                    flex: 1;
+                    border-radius: 14px;
+                    overflow: hidden;
+                    border: 1px solid rgba(255,255,255,0.07);
+                    min-width: 0;
+                    min-height: 0;
+                }
                 .leaflet-marker-icon, .leaflet-marker-shadow {
                     transition: transform 1.4s cubic-bezier(0.25, 0.1, 0.25, 1);
                     will-change: transform;
@@ -553,26 +592,65 @@ export default function MapTrackingGlobal({
                 .leaflet-zoom-anim .leaflet-marker-shadow {
                     transition: none;
                 }
+                @media (max-width: 980px) {
+                    .tracking-global-shell {
+                        flex-direction: column;
+                        gap: 10px;
+                    }
+                    .tracking-global-map {
+                        order: -1;
+                        min-height: clamp(360px, 56vh, 540px);
+                    }
+                    .tracking-global-sidebar {
+                        width: 100%;
+                    }
+                    .tracking-global-sidebar-header {
+                        padding: 10px 12px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: flex-end;
+                        gap: 12px;
+                    }
+                    .tracking-global-sidebar-list {
+                        display: flex;
+                        gap: 8px;
+                        overflow-x: auto;
+                        overflow-y: hidden;
+                        padding: 8px;
+                        flex: 0 0 auto;
+                        scroll-snap-type: x proximity;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    .tracking-global-route-card,
+                    .tracking-global-idle-card {
+                        flex: 0 0 min(280px, 78vw);
+                        margin-bottom: 0 !important;
+                    }
+                    .tracking-global-idle-title {
+                        display: flex;
+                        align-items: center;
+                        min-width: max-content;
+                        padding: 0 4px !important;
+                        border-top: none !important;
+                        margin-top: 0 !important;
+                    }
+                }
+                @media (max-width: 640px) {
+                    .tracking-global-map {
+                        min-height: clamp(400px, 62vh, 620px);
+                    }
+                    .tracking-global-sidebar-header {
+                        align-items: center;
+                    }
+                    .tracking-global-route-card,
+                    .tracking-global-idle-card {
+                        flex-basis: min(320px, 84vw);
+                    }
+                }
             `}</style>
             {/* ── Sidebar ────────────────────────────────────── */}
-            <div
-                style={{
-                    width: 230,
-                    flexShrink: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    background: "rgba(6,6,12,0.97)",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    overflow: "hidden",
-                }}
-            >
-                <div
-                    style={{
-                        padding: "12px 14px",
-                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                    }}
-                >
+            <div className="tracking-global-sidebar">
+                <div className="tracking-global-sidebar-header">
                     <div
                         style={{
                             fontSize: "0.58rem",
@@ -618,7 +696,7 @@ export default function MapTrackingGlobal({
                     </div>
                 </div>
 
-                <div style={{ flex: 1, overflowY: "auto", padding: 6 }}>
+                <div className="tracking-global-sidebar-list">
                     {active.length === 0 && (
                         <div
                             style={{
@@ -643,6 +721,7 @@ export default function MapTrackingGlobal({
                         return (
                             <div
                                 key={r.id}
+                                className="tracking-global-route-card"
                                 onClick={() => handleSelect(r)}
                                 style={{
                                     padding: "10px 10px 8px",
@@ -755,6 +834,7 @@ export default function MapTrackingGlobal({
 
                     {idleDrivers.length > 0 && (
                         <div
+                            className="tracking-global-idle-title"
                             style={{
                                 fontSize: "0.55rem",
                                 color: "#4b5563",
@@ -776,6 +856,7 @@ export default function MapTrackingGlobal({
                         return (
                             <div
                                 key={`idle-${c.id}`}
+                                className="tracking-global-idle-card"
                                 onClick={() => {
                                     if (c.latitudActual && c.longitudActual) {
                                         setFlyPos([c.latitudActual, c.longitudActual]);
@@ -837,15 +918,7 @@ export default function MapTrackingGlobal({
             </div>
 
             {/* ── Map ────────────────────────────────────────── */}
-            <div
-                style={{
-                    flex: 1,
-                    borderRadius: 14,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    minWidth: 0,
-                }}
-            >
+            <div className="tracking-global-map">
                 <MapContainer
                     center={center}
                     zoom={allPos.length > 0 ? 10 : 6}

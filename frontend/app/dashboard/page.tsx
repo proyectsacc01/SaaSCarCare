@@ -1940,14 +1940,14 @@ export default function Dashboard() {
           {activeTab === 'tracking' && (
             <div className={styles.rutasContainer} style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
               {/* Mapa Tracking Global */}
-              <div className={styles.card} style={{ height: '600px', padding: 0, overflow: 'hidden', position: 'relative', border: '1px solid rgba(59, 246, 59, 0.3)', boxShadow: '0 0 50px rgba(59, 246, 59, 0.1)' }}>
+              <div className={`${styles.card} ${styles.trackingMapCard}`}>
                 <MapTrackingGlobal
                   rutasActivas={rutasTrackingActivas}
                   conductoresUbicaciones={conductoresUbicaciones}
                   onRutaClick={(rutaId) => router.push(`/ruta/${rutaId}`)}
                 />
 
-                <div style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(0,0,0,0.8)', padding: '1rem', borderRadius: '12px', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', zIndex: 1000 }}>
+                <div className={styles.trackingLiveBadge}>
                   <h3 style={{ fontSize: '0.9rem', color: '#fff', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e' }}></span>
                     {t.dashboard.live}
