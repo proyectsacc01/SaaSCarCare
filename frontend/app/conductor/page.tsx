@@ -239,6 +239,73 @@ export default function ConductorDashboard() {
         return headers;
     };
 
+    const postRouteGpsPoint = async (rutaId: string, point: { lat: number; lng: number; accuracy?: number; speedKmh?: number | null }) => {
+        await fetch(`${API_URL}/api/rutas/${rutaId}/gps`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                latitud: point.lat,
+                longitud: point.lng,
+                precision: point.accuracy,
+                velocidadKmh: point.speedKmh != null && point.speedKmh >= 0 ? point.speedKmh : undefined,
+            })
+        });
+    };
+
+    const flushFinalGpsSample = async (rutaId: string) => {
+        if (!rutaId) return;
+
+        // 1) Mandar la última muestra visible en UI si la tenemos.
+        // Esto evita perder el último tramo cuando el usuario toca
+        // "Completar" justo antes del siguiente tick automático.
+        if (liveGps) {
+            try {
+                await postRouteGpsPoint(rutaId, {
+                    lat: liveGps.lat,
+                    lng: liveGps.lng,
+                    accuracy: liveGps.accuracy,
+                    speedKmh: liveGps.speed,
+                });
+            } catch {
+                // best-effort
+            }
+        }
+
+        // 2) Intentar una lectura fresca de alta precisión antes de cerrar la ruta.
+        // Si falla, NO bloqueamos el cierre.
+        if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+        await new Promise<void>((resolve) => {
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                resolve();
+            };
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    try {
+                        await postRouteGpsPoint(rutaId, {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                            speedKmh: position.coords.speed != null && position.coords.speed >= 0 ? position.coords.speed * 3.6 : undefined,
+                        });
+                    } catch {
+                        // best-effort
+                    } finally {
+                        finish();
+                    }
+                },
+                () => finish(),
+                { enableHighAccuracy: true, timeout: 6000, maximumAge: 1500 }
+            );
+
+            globalThis.setTimeout(finish, 6500);
+        });
+    };
+
     const postConductorCritical = async <TBody extends Record<string, unknown>>(path: '/me/support' | '/me/sos', body: TBody) => {
         const candidates = [
             `/proxy/conductores${path}`,
@@ -916,11 +983,19 @@ export default function ConductorDashboard() {
 
     const completarRuta = async (ruta: Ruta) => {
         try {
-            await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
+            await flushFinalGpsSample(ruta.id);
+
+            const res = await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
                 method: 'PUT', headers: getAuthHeaders(),
                 body: JSON.stringify({ estado: 'COMPLETADA' })
             });
-            cargarRutas();
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            stopRouteTracking();
+            await cargarRutas();
             toast.success("Trayecto completado");
         } catch { toast.error("Error al completar ruta"); }
     };

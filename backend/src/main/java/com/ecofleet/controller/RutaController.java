@@ -313,47 +313,43 @@ public class RutaController {
 
                     // ═══ ACUMULAR DISTANCIA RECORRIDA REAL ═══
                     // Sumamos la distancia entre cada par de GPS para tener el km
-                    // verdadero al completar. Estrategia anti-jitter SIN cap fijo
-                    // de distancia (el cap viejo de 1km filtraba movimiento real
-                    // a velocidad de carretera con GPS poco frecuente).
+                    // verdadero al completar.
                     //
-                    // Filtramos así:
-                    //  1. Distancia menor que la precisión del GPS → ruido posicional
-                    //  2. Velocidad implícita > 250 km/h → salto GPS imposible
-                    //     (puede pasar por error de fix o cambio de torre celular)
+                    // OJO: no podemos exigir que el tramo sea mayor que toda la
+                    // precisión reportada (ej. 50m, 80m) porque la app emite GPS
+                    // cada 3–4s. A velocidad urbana o media, un vehículo puede
+                    // avanzar 25m, 40m o 60m entre muestras: eso es MOVIMIENTO
+                    // real, no ruido. Si el umbral depende demasiado de la
+                    // precisión, terminamos descartando kilómetros válidos y el
+                    // historial queda en 0.
                     //
-                    // Esto cuenta CORRECTAMENTE recorridos a 100, 120 km/h aunque
-                    // el GPS llegue cada 60s o más.
+                    // La estrategia correcta combina:
+                    //  1. un umbral corto de jitter (3m–12m, acotado)
+                    //  2. velocidad plausible (<250 km/h)
+                    //  3. confirmación por velocidad reportada o implícita
                     if (distanciaRecorrida > 0 && timestampAnterior != null) {
                         double precisionM = gps.getPrecision() != null && gps.getPrecision() > 0
                                 ? gps.getPrecision()
                                 : 15.0;
-                        double umbralKm = Math.max(0.005, (precisionM * 1.5) / 1000.0);
 
-                        if (distanciaRecorrida >= umbralKm) {
-                            try {
-                                Instant a = Instant.parse(timestampAnterior);
-                                Instant b = Instant.parse(timestampActual);
-                                double seg = (b.toEpochMilli() - a.toEpochMilli()) / 1000.0;
-                                if (seg > 0) {
-                                    double velocidadImplicita = (distanciaRecorrida / seg) * 3600.0;
-                                    if (velocidadImplicita <= 250.0) {
-                                        double acumulada = ruta.getDistanciaRecorridaKm() != null
-                                                ? ruta.getDistanciaRecorridaKm()
-                                                : 0.0;
-                                        ruta.setDistanciaRecorridaKm(acumulada + distanciaRecorrida);
-                                    } else {
-                                        System.out.printf("[RutaController] ⚠ Salto GPS descartado: %.2f km en %.1fs (%.0f km/h implícita)%n",
-                                                distanciaRecorrida, seg, velocidadImplicita);
-                                    }
+                        try {
+                            Instant a = Instant.parse(timestampAnterior);
+                            Instant b = Instant.parse(timestampActual);
+                            double seg = (b.toEpochMilli() - a.toEpochMilli()) / 1000.0;
+                            if (seg > 0) {
+                                double velocidadImplicita = (distanciaRecorrida / seg) * 3600.0;
+                                if (!esVelocidadGpsPosible(velocidadImplicita)) {
+                                    System.out.printf("[RutaController] ⚠ Salto GPS descartado: %.2f km en %.1fs (%.0f km/h implícita)%n",
+                                            distanciaRecorrida, seg, velocidadImplicita);
+                                } else if (debeAcumularSegmento(distanciaRecorrida, precisionM, gps.getVelocidadKmh(), velocidadImplicita)) {
+                                    acumularDistanciaRecorrida(ruta, distanciaRecorrida);
                                 }
-                            } catch (Exception ignored) {
-                                // Si los timestamps no parsean, sumamos defensivamente
-                                // para no perder distancia real (asumimos válida).
-                                double acumulada = ruta.getDistanciaRecorridaKm() != null
-                                        ? ruta.getDistanciaRecorridaKm()
-                                        : 0.0;
-                                ruta.setDistanciaRecorridaKm(acumulada + distanciaRecorrida);
+                            }
+                        } catch (Exception ignored) {
+                            // Si los timestamps no parsean, seguimos filtrando jitter,
+                            // pero sin perder un tramo real por un parseo fallido.
+                            if (debeAcumularSegmento(distanciaRecorrida, precisionM, gps.getVelocidadKmh(), null)) {
+                                acumularDistanciaRecorrida(ruta, distanciaRecorrida);
                             }
                         }
                     }
@@ -578,6 +574,47 @@ public class RutaController {
         ruta.setDistanciaRestanteKm(null);
         ruta.setDesviado(false);
         ruta.setInicioDetencion(null);
+    }
+
+    private void acumularDistanciaRecorrida(Ruta ruta, double distanciaKm) {
+        double acumulada = ruta.getDistanciaRecorridaKm() != null
+                ? ruta.getDistanciaRecorridaKm()
+                : 0.0;
+        ruta.setDistanciaRecorridaKm(acumulada + distanciaKm);
+    }
+
+    static double calcularUmbralAcumulacionMetros(Double precisionM) {
+        double precisionNormalizada = precisionM != null && precisionM > 0 ? precisionM : 15.0;
+        // Nunca menor a 3m para no sumar jitter mínimo, y nunca mayor a 12m
+        // para no comernos tramos reales cuando las muestras llegan cada pocos segundos.
+        return Math.max(3.0, Math.min(precisionNormalizada * 0.35, 12.0));
+    }
+
+    static boolean esVelocidadGpsPosible(Double velocidadKmh) {
+        return velocidadKmh != null
+                && Double.isFinite(velocidadKmh)
+                && velocidadKmh >= 0
+                && velocidadKmh <= 250.0;
+    }
+
+    static boolean debeAcumularSegmento(double distanciaRecorridaKm,
+                                        Double precisionM,
+                                        Double velocidadReportadaKmh,
+                                        Double velocidadImplicitaKmh) {
+        if (!Double.isFinite(distanciaRecorridaKm) || distanciaRecorridaKm <= 0) {
+            return false;
+        }
+
+        double distanciaMetros = distanciaRecorridaKm * 1000.0;
+        double umbralMetros = calcularUmbralAcumulacionMetros(precisionM);
+        double velocidadReportada = esVelocidadGpsPosible(velocidadReportadaKmh) ? velocidadReportadaKmh : 0.0;
+        double velocidadImplicita = esVelocidadGpsPosible(velocidadImplicitaKmh) ? velocidadImplicitaKmh : 0.0;
+
+        boolean segmentoSuficiente = distanciaMetros >= umbralMetros;
+        boolean movimientoConfirmado = velocidadReportada >= 4.0 || velocidadImplicita >= 4.0;
+        boolean microTramoValido = movimientoConfirmado && distanciaMetros >= Math.max(3.0, umbralMetros * 0.5);
+
+        return segmentoSuficiente || microTramoValido;
     }
 
     private Double calcularDistanciaRutaRealKm(double latOrigen, double lonOrigen, double latDestino, double lonDestino) {
