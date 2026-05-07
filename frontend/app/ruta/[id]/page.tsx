@@ -412,6 +412,13 @@ export default function RutaTracking() {
                     gap: 2rem;
                     margin-top: 2rem;
                 }
+                .ruta-map-column,
+                .ruta-sidebar-column {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1.5rem;
+                    min-width: 0;
+                }
                 .ruta-map-box {
                     height: 600px;
                     padding: 0;
@@ -420,10 +427,56 @@ export default function RutaTracking() {
                     border: 1px solid rgba(255,255,255,0.1);
                     box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
                 }
+                .ruta-meta-line,
+                .ruta-progress-meta,
+                .ruta-progress-submeta {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.35rem 0.8rem;
+                    min-width: 0;
+                }
+                .ruta-gps-banner {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 0.8rem;
+                }
+                .ruta-progress-head {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 0.75rem;
+                    align-items: center;
+                    margin-bottom: 1rem;
+                    flex-wrap: wrap;
+                }
+                .ruta-telemetry-grid {
+                    display: grid;
+                    gap: 1rem;
+                }
+                .ruta-eta-card {
+                    grid-column: 1 / -1;
+                }
+                .ruta-admin-actions {
+                    margin-top: 2rem;
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 0.8rem;
+                }
+                .ruta-chat-shell {
+                    min-height: 420px;
+                    height: min(680px, 72dvh);
+                    display: flex;
+                    min-width: 0;
+                }
 
                 @media (max-width: 1100px) {
                     .ruta-main-grid { grid-template-columns: 1fr; gap: 1.25rem; }
-                    .ruta-map-box { height: 420px; }
+                    .ruta-map-box { height: clamp(440px, 58dvh, 620px); }
+                    .ruta-telemetry-grid {
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                    }
+                    .ruta-chat-shell {
+                        height: min(620px, 68dvh);
+                    }
                 }
 
                 /* ── MÓVIL ── */
@@ -448,14 +501,51 @@ export default function RutaTracking() {
                         font-size: 1.25rem;
                         line-height: 1.3;
                     }
+                    .ruta-meta-line,
+                    .ruta-progress-meta,
+                    .ruta-progress-submeta,
+                    .ruta-progress-head {
+                        gap: 0.45rem 0.65rem;
+                    }
                     .ruta-vehicle-label { display: none; }
                     .ruta-vehicle-pill { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+                    .ruta-vehicle-mobile span {
+                        max-width: calc(100vw - 120px);
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    }
                     /* Ocultar el bloque vehicle de la derecha en desktop-style */
                     .ruta-vehicle-desktop { display: none; }
                     .ruta-vehicle-mobile { display: flex !important; }
                     .ruta-back-btn { width: 36px !important; height: 36px !important; font-size: 1rem; }
                     .ruta-main-grid { grid-template-columns: 1fr; gap: 1rem; }
-                    .ruta-map-box { height: 280px !important; border-radius: 16px !important; }
+                    .ruta-map-box {
+                        height: min(52dvh, 460px) !important;
+                        min-height: 340px;
+                        border-radius: 16px !important;
+                    }
+                    .ruta-telemetry-grid,
+                    .ruta-admin-actions {
+                        grid-template-columns: 1fr;
+                    }
+                    .ruta-chat-shell {
+                        min-height: 360px;
+                        height: min(560px, 62dvh);
+                    }
+                }
+                @media (max-width: 560px) {
+                    .ruta-map-column,
+                    .ruta-sidebar-column {
+                        gap: 1rem;
+                    }
+                    .ruta-map-box {
+                        height: min(56dvh, 500px) !important;
+                        min-height: 360px;
+                    }
+                    .ruta-gps-banner {
+                        align-items: center;
+                    }
                 }
                 @media (min-width: 769px) {
                     .ruta-header-topbar { display: contents; }
@@ -523,10 +613,12 @@ export default function RutaTracking() {
                                     </span>
                                 )}
 
-                                <span style={{ color: '#4b5563', fontSize: '0.75rem' }}>{ruta.fecha?.slice(0, 10)}</span>
-                                <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
-                                    {ruta.conductorNombre ? `Conductor: ${ruta.conductorNombre}` : 'Conductor sin asignar'}
-                                </span>
+                                <div className="ruta-meta-line" style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+                                    <span style={{ color: '#4b5563' }}>{ruta.fecha?.slice(0, 10)}</span>
+                                    <span>
+                                        {ruta.conductorNombre ? `Conductor: ${ruta.conductorNombre}` : 'Conductor sin asignar'}
+                                    </span>
+                                </div>
                             </div>
 
                             <h1 className="ruta-title-h1">
@@ -553,7 +645,7 @@ export default function RutaTracking() {
 
                     <div className="ruta-main-grid">
                         {/* Map Section */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div className="ruta-map-column">
                             <div className={`${styles.card} ruta-map-box`}>
                                 <MapTracking
                                     origin={ruta.latitudOrigen != null && ruta.longitudOrigen != null ? [ruta.latitudOrigen, ruta.longitudOrigen] : null}
@@ -601,14 +693,11 @@ export default function RutaTracking() {
 
                             {/* Indicador GPS */}
                             {ruta?.latitudActual && ruta?.longitudActual && (
-                                <div style={{
+                                <div className="ruta-gps-banner" style={{
                                     padding: '1rem 1.2rem',
                                     background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.1))',
                                     border: '1px solid rgba(34, 197, 94, 0.3)',
                                     borderRadius: '12px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.8rem',
                                     fontSize: '0.9rem',
                                     color: '#22c55e',
                                     marginBottom: '1rem'
@@ -638,7 +727,7 @@ export default function RutaTracking() {
                                     : ruta.distanciaEstimadaKm;
                                 return (
                                     <div className={styles.card} style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                        <div className="ruta-progress-head">
                                             <span style={{ fontSize: '0.8rem', color: '#6b7280', fontWeight: '600' }}>PROGRESS TRACKER</span>
                                             <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: '700' }}>
                                                 {ruta.estado === 'DETENIDO' ? `${progreso.toFixed(0)}% — ${formatRouteStateLabel(ruta.estado)}`
@@ -657,12 +746,12 @@ export default function RutaTracking() {
                                                 transition: 'width 1s ease-out'
                                             }}></div>
                                         </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.8rem', fontSize: '0.75rem', color: '#4b5563' }}>
+                                        <div className="ruta-progress-meta" style={{ marginTop: '0.8rem', fontSize: '0.75rem', color: '#4b5563' }}>
                                             <span>SALIDA: {ruta.origen}</span>
                                             <span>ETA: {eta}</span>
                                         </div>
                                         {kmTotalesReales != null && kmTotalesReales > 0 && (
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.7rem', color: '#374151' }}>
+                                            <div className="ruta-progress-submeta" style={{ marginTop: '0.4rem', fontSize: '0.7rem', color: '#374151' }}>
                                                 <span>
                                                     {/* Preferimos los KM RECORRIDOS reales (acumulados desde GPS).
                                                         Caemos al cálculo estimado-restante solo si todavía no llegó GPS. */}
@@ -679,7 +768,7 @@ export default function RutaTracking() {
                         </div>
 
                         {/* Sidebar Stats */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div className="ruta-sidebar-column">
                             <div className={styles.card} style={{ background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.95))' }}>
                                 <h3 className={styles.cardTitle} style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
@@ -723,7 +812,7 @@ export default function RutaTracking() {
                                     const distRestante = ruta.distanciaRestanteKm;
                                     
                                     return (
-                                        <div style={{ display: 'grid', gap: '1rem' }}>
+                                        <div className="ruta-telemetry-grid">
                                             <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(96, 165, 250, 0.18)' }}>
                                                 <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Conductor Asignado</span>
                                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
@@ -816,7 +905,7 @@ export default function RutaTracking() {
 
                                             {/* ETA Card */}
                                             {(ruta.estado === 'EN_CURSO' || ruta.estado === 'DETENIDO') && ruta.distanciaRestanteKm !== undefined && (
-                                                <div style={{ padding: '1rem', background: 'linear-gradient(135deg, rgba(59, 246, 59, 0.05), rgba(34, 197, 94, 0.08))', borderRadius: '12px', border: '1px solid rgba(59, 246, 59, 0.15)' }}>
+                                                <div className="ruta-eta-card" style={{ padding: '1rem', background: 'linear-gradient(135deg, rgba(59, 246, 59, 0.05), rgba(34, 197, 94, 0.08))', borderRadius: '12px', border: '1px solid rgba(59, 246, 59, 0.15)' }}>
                                                     <span style={{ display: 'block', fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem' }}>Tiempo Estimado Llegada</span>
                                                     <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#3bf63b' }}>
                                                         {calcularETA(ruta.distanciaRestanteKm, ruta.velocidadActualKmh)}
@@ -832,7 +921,7 @@ export default function RutaTracking() {
                                     );
                                 })()}
 
-                                <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                <div className="ruta-admin-actions">
                                     <button
                                         className={styles.submitButton}
                                         style={{
@@ -891,7 +980,9 @@ export default function RutaTracking() {
                                 </p>
                             </div>
 
-                            <ChatRuta rutaId={id as string} rol="ADMIN" />
+                            <div className="ruta-chat-shell">
+                                <ChatRuta rutaId={id as string} rol="ADMIN" fillParent />
+                            </div>
                         </div>
                     </div>
                 </div>
