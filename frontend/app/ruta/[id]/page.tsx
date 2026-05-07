@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
@@ -37,14 +37,6 @@ interface Ruta {
     ultimaActualizacionGPS?: string;
     inicioDetencion?: string;
     signalSource?: 'route' | 'presence';
-}
-
-interface Conductor {
-    id: string;
-    nombre: string;
-    email: string;
-    disponible?: boolean;
-    rutaActivaId?: string | null;
 }
 
 interface ConductorUbicacion {
@@ -148,10 +140,7 @@ export default function RutaTracking() {
     const [error, setError] = useState<string | null>(null); // null = sin error, string = mensaje de error
     const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
     const [, setIsCalculatingRoute] = useState(false);
-    const [conductores, setConductores] = useState<Conductor[]>([]);
     const [conductoresUbicaciones, setConductoresUbicaciones] = useState<ConductorUbicacion[]>([]);
-    const [selectedConductorId, setSelectedConductorId] = useState('');
-    const [guardandoConductor, setGuardandoConductor] = useState(false);
 
     // useRef para mantener referencias correctamente entre renders
     const isMountedRef = useRef(true);
@@ -209,22 +198,6 @@ export default function RutaTracking() {
             signalSource: 'presence',
         };
     }, [conductoresUbicaciones]);
-
-    const cargarConductores = useCallback(async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/conductores`, { headers: getAuthHeaders() });
-            if (res.ok) {
-                const data: Conductor[] = await res.json();
-                setConductores(data);
-                return;
-            }
-            if (res.status === 403) {
-                setConductores([]);
-            }
-        } catch {
-            // silencioso: un conductor no debería romper la vista por no poder editar
-        }
-    }, [getAuthHeaders]);
 
     const cargarUbicacionesConductores = useCallback(async () => {
         try {
@@ -383,7 +356,6 @@ export default function RutaTracking() {
     }, [id, calcularRutaDinamica, getAuthHeaders, mezclarRutaConGpsConductor]);
 
     useEffect(() => {
-        void cargarConductores();
         void cargarUbicacionesConductores();
 
         const intervalId = window.setInterval(() => {
@@ -391,57 +363,10 @@ export default function RutaTracking() {
         }, 5000);
 
         return () => window.clearInterval(intervalId);
-    }, [cargarConductores, cargarUbicacionesConductores]);
+    }, [cargarUbicacionesConductores]);
 
-    useEffect(() => {
-        setSelectedConductorId(ruta?.conductorId || '');
-    }, [ruta?.conductorId]);
 
-    const conductorSeleccionado = useMemo(
-        () => conductores.find((conductor) => conductor.id === selectedConductorId) ?? null,
-        [conductores, selectedConductorId]
-    );
 
-    const conductoresAsignables = useMemo(
-        () => conductores.filter((conductor) => conductor.disponible !== false || conductor.id === ruta?.conductorId),
-        [conductores, ruta?.conductorId]
-    );
-
-    const gpsConductorSeleccionado = useMemo(
-        () => conductoresUbicaciones.find((conductor) => conductor.id === selectedConductorId) ?? null,
-        [conductoresUbicaciones, selectedConductorId]
-    );
-
-    const guardarAsignacionConductor = useCallback(async () => {
-        if (!ruta || guardandoConductor) return;
-
-        setGuardandoConductor(true);
-        try {
-            const res = await fetch(`${API_URL}/api/rutas/${ruta.id}`, {
-                method: 'PUT',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({
-                    conductorId: selectedConductorId,
-                    conductorNombre: conductorSeleccionado?.nombre || '',
-                })
-            });
-
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status}`);
-            }
-
-            await cargarUbicacionesConductores();
-            await cargarDatos();
-            toast.success(selectedConductorId
-                ? 'Conductor reasignado correctamente'
-                : 'Ruta sin conductor asignado');
-        } catch (err) {
-            console.error('[RutaTracking] Error reasignando conductor:', err);
-            toast.error('No se pudo actualizar el conductor de la ruta');
-        } finally {
-            setGuardandoConductor(false);
-        }
-    }, [ruta, guardandoConductor, getAuthHeaders, selectedConductorId, conductorSeleccionado?.nombre, cargarUbicacionesConductores, cargarDatos]);
 
     useEffect(() => {
         isMountedRef.current = true;
@@ -954,84 +879,6 @@ export default function RutaTracking() {
 
                         {/* Sidebar Stats */}
                         <div className="ruta-sidebar-column">
-                            {conductores.length > 0 && (
-                                <div className={styles.card} style={{ background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.95))', marginBottom: '1rem' }}>
-                                    <h3 className={styles.cardTitle} style={{ fontSize: '1rem', marginBottom: '1rem' }}>
-                                        Reasignar conductor
-                                    </h3>
-
-                                    <div style={{ display: 'grid', gap: '0.8rem' }}>
-                                        <div>
-                                            <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: '700', letterSpacing: '0.04em' }}>
-                                                Conductor disponible
-                                            </label>
-                                            <select
-                                                value={selectedConductorId}
-                                                onChange={(e) => setSelectedConductorId(e.target.value)}
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.85rem 0.95rem',
-                                                    borderRadius: '12px',
-                                                    border: '1px solid rgba(255,255,255,0.08)',
-                                                    background: 'rgba(0,0,0,0.28)',
-                                                    color: '#e2e8f0',
-                                                    fontSize: '0.92rem',
-                                                    outline: 'none'
-                                                }}
-                                            >
-                                                <option value="">Sin asignar</option>
-                                                {conductoresAsignables.map((conductor) => (
-                                                    <option key={conductor.id} value={conductor.id}>
-                                                        {conductor.nombre} · {conductor.email}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div style={{ padding: '0.85rem 0.95rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                            {selectedConductorId ? (
-                                                gpsConductorSeleccionado?.latitudActual != null && gpsConductorSeleccionado.longitudActual != null ? (
-                                                    <>
-                                                        <div style={{ fontSize: '0.78rem', color: '#22c55e', fontWeight: '800', marginBottom: '0.2rem' }}>
-                                                            Señal GPS detectada para el conductor seleccionado
-                                                        </div>
-                                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.45 }}>
-                                                            Al guardar, la ruta intentará usar esta señal del conductor mientras llega telemetría directa de su trayecto.
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <div style={{ fontSize: '0.78rem', color: '#f59e0b', fontWeight: '800', marginBottom: '0.2rem' }}>
-                                                            Sin señal GPS reciente
-                                                        </div>
-                                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.45 }}>
-                                                            Podés reasignar igual, pero el mapa esperará a que el conductor nuevo comparta ubicación.
-                                                        </div>
-                                                    </>
-                                                )
-                                            ) : (
-                                                <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.45 }}>
-                                                    La ruta quedará sin conductor asignado hasta que selecciones uno nuevo.
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <button
-                                            className={styles.submitButton}
-                                            type="button"
-                                            disabled={guardandoConductor || selectedConductorId === (ruta.conductorId || '')}
-                                            onClick={guardarAsignacionConductor}
-                                            style={{
-                                                opacity: guardandoConductor || selectedConductorId === (ruta.conductorId || '') ? 0.6 : 1,
-                                                cursor: guardandoConductor || selectedConductorId === (ruta.conductorId || '') ? 'not-allowed' : 'pointer'
-                                            }}
-                                        >
-                                            {guardandoConductor ? 'Guardando conductor…' : 'Guardar asignación'}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
                             <div className={styles.card} style={{ background: 'linear-gradient(145deg, rgba(30,30,40,0.95), rgba(20,20,25,0.95))' }}>
                                 <h3 className={styles.cardTitle} style={{ fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>

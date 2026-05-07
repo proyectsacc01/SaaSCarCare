@@ -80,6 +80,8 @@ interface Conductor {
   id: string;
   nombre: string;
   email: string;
+  disponible?: boolean;
+  rutaActivaId?: string | null;
 }
 
 interface ConductorUbicacion {
@@ -89,6 +91,7 @@ interface ConductorUbicacion {
   latitudActual?: number;
   longitudActual?: number;
   ultimaActualizacionGPS?: string;
+  compartiendoUbicacion?: boolean;
 }
 
 interface MantenimientoItem {
@@ -273,6 +276,9 @@ export default function Dashboard() {
   const [mantenimientos, setMantenimientos] = useState<MantenimientoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
+  const [editConductorRutaId, setEditConductorRutaId] = useState<string | null>(null);
+  const [editConductorValue, setEditConductorValue] = useState('');
+  const [guardandoConductor, setGuardandoConductor] = useState(false);
 
   // Helper to get auth headers
   const getAuthHeaders = useCallback((): Record<string, string> => {
@@ -910,6 +916,36 @@ export default function Dashboard() {
     }
   };
 
+  const handleReasignarConductor = async (rutaId: string, conductorId: string) => {
+    setGuardandoConductor(true);
+    try {
+      const conductor = conductores.find(c => c.id === conductorId);
+      const res = await fetch(`${API_URL}/api/rutas/${rutaId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          conductorId,
+          conductorNombre: conductor?.nombre || '',
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      setRutas(prev => prev.map(r =>
+        r.id === rutaId
+          ? { ...r, conductorId: conductorId || undefined, conductorNombre: conductor?.nombre }
+          : r
+      ));
+      setEditConductorRutaId(null);
+      toast.success('Conductor actualizado correctamente');
+    } catch (err) {
+      console.error('[Dashboard] Error reasignando conductor:', err);
+      toast.error('No se pudo actualizar el conductor de la ruta');
+    } finally {
+      setGuardandoConductor(false);
+    }
+  };
+
   const handleEliminarRuta = async (ruta: Ruta) => {
     const rutasPrevias = [...rutas];
     setRutas(prev => prev.filter(r => r.id !== ruta.id));
@@ -1360,7 +1396,88 @@ export default function Dashboard() {
 
                         <div className={styles.statRow}>
                           <span className={styles.statLabel}>{t.dashboard.driverLbl}</span>
-                          <span className={styles.statValue}>{r.conductorNombre || "Sin asignar"}</span>
+                          {editConductorRutaId === r.id ? (
+                            <div
+                              style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <select
+                                value={editConductorValue}
+                                onChange={e => setEditConductorValue(e.target.value)}
+                                style={{
+                                  padding: '0.3rem 0.5rem',
+                                  borderRadius: '8px',
+                                  border: '1px solid rgba(255,255,255,0.15)',
+                                  background: 'rgba(0,0,0,0.4)',
+                                  color: '#e2e8f0',
+                                  fontSize: '0.78rem',
+                                  outline: 'none',
+                                  maxWidth: '140px'
+                                }}
+                              >
+                                <option value="">Sin asignar</option>
+                                {conductores.map(c => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleReasignarConductor(r.id!, editConductorValue)}
+                                disabled={guardandoConductor}
+                                style={{
+                                  padding: '0.3rem 0.6rem',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: guardandoConductor ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.5)',
+                                  color: '#fff',
+                                  fontSize: '0.72rem',
+                                  fontWeight: '700',
+                                  cursor: guardandoConductor ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                {guardandoConductor ? '...' : 'OK'}
+                              </button>
+                              <button
+                                onClick={() => setEditConductorRutaId(null)}
+                                style={{
+                                  padding: '0.3rem 0.5rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(255,255,255,0.15)',
+                                  background: 'transparent',
+                                  color: '#94a3b8',
+                                  fontSize: '0.72rem',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <span className={styles.statValue}>
+                              {r.conductorNombre || "Sin asignar"}
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setEditConductorRutaId(r.id!);
+                                  setEditConductorValue(r.conductorId || '');
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: '#94a3b8',
+                                  fontSize: '0.72rem',
+                                  marginLeft: '0.4rem',
+                                  padding: '0.15rem 0.3rem',
+                                  borderRadius: '4px',
+                                }}
+                                title="Cambiar conductor"
+                              >
+                                ✏️
+                              </button>
+                            </span>
+                          )}
                         </div>
 
                         <div className={styles.statRow}>
