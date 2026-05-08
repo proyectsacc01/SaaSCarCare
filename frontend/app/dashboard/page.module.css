@@ -32,7 +32,9 @@
   align-items: center;
   gap: 0.75rem;
   margin-left: auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  white-space: nowrap;
   justify-content: flex-end;
 }
 
