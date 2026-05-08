@@ -346,7 +346,7 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
     <div className={styles.bellWrapper}>
       {/* Botón campanita */}
       <button
-        className={`${styles.bellBtn} ${noLeidas > 0 ? styles.hasAlertas : ""}`}
+        className={`${styles.bellBtn} ${noLeidas > 0 ? styles.hasAlertas : ""} ${open ? styles.bellBtnActive : ""}`}
         onClick={() => setOpen(v => !v)}
         title={t.components.alertsCenter}
       >

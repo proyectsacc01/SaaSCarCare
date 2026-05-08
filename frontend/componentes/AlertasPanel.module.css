@@ -20,6 +20,7 @@
   cursor: pointer;
   color: rgba(255, 255, 255, 0.7);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: visible;
 }
 
 .bellBtn:hover {
@@ -27,11 +28,27 @@
   border-color: rgba(255, 255, 255, 0.22);
   color: #fff;
   transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 .bellBtn.hasAlertas {
-  border-color: rgba(239, 68, 68, 0.4);
+  border-color: rgba(239, 68, 68, 0.5);
   color: #fff;
+  animation: bellGlow 2s ease-in-out infinite;
+}
+
+@keyframes bellGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.15); }
+  50%      { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3), 0 0 40px rgba(239, 68, 68, 0.1); }
+}
+
+/* Active state — matches ConfiguracionPanel */
+.bellBtnActive {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #fca5a5 !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2) !important;
+  animation: none !important;
 }
 
 /* Bell icon swing animation */
@@ -43,7 +60,16 @@
 }
 
 .bellIconActive {
-  transform: rotate(-15deg);
+  animation: bellSwing 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes bellSwing {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(15deg); }
+  40%  { transform: rotate(-12deg); }
+  60%  { transform: rotate(8deg); }
+  80%  { transform: rotate(-4deg); }
+  100% { transform: rotate(0deg); }
 }
 
 .badge {
@@ -53,7 +79,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
-  background: #ef4444;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #fff;
   font-size: 0.65rem;
   font-weight: 700;
@@ -66,8 +92,8 @@
 }
 
 @keyframes badgePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  50%       { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); transform: scale(1); }
+  50%       { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); transform: scale(1.05); }
 }
 
 /* ═══════════════════════════════════════════════
@@ -81,16 +107,16 @@
   backdrop-filter: blur(0);
   -webkit-backdrop-filter: blur(0);
   transition:
-    background 0.35s ease,
-    backdrop-filter 0.35s ease,
-    -webkit-backdrop-filter 0.35s ease;
+    background 0.4s ease,
+    backdrop-filter 0.4s ease,
+    -webkit-backdrop-filter 0.4s ease;
   pointer-events: none;
 }
 
 .overlayVisible {
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   pointer-events: auto;
 }
 
@@ -100,16 +126,11 @@
   right: 2rem;
   width: 400px;
   max-height: 560px;
-  background: rgba(13, 17, 23, 0.92);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  background: rgba(13, 17, 23, 0.94);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
-  box-shadow:
-    0 32px 80px rgba(0, 0, 0, 0.55),
-    0 8px 24px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   z-index: 9999;
   display: flex;
   flex-direction: column;
@@ -117,17 +138,25 @@
 
   /* Initial hidden state */
   opacity: 0;
-  transform: translateY(-12px) scale(0.96);
+  transform: translateY(-16px) scale(0.94);
   pointer-events: none;
   transition:
-    opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s ease;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
 }
 
 .panelVisible {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.6),
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 60px rgba(239, 68, 68, 0.06);
 }
 
 /* ═══════════════════════════════════════════════
@@ -140,7 +169,7 @@
   padding: 1.1rem 1.25rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.02);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
 }
 
 .panelTitle {
@@ -201,7 +230,7 @@
 .lista::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
 /* ═══════════════════════════════════════════════
-   ALERTA ITEM — staggered entry
+   ALERTA ITEM
 ═══════════════════════════════════════════════ */
 .item {
   display: flex;
@@ -210,21 +239,22 @@
   padding: 0.95rem 1.25rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
+  transition: all 0.25s ease;
   position: relative;
 }
 
 .item:last-child { border-bottom: none; }
 
 .item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .item:active {
-  transform: scale(0.995);
+  transform: scale(0.98);
 }
 
-.item.leida { opacity: 0.5; }
+.item.leida { opacity: 0.45; }
+.item.leida:hover { opacity: 0.65; }
 
 .itemBorde {
   position: absolute;
@@ -244,11 +274,11 @@
   align-items: center;
   justify-content: center;
   margin-top: 1px;
-  transition: transform 0.2s;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .item:hover .iconWrap {
-  transform: scale(1.05);
+  transform: scale(1.12) rotate(-3deg);
 }
 
 .itemBody {
@@ -289,22 +319,23 @@
   width: 24px;
   height: 24px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.25);
   cursor: pointer;
   border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   margin-top: 1px;
 }
 
 .dismissBtn:hover {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
   color: #22c55e;
-  transform: scale(1.1);
+  transform: scale(1.15);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
 }
 
 /* ═══════════════════════════════════════════════

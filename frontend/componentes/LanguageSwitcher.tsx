@@ -67,12 +67,21 @@ export default function LanguageSwitcher() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const [flashing, setFlashing] = useState(false);
+
   const locales = Object.keys(LOCALE_LABELS) as Locale[];
+
+  const handleSelect = (loc: Locale) => {
+    setLocale(loc);
+    setOpen(false);
+    setFlashing(true);
+    setTimeout(() => setFlashing(false), 600);
+  };
 
   return (
     <div ref={ref} className={styles.wrapper}>
       <button
-        className={`${styles.trigger} ${open ? styles.triggerActive : ""}`}
+        className={`${styles.trigger} ${open ? styles.triggerActive : ""} ${flashing ? styles.triggerFlash : ""}`}
         onClick={() => setOpen(!open)}
         title="Change language"
       >
@@ -96,7 +105,7 @@ export default function LanguageSwitcher() {
           <button
             key={loc}
             className={`${styles.option} ${locale === loc ? styles.optionActive : ""}`}
-            onClick={() => { setLocale(loc); setOpen(false); }}
+            onClick={() => handleSelect(loc)}
           >
             <span className={styles.optionFlag}>
               {flags[loc]}
