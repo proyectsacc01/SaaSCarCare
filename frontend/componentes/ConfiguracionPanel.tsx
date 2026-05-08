@@ -204,105 +204,114 @@ export default function ConfiguracionPanel({ apiUrl, getAuthHeaders }: Props) {
         onClick={() => setOpen(v => !v)}
         title={t.components.settings}
       >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
+        <span className={`${styles.gearIcon} ${open ? styles.gearIconActive : ""}`}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </span>
       </button>
 
-      {open && <div className={styles.overlay} onClick={() => setOpen(false)} />}
+      {/* Overlay — always in DOM, toggled via CSS */}
+      <div
+        className={`${styles.overlay} ${open ? styles.overlayVisible : ""}`}
+        onClick={() => setOpen(false)}
+      />
 
-      {open && (
-        <div className={styles.panel}>
-          <div className={styles.header}>
-            <span className={styles.title}>{t.components.notifSettings}</span>
-            <button className={styles.closeBtn} onClick={() => setOpen(false)}>x</button>
+      {/* Panel — always in DOM, toggled via CSS for smooth exit animation */}
+      <div className={`${styles.panel} ${open ? styles.panelVisible : ""}`}>
+        <div className={styles.header}>
+          <span className={styles.title}>{t.components.notifSettings}</span>
+          <button className={styles.closeBtn} onClick={() => setOpen(false)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className={`${styles.body} ${open ? styles.bodyVisible : ""}`}>
+          {/* Email de la cuenta */}
+          <div className={styles.infoRow}>
+            <span className={styles.label}>{t.components.yourAccountEmail}</span>
+            <span className={styles.value}>{emailCuenta || "..."}</span>
           </div>
 
-          <div className={styles.body}>
-            {/* Email de la cuenta */}
-            <div className={styles.infoRow}>
-              <span className={styles.label}>{t.components.yourAccountEmail}</span>
-              <span className={styles.value}>{emailCuenta || "..."}</span>
+          <div className={styles.divider} />
+
+          {/* Email destino */}
+          <div className={styles.section}>
+            <label className={styles.sectionTitle}>{t.components.receiveReportsMultiple}</label>
+            <p className={styles.sectionDesc}>{t.components.reportsDesc}</p>
+
+            <input
+              className={styles.input}
+              type="text"
+              placeholder={emailCuenta || t.components.emailPlaceholder}
+              value={emailNotif}
+              onChange={e => setEmailNotif(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && hayCambios) guardar(); }}
+            />
+
+            <div className={styles.currentEmail}>
+              <span className={styles.dot} />
+              Los reportes llegan a: <strong>{emailActivo}</strong>
             </div>
+          </div>
 
-            <div className={styles.divider} />
+          <div className={styles.divider} />
 
-            {/* Email destino */}
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>{t.components.receiveReportsMultiple}</label>
-              <p className={styles.sectionDesc}>{t.components.reportsDesc}</p>
+          <div className={styles.section}>
+            <label className={styles.sectionTitle}>Teléfono urgente para conductores</label>
+            <p className={styles.sectionDesc}>Cuando falle el canal interno, la app del conductor intentará llamar primero a este número.</p>
 
-              <input
-                className={styles.input}
-                type="text"
-                placeholder={emailCuenta || t.components.emailPlaceholder}
-                value={emailNotif}
-                onChange={e => setEmailNotif(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && hayCambios) guardar(); }}
-              />
+            <input
+              className={styles.input}
+              type="text"
+              placeholder="Ej: +34 600 123 456"
+              value={telefonoUrgencias}
+              onChange={e => setTelefonoUrgencias(e.target.value)}
+            />
 
+            {telefonoUrgencias && (
               <div className={styles.currentEmail}>
                 <span className={styles.dot} />
-                Los reportes llegan a: <strong>{emailActivo}</strong>
-              </div>
-            </div>
-
-            <div className={styles.divider} />
-
-            <div className={styles.section}>
-              <label className={styles.sectionTitle}>Teléfono urgente para conductores</label>
-              <p className={styles.sectionDesc}>Cuando falle el canal interno, la app del conductor intentará llamar primero a este número.</p>
-
-              <input
-                className={styles.input}
-                type="text"
-                placeholder="Ej: +34 600 123 456"
-                value={telefonoUrgencias}
-                onChange={e => setTelefonoUrgencias(e.target.value)}
-              />
-
-              {telefonoUrgencias && (
-                <div className={styles.currentEmail}>
-                  <span className={styles.dot} />
-                  Llamada urgente a: <strong>{telefonoUrgencias}</strong>
-                </div>
-              )}
-            </div>
-
-            {msg && (
-              <div className={`${styles.msg} ${msg.tipo === "ok" ? styles.msgOk : styles.msgError}`}>
-                {msg.texto}
+                Llamada urgente a: <strong>{telefonoUrgencias}</strong>
               </div>
             )}
+          </div>
 
-            <div className={styles.actions}>
-              {emailNotif && (
-                <button
-                  className={styles.btnSecondary}
-                  onClick={() => { setEmailNotif(""); }}
-                >
-                  Usar email de cuenta
-                </button>
-              )}
+          {msg && (
+            <div className={`${styles.msg} ${msg.tipo === "ok" ? styles.msgOk : styles.msgError}`}>
+              {msg.texto}
+            </div>
+          )}
+
+          <div className={styles.actions}>
+            {emailNotif && (
               <button
                 className={styles.btnSecondary}
-                onClick={testEmail}
-                disabled={testeando}
+                onClick={() => { setEmailNotif(""); }}
               >
-                {testeando ? t.components.sending : t.components.sendTest}
+                Usar email de cuenta
               </button>
-              <button
-                className={styles.btnPrimary}
-                onClick={guardar}
-                disabled={guardando || !hayCambios}
-              >
-                {guardando ? t.components.saving : t.components.save}
-              </button>
-            </div>
+            )}
+            <button
+              className={styles.btnSecondary}
+              onClick={testEmail}
+              disabled={testeando}
+            >
+              {testeando ? t.components.sending : t.components.sendTest}
+            </button>
+            <button
+              className={styles.btnPrimary}
+              onClick={guardar}
+              disabled={guardando || !hayCambios}
+            >
+              {guardando ? t.components.saving : t.components.save}
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
