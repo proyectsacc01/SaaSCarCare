@@ -234,6 +234,30 @@ const GasPriceWorldMap = dynamic(() => import("@/componentes/GasPriceWorldMap"),
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 
+/** Compress an image file to a max-dimension JPEG base64 string (< 100KB typically) */
+function compressImage(file: File, maxDim = 600, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        const ratio = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 const EMISSION_FACTORS_KG_CO2_PER_LITER: Record<string, number> = {
@@ -1308,18 +1332,19 @@ export default function Dashboard() {
                       type="file"
                       accept="image/*"
                       style={{ display: 'none' }}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) {
+                        if (file.size > 5 * 1024 * 1024) {
                           toast.warning(t.vehicle.photoTooLarge);
                           return;
                         }
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          setNuevoVehiculo({ ...nuevoVehiculo, imagenUrl: ev.target?.result as string });
-                        };
-                        reader.readAsDataURL(file);
+                        try {
+                          const compressed = await compressImage(file);
+                          setNuevoVehiculo({ ...nuevoVehiculo, imagenUrl: compressed });
+                        } catch {
+                          toast.error('Error al procesar la imagen');
+                        }
                       }}
                     />
                   </div>

@@ -21,6 +21,30 @@ interface Vehiculo {
   activo: boolean;
 }
 
+/** Compress an image file to a max-dimension JPEG base64 string */
+function compressImage(file: File, maxDim = 600, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        const ratio = Math.min(maxDim / w, maxDim / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 interface RutaEstado {
   id: string;
   estado: string;
@@ -1758,18 +1782,19 @@ export default function VehiculoDetalle() {
                         type="file"
                         accept="image/*"
                         style={{ display: 'none' }}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          if (file.size > 2 * 1024 * 1024) {
+                          if (file.size > 5 * 1024 * 1024) {
                             toast.warning(t.vehicle.photoTooLarge);
                             return;
                           }
-                          const reader = new FileReader();
-                          reader.onload = (ev) => {
-                            setEditData({ ...editData, imagenUrl: ev.target?.result as string });
-                          };
-                          reader.readAsDataURL(file);
+                          try {
+                            const compressed = await compressImage(file);
+                            setEditData({ ...editData, imagenUrl: compressed });
+                          } catch {
+                            toast.error('Error al procesar la imagen');
+                          }
                         }}
                       />
                     </div>
