@@ -23,6 +23,12 @@ public class VehiculoController {
         return vehiculoRepository.findByUsuarioId(usuarioId);
     }
 
+    /** Health endpoint — confirms which fields the Vehiculo model supports */
+    @GetMapping("/version")
+    public ResponseEntity<String> version() {
+        return ResponseEntity.ok("vehiculo-model-v2-imagenUrl-support");
+    }
+
     @PostMapping
     public Vehiculo crearVehiculo(@RequestBody Vehiculo vehiculo, HttpServletRequest request) {
         String usuarioId = (String) request.getAttribute("userId");
