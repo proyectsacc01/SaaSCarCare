@@ -350,17 +350,22 @@ export default function AlertasPanel({ apiUrl, getAuthHeaders, onNavigate }: Pro
         onClick={() => setOpen(v => !v)}
         title={t.components.alertsCenter}
       >
-        <IconBell hasAlertas={noLeidas > 0} />
+        <span className={`${styles.bellIcon} ${open ? styles.bellIconActive : ""}`}>
+          <IconBell hasAlertas={noLeidas > 0} />
+        </span>
         {noLeidas > 0 && (
           <span className={styles.badge}>{noLeidas > 99 ? "99+" : noLeidas}</span>
         )}
       </button>
 
-      {/* Overlay + Panel via Portal para escapar del stacking context de BackgroundMeteors */}
-      {open && createPortal(
+      {/* Overlay + Panel via Portal — always in DOM, toggled via CSS */}
+      {createPortal(
         <>
-          <div className={styles.overlay} onClick={() => setOpen(false)} />
-          <div className={styles.panel}>
+          <div
+            className={`${styles.overlay} ${open ? styles.overlayVisible : ""}`}
+            onClick={() => setOpen(false)}
+          />
+          <div className={`${styles.panel} ${open ? styles.panelVisible : ""}`}>
           {/* Header */}
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>

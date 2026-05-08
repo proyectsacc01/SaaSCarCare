@@ -19,7 +19,7 @@
   border-radius: 10px;
   cursor: pointer;
   color: rgba(255, 255, 255, 0.7);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .bellBtn:hover {
@@ -32,6 +32,18 @@
 .bellBtn.hasAlertas {
   border-color: rgba(239, 68, 68, 0.4);
   color: #fff;
+}
+
+/* Bell icon swing animation */
+.bellIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bellIconActive {
+  transform: rotate(-15deg);
 }
 
 .badge {
@@ -50,43 +62,72 @@
   align-items: center;
   justify-content: center;
   border: 2px solid #0d1117;
-  animation: pulse 2s ease-in-out infinite;
+  animation: badgePulse 2s ease-in-out infinite;
 }
 
-@keyframes pulse {
+@keyframes badgePulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
   50%       { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
 }
 
 /* ═══════════════════════════════════════════════
-   DROPDOWN PANEL
+   OVERLAY & PANEL — always in DOM, toggled via class
 ═══════════════════════════════════════════════ */
 .overlay {
   position: fixed;
   inset: 0;
   z-index: 9998;
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0);
+  -webkit-backdrop-filter: blur(0);
+  transition:
+    background 0.35s ease,
+    backdrop-filter 0.35s ease,
+    -webkit-backdrop-filter 0.35s ease;
+  pointer-events: none;
+}
+
+.overlayVisible {
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
 }
 
 .panel {
   position: fixed;
   top: 72px;
   right: 2rem;
-  width: 390px;
-  max-height: 540px;
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  width: 400px;
+  max-height: 560px;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.55),
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   z-index: 9999;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: slideDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Initial hidden state */
+  opacity: 0;
+  transform: translateY(-12px) scale(0.96);
+  pointer-events: none;
+  transition:
+    opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+.panelVisible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
 /* ═══════════════════════════════════════════════
@@ -96,9 +137,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .panelTitle {
@@ -108,6 +150,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  letter-spacing: 0.02em;
 }
 
 .panelCount {
@@ -135,7 +178,7 @@
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
-  transition: all 0.15s;
+  transition: all 0.2s;
 }
 
 .marcarTodasBtn:hover {
@@ -158,7 +201,7 @@
 .lista::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
 /* ═══════════════════════════════════════════════
-   ALERTA ITEM
+   ALERTA ITEM — staggered entry
 ═══════════════════════════════════════════════ */
 .item {
   display: flex;
@@ -167,13 +210,19 @@
   padding: 0.95rem 1.25rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.2s, transform 0.2s;
   position: relative;
 }
 
 .item:last-child { border-bottom: none; }
 
-.item:hover { background: rgba(255, 255, 255, 0.03); }
+.item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.item:active {
+  transform: scale(0.995);
+}
 
 .item.leida { opacity: 0.5; }
 
@@ -195,6 +244,11 @@
   align-items: center;
   justify-content: center;
   margin-top: 1px;
+  transition: transform 0.2s;
+}
+
+.item:hover .iconWrap {
+  transform: scale(1.05);
 }
 
 .itemBody {
@@ -232,23 +286,25 @@
 
 .dismissBtn {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  background: none;
-  border: none;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.2);
   cursor: pointer;
-  border-radius: 5px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: all 0.2s;
   margin-top: 1px;
 }
 
 .dismissBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.7);
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #22c55e;
+  transform: scale(1.1);
 }
 
 /* ═══════════════════════════════════════════════
@@ -276,4 +332,16 @@
 .emptySubtext {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.15);
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE
+═══════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .panel {
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    top: 64px;
+  }
 }

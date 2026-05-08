@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { ReactElement } from "react";
 import { useI18n, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import styles from "./LanguageSwitcher.module.css";
 
 // SVG flag components — renders correctly everywhere (no emoji issues)
 const flags: Record<string, ReactElement> = {
@@ -69,118 +70,49 @@ export default function LanguageSwitcher() {
   const locales = Object.keys(LOCALE_LABELS) as Locale[];
 
   return (
-    <div ref={ref} style={{ position: "relative", zIndex: 100 }}>
+    <div ref={ref} className={styles.wrapper}>
       <button
+        className={`${styles.trigger} ${open ? styles.triggerActive : ""}`}
         onClick={() => setOpen(!open)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          padding: "0.5rem 0.75rem",
-          borderRadius: "8px",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.06)",
-          color: "rgba(255,255,255,0.85)",
-          cursor: "pointer",
-          fontSize: "0.8rem",
-          fontWeight: 500,
-          transition: "all 0.2s",
-          backdropFilter: "blur(8px)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.12)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(14, 233, 54, 0.4)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.12)";
-        }}
         title="Change language"
       >
-        <span style={{ display: "flex", alignItems: "center", borderRadius: "2px", overflow: "hidden" }}>
+        <span className={styles.flag}>
           {flags[locale]}
         </span>
         <span>{locale.toUpperCase()}</span>
-        <svg
-          width="10" height="10" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-          style={{
-            transition: "transform 0.2s",
-            transform: open ? "rotate(180deg)" : "rotate(0deg)",
-          }}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+        <span className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`}>
+          <svg
+            width="10" height="10" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
       </button>
 
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            background: "rgba(13, 17, 23, 0.97)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: "10px",
-            backdropFilter: "blur(16px)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            overflow: "hidden",
-            minWidth: "170px",
-            animation: "fadeInDown 0.15s ease-out",
-          }}
-        >
-          {locales.map((loc) => (
-            <button
-              key={loc}
-              onClick={() => { setLocale(loc); setOpen(false); }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.6rem",
-                width: "100%",
-                padding: "0.6rem 0.85rem",
-                border: "none",
-                background: locale === loc ? "rgba(14, 233, 54, 0.1)" : "transparent",
-                color: locale === loc ? "#3bf63b" : "rgba(255,255,255,0.75)",
-                cursor: "pointer",
-                fontSize: "0.85rem",
-                fontWeight: locale === loc ? 600 : 400,
-                transition: "all 0.15s",
-                textAlign: "left",
-              }}
-              onMouseEnter={(e) => {
-                if (locale !== loc) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = locale === loc ? "rgba(14, 233, 54, 0.1)" : "transparent";
-              }}
-            >
-              <span style={{ display: "flex", alignItems: "center", borderRadius: "2px", overflow: "hidden" }}>
-                {flags[loc]}
-              </span>
-              <span>{LOCALE_LABELS[loc]}</span>
-              {locale === loc && (
-                <svg
-                  width="14" height="14" viewBox="0 0 24 24" fill="none"
-                  stroke="#3bf63b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ marginLeft: "auto" }}
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <style>{`
-        @keyframes fadeInDown {
-          from { opacity: 0; transform: translateY(-6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      {/* Dropdown — always in DOM, toggled via CSS */}
+      <div className={`${styles.dropdown} ${open ? styles.dropdownVisible : ""}`}>
+        {locales.map((loc) => (
+          <button
+            key={loc}
+            className={`${styles.option} ${locale === loc ? styles.optionActive : ""}`}
+            onClick={() => { setLocale(loc); setOpen(false); }}
+          >
+            <span className={styles.optionFlag}>
+              {flags[loc]}
+            </span>
+            <span className={styles.optionLabel}>{LOCALE_LABELS[loc]}</span>
+            <span className={styles.optionCheck}>
+              <svg
+                width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
