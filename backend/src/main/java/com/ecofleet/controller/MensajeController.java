@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,69 +34,120 @@ public class MensajeController {
     @Autowired
     private RutaRepository rutaRepository;
 
+    /**
+     * GET /api/mensajes/{rutaId}
+     *
+     * Returns messages for the 1-to-1 conversation between ADMIN and the
+     * CURRENTLY ASSIGNED conductor on this route.
+     *
+     * Security rules:
+     * - Tenant isolation: route must belong to the requesting user's company
+     * - Conductor isolation: if the caller is a conductor, they must be the
+     *   one currently assigned to the route
+     * - Messages are scoped by (rutaId + conductorId): when the admin
+     *   reassigns a conductor, the chat resets because the conductorId filter
+     *   no longer matches old messages.
+     */
     @GetMapping("/{rutaId}")
     public Object obtenerMensajes(@PathVariable String rutaId, HttpServletRequest request) {
-        String usuarioId = (String) request.getAttribute("userId");
-        if (usuarioId == null) {
-            return java.util.Collections.emptyList();
+        String empresaId = (String) request.getAttribute("userId");
+        if (empresaId == null) {
+            return Collections.emptyList();
         }
 
         // Tenant isolation: verify this route belongs to the requesting user's company
-        Optional<Ruta> ruta = rutaRepository.findById(rutaId);
-        if (ruta.isEmpty() || !usuarioId.equals(ruta.get().getUsuarioId())) {
-            return java.util.Collections.emptyList();
+        Optional<Ruta> rutaOpt = rutaRepository.findById(rutaId);
+        if (rutaOpt.isEmpty() || !empresaId.equals(rutaOpt.get().getUsuarioId())) {
+            return Collections.emptyList();
         }
 
-        return mensajeRepository.findByRutaIdOrderByTimestampAsc(rutaId);
+        Ruta ruta = rutaOpt.get();
+        String conductorIdEnRuta = ruta.getConductorId();
+
+        // If there's no conductor assigned, no conversation exists
+        if (conductorIdEnRuta == null || conductorIdEnRuta.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        // Conductor isolation: if the caller is a conductor, verify they are
+        // the one assigned to this route
+        String callerConductorId = (String) request.getAttribute("conductorId");
+        if (callerConductorId != null && !callerConductorId.equals(conductorIdEnRuta)) {
+            return Collections.emptyList();
+        }
+
+        // Return only messages for this (ruta, conductor) pair
+        return mensajeRepository.findByRutaIdAndConductorIdOrderByTimestampAsc(
+                rutaId, conductorIdEnRuta);
     }
 
+    /**
+     * POST /api/mensajes
+     *
+     * Sends a message in the 1-to-1 conversation. The conductorId is
+     * automatically set from the route's current assignment — the client
+     * does NOT control it.
+     */
     @PostMapping
     public Object enviarMensaje(@RequestBody Mensaje mensaje, HttpServletRequest request) {
-        String usuarioId = (String) request.getAttribute("userId");
-        if (usuarioId == null) {
-            return java.util.Collections.singletonMap("error", "No autenticado");
+        String empresaId = (String) request.getAttribute("userId");
+        if (empresaId == null) {
+            return Collections.singletonMap("error", "No autenticado");
         }
 
-        // Tenant isolation: verify the target route belongs to the sender's company
-        if (mensaje.getRutaId() != null) {
-            Optional<Ruta> ruta = rutaRepository.findById(mensaje.getRutaId());
-            if (ruta.isEmpty() || !usuarioId.equals(ruta.get().getUsuarioId())) {
-                return java.util.Collections.singletonMap("error", "No autorizado para esta ruta");
-            }
+        if (mensaje.getRutaId() == null || mensaje.getRutaId().isBlank()) {
+            return Collections.singletonMap("error", "rutaId es requerido");
         }
 
-        mensaje.setUsuarioId(usuarioId);
+        // Tenant isolation
+        Optional<Ruta> rutaOpt = rutaRepository.findById(mensaje.getRutaId());
+        if (rutaOpt.isEmpty() || !empresaId.equals(rutaOpt.get().getUsuarioId())) {
+            return Collections.singletonMap("error", "No autorizado para esta ruta");
+        }
+
+        Ruta ruta = rutaOpt.get();
+        String conductorIdEnRuta = ruta.getConductorId();
+
+        // Must have an assigned conductor to have a conversation
+        if (conductorIdEnRuta == null || conductorIdEnRuta.isBlank()) {
+            return Collections.singletonMap("error", "No hay conductor asignado a esta ruta");
+        }
+
+        // Conductor isolation: if the caller is a conductor, verify they are the assigned one
+        String callerConductorId = (String) request.getAttribute("conductorId");
+        if (callerConductorId != null && !callerConductorId.equals(conductorIdEnRuta)) {
+            return Collections.singletonMap("error", "No eres el conductor asignado a esta ruta");
+        }
+
+        // Server-side enforcement: set conductorId from the route, not from the client
+        mensaje.setUsuarioId(empresaId);
+        mensaje.setConductorId(conductorIdEnRuta);
 
         Mensaje guardado = mensajeRepository.save(mensaje);
 
         // Si el remitente es un CONDUCTOR, generamos una alerta para que el admin
-        // vea en la campanita que tiene mensajes nuevos. Reutilizamos una sola
-        // alerta por (ruta, conductor) hasta que el admin la marque como leída,
-        // así no se inunda el panel con 50 entradas de la misma conversación.
+        // vea en la campanita que tiene mensajes nuevos.
         try {
             if ("CONDUCTOR".equalsIgnoreCase(guardado.getRemitente())
-                    && guardado.getRutaId() != null
-                    && usuarioId != null) {
+                    && guardado.getRutaId() != null) {
 
-                String conductorId = (String) request.getAttribute("conductorId");
                 String conductorNombre = "Conductor";
-                if (conductorId != null) {
-                    Optional<Conductor> c = conductorRepository.findById(conductorId);
+                if (callerConductorId != null) {
+                    Optional<Conductor> c = conductorRepository.findById(callerConductorId);
                     if (c.isPresent() && c.get().getNombre() != null) {
                         conductorNombre = c.get().getNombre();
                     }
                 }
 
                 String rutaInfo = "";
-                Optional<Ruta> r = rutaRepository.findById(guardado.getRutaId());
-                if (r.isPresent()) {
-                    Ruta ru = r.get();
-                    rutaInfo = (ru.getOrigen() != null ? ru.getOrigen() : "") + " → "
-                             + (ru.getDestino() != null ? ru.getDestino() : "");
+                String origen = ruta.getOrigen() != null ? ruta.getOrigen() : "";
+                String destino = ruta.getDestino() != null ? ruta.getDestino() : "";
+                if (!origen.isEmpty() || !destino.isEmpty()) {
+                    rutaInfo = origen + " → " + destino;
                 }
 
                 String grupoKey = "MENSAJE_CONDUCTOR|" + guardado.getRutaId()
-                        + "|" + (conductorId != null ? conductorId : "");
+                        + "|" + conductorIdEnRuta;
 
                 Optional<Alerta> existente =
                         alertaRepository.findByGrupoKeyAndResueltaFalse(grupoKey);
@@ -104,11 +156,13 @@ public class MensajeController {
                         ? guardado.getContenido()
                         : (guardado.getMediaType() != null && guardado.getMediaType().startsWith("image/")
                                 ? "[Foto adjunta]"
-                                : "[Adjunto]");
+                                : guardado.getMediaType() != null && guardado.getMediaType().startsWith("audio/")
+                                        ? "[Audio]"
+                                        : "[Adjunto]");
                 if (preview.length() > 80) preview = preview.substring(0, 77) + "…";
 
                 Alerta a = existente.orElseGet(Alerta::new);
-                a.setEmpresaId(usuarioId);
+                a.setEmpresaId(empresaId);
                 a.setTipo("MENSAJE_CONDUCTOR");
                 a.setSeveridad("INFO");
                 a.setTitulo("Mensaje de " + conductorNombre);
@@ -116,14 +170,11 @@ public class MensajeController {
                 a.setRutaId(guardado.getRutaId());
                 a.setGrupoKey(grupoKey);
                 a.setTimestamp(LocalDateTime.now());
-                // Si ya existía y estaba leída, la marcamos no leída de nuevo
-                // porque hay un mensaje nuevo encima.
                 a.setLeida(false);
                 a.setResuelta(false);
                 alertaRepository.save(a);
             }
         } catch (Exception e) {
-            // No bloquear el envío del mensaje por un fallo de alerta
             System.err.println("[MensajeController] Error generando alerta de mensaje: " + e.getMessage());
         }
 
