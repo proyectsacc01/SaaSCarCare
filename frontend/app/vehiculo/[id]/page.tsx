@@ -404,11 +404,20 @@ export default function VehiculoDetalle() {
     e.preventDefault();
     setGuardandoEdicion(true);
     try {
+      const bodyData = JSON.stringify(editData);
+      console.log('[DEBUG] PUT body keys:', Object.keys(editData));
+      console.log('[DEBUG] imagenUrl present?', !!editData.imagenUrl);
+      console.log('[DEBUG] imagenUrl length:', editData.imagenUrl?.length || 0);
+      console.log('[DEBUG] body size (bytes):', bodyData.length);
       const res = await fetch(`${API_URL}/api/vehiculos/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(editData),
+        body: bodyData,
       });
+      const resData = await res.json();
+      console.log('[DEBUG] Response status:', res.status);
+      console.log('[DEBUG] Response imagenUrl?', !!resData.imagenUrl);
+      console.log('[DEBUG] Response imagenUrl length:', resData.imagenUrl?.length || 0);
       if (res.ok) {
         toast.success(t.vehiclePage.vehicleUpdated);
         await cargarDatos();
