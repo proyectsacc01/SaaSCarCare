@@ -412,11 +412,152 @@
   max-width: 480px;
 }
 
+.heroDynamicLine {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  min-height: 56px;
+}
+
+.heroDynamicLabel {
+  flex-shrink: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 246, 59, 0.16);
+  background: rgba(59, 246, 59, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.heroDynamicWords {
+  position: relative;
+  min-height: 56px;
+  flex: 1;
+}
+
+.heroDynamicWord {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  color: #ffffff;
+  font-size: clamp(1.1rem, 2vw, 1.45rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  opacity: 0;
+  transform: translateY(18px) scale(0.98);
+  filter: blur(8px);
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.55s ease;
+}
+
+.heroDynamicWordActive {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
 .heroCtas {
   display: flex;
   gap: 1rem;
   margin-bottom: 4rem;
   flex-wrap: wrap;
+}
+
+.heroSignalRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  max-width: 680px;
+  margin-bottom: 2rem;
+}
+
+.heroSignalCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(11, 18, 34, 0.88), rgba(11, 18, 34, 0.68));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.heroSignalCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(59, 246, 59, 0.09) 48%, transparent 100%);
+  transform: translateX(-100%);
+  animation: heroSignalSweep 5s ease-in-out infinite;
+}
+
+.heroSignalCard:nth-child(2)::before {
+  animation-delay: 1.1s;
+}
+
+.heroSignalCard:nth-child(3)::before {
+  animation-delay: 2.2s;
+}
+
+.heroSignalPulse {
+  position: relative;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #3bf63b;
+  box-shadow: 0 0 0 0 rgba(59, 246, 59, 0.45);
+  animation: heroSignalPulse 2.2s ease-out infinite;
+  flex-shrink: 0;
+}
+
+.heroSignalText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.heroSignalText strong {
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.heroSignalText span {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@keyframes heroSignalPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 246, 59, 0.42);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(59, 246, 59, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 246, 59, 0);
+  }
+}
+
+@keyframes heroSignalSweep {
+  0%, 100% {
+    transform: translateX(-120%);
+  }
+  45%, 55% {
+    transform: translateX(120%);
+  }
 }
 
 .primaryCta {
@@ -509,6 +650,81 @@
   display: grid;
   grid-template-columns: repeat(4, auto);
   gap: 0;
+}
+
+.motionBand {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  margin: 0 auto;
+  max-width: 1320px;
+  padding: 1.1rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(7, 11, 20, 0.72), rgba(7, 11, 20, 0.45));
+}
+
+.motionBandTrack {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: max-content;
+  animation: motionBandScroll 24s linear infinite;
+  padding-left: 1rem;
+}
+
+.motionBandItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 246, 59, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.motionBandDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #3bf63b;
+  box-shadow: 0 0 10px rgba(59, 246, 59, 0.55);
+}
+
+.motionBandFadeLeft,
+.motionBandFadeRight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 110px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.motionBandFadeLeft {
+  left: 0;
+  background: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+.motionBandFadeRight {
+  right: 0;
+  background: linear-gradient(270deg, #000 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+@keyframes motionBandScroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 .statItem {
@@ -2450,6 +2666,15 @@
     margin: 0 auto 2.5rem;
   }
 
+  .heroDynamicLine {
+    justify-content: center;
+  }
+
+  .heroSignalRow {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .heroCtas {
     justify-content: center;
   }
@@ -2545,6 +2770,37 @@
 
   .heroSubtitle {
     font-size: 1rem;
+  }
+
+  .heroDynamicLine {
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 92px;
+  }
+
+  .heroDynamicWords {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .heroDynamicWord {
+    justify-content: center;
+    text-align: center;
+    font-size: 1.05rem;
+  }
+
+  .heroSignalRow {
+    grid-template-columns: 1fr;
+    max-width: 420px;
+  }
+
+  .motionBand {
+    padding: 0.9rem 0;
+  }
+
+  .motionBandItem {
+    padding: 0.65rem 0.95rem;
+    font-size: 0.78rem;
   }
 
   .heroStats {
@@ -2792,6 +3048,28 @@
     flex-direction: column;
   }
 
+  .heroDynamicLine {
+    min-height: 96px;
+    margin-bottom: 1.5rem;
+  }
+
+  .heroDynamicLabel {
+    font-size: 0.66rem;
+  }
+
+  .heroDynamicWord {
+    font-size: 0.95rem;
+  }
+
+  .heroSignalCard {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .motionBandFadeLeft,
+  .motionBandFadeRight {
+    width: 48px;
+  }
+
   .primaryCta,
   .secondaryCta {
     width: 100%;
@@ -2921,5 +3199,40 @@
 
   .ctaTitle {
     font-size: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bgGradient,
+  .bgGradient::before,
+  .bgGradient::after,
+  .main::before,
+  .main::after,
+  .logoIcon,
+  .heroTag,
+  .gradientText,
+  .primaryCta,
+  .statNumber,
+  .dashCardsWrap,
+  .dashCard,
+  .dashRoutePath,
+  .dashVehicle,
+  .phoneGlow,
+  .motionBandTrack,
+  .heroSignalPulse,
+  .heroSignalCard::before {
+    animation: none !important;
+  }
+
+  .scrollReveal,
+  .heroContent,
+  .heroDynamicWord,
+  .featureCard,
+  .metricCard,
+  .ctaBenefitCard {
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
   }
 }

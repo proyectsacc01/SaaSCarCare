@@ -73,14 +73,6 @@ const CheckIcon = () => (
   </svg>
 );
 
-const DownloadIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" x2="12" y1="15" y2="3" />
-  </svg>
-);
-
 const PackageIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M16.5 9.4 7.55 4.24" />
@@ -169,6 +161,7 @@ export default function LandingPage() {
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [activeWeekDayIndex, setActiveWeekDayIndex] = useState(() => getCurrentLandingWeekDayIndex());
+  const [activeHeroKeywordIndex, setActiveHeroKeywordIndex] = useState(0);
   const [isDashboardPrecisionMode, setIsDashboardPrecisionMode] = useState(false);
 
   // Refs for scroll-triggered animations
@@ -292,6 +285,28 @@ export default function LandingPage() {
     }
   ];
 
+  const heroKeywords = [
+    t.landing.feature2Title,
+    t.landing.feature3Title,
+    t.landing.feature4Title,
+    t.landing.feature5Title,
+  ];
+
+  const heroSignals = [
+    { label: t.landing.liveMap, value: t.landing.activeVehiclesCount },
+    { label: t.landing.statRefresh, value: "3s" },
+    { label: t.landing.useCaseApp, value: "Android" },
+  ];
+
+  const motionBandItems = [
+    t.landing.feature1Title,
+    t.landing.feature2Title,
+    t.landing.feature3Title,
+    t.landing.feature4Title,
+    t.landing.feature5Title,
+    t.landing.feature6Title,
+  ];
+
   const weeklyBars = [
     { day: t.landing.dayL, h: 45 },
     { day: t.landing.dayM, h: 70 },
@@ -354,6 +369,14 @@ export default function LandingPage() {
     { number: "24/7", label: t.landing.statMonitoring }
   ];
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveHeroKeywordIndex((current) => (current + 1) % heroKeywords.length);
+    }, 2400);
+
+    return () => window.clearInterval(intervalId);
+  }, [heroKeywords.length]);
+
   return (
     <main className={styles.main} ref={mainRef}>
       <BackgroundMeteors fixed />
@@ -407,6 +430,20 @@ export default function LandingPage() {
             {t.landing.heroSubtitle}
           </p>
 
+          <div className={styles.heroDynamicLine}>
+            <span className={styles.heroDynamicLabel}>{t.landing.modulesTag}</span>
+            <div className={styles.heroDynamicWords}>
+              {heroKeywords.map((keyword, index) => (
+                <span
+                  key={keyword}
+                  className={`${styles.heroDynamicWord} ${index === activeHeroKeywordIndex ? styles.heroDynamicWordActive : ''}`}
+                >
+                  {keyword}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div className={styles.heroCtas}>
             <WavyButton
               variant="success"
@@ -421,6 +458,18 @@ export default function LandingPage() {
               <span className={styles.androidIcon}><AndroidIcon /></span>
               <span>{t.landing.downloadCta}</span>
             </a>
+          </div>
+
+          <div className={styles.heroSignalRow}>
+            {heroSignals.map((signal) => (
+              <div key={`${signal.label}-${signal.value}`} className={styles.heroSignalCard}>
+                <span className={styles.heroSignalPulse}></span>
+                <div className={styles.heroSignalText}>
+                  <strong>{signal.value}</strong>
+                  <span>{signal.label}</span>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className={styles.heroStats}>
@@ -577,6 +626,19 @@ export default function LandingPage() {
             </div>
 
           </div>
+        </div>
+      </section>
+
+      <section className={styles.motionBand}>
+        <div className={styles.motionBandFadeLeft}></div>
+        <div className={styles.motionBandFadeRight}></div>
+        <div className={styles.motionBandTrack}>
+          {[...motionBandItems, ...motionBandItems].map((item, index) => (
+            <div key={`${item}-${index}`} className={styles.motionBandItem}>
+              <span className={styles.motionBandDot}></span>
+              <span>{item}</span>
+            </div>
+          ))}
         </div>
       </section>
 
