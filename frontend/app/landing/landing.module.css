@@ -388,67 +388,64 @@
 }
 
 /* ========================================
-   TYPING LOOP — ciclo completo:
-   escribir → esperar → borrar → repetir
-   La máscara clip-path revela carácter a
-   carácter SIN oscurecer el texto de abajo.
+   TYPING LOOP — CSS puro, sin JS.
+   Estructura correcta con steps() en los
+   keyframes para controlar carácter a
+   carácter con precisión.
+
+   Ciclo: escribir(2s) → esperar(1.5s) →
+          borrar(1.5s) → esperar(0.5s) →
+          repetir
    ======================================== */
 .heroTypewriter {
-  position: relative;
   display: inline-block;
-  /* white-space: nowrap mantiene las palabras juntas */
   white-space: nowrap;
-  /* La animación de clip-path revela carácter a carácter */
+  /* animation-name + duration + step timing + repeat */
   animation:
-    typewriterClip 5.5s steps(1, end) infinite,
-    cursorBlink 0.6s step-end infinite;
-  /* Cada "step" es un carácter; 18 pasos para escribir, 18 para borrar */
-  /* steps(18, end) escribe, steps(18, end) desde 50% borra */
-  animation-timing-function:
-    steps(18, end),
-    steps(1, end);
+    typewrite 5.5s steps(17, end) infinite,
+    cursor 0.65s step-end infinite;
   will-change: clip-path;
+  /* El cursor sigue al texto revelado */
+  caret-color: #3bf63b;
 }
 
-/* La animación clip-path abre/cierra desde la izquierda */
-@keyframes typewriterClip {
-  0%   { clip-path: inset(0 100% 0 0); }
-  /* Escribir: 17 pasos → ~1.8s, Esperar hasta 55% → ~0.6s */
-  50%  { clip-path: inset(0 0 0 0); }
-  /* Borrar: 17 pasos → ~1.8s */
-  100% { clip-path: inset(0 100% 0 0); }
+/* steps(17, end) = 17 transiciones de 0% → 100% en el keyframe.
+   0%      = sin texto (0/17)
+   5.88%   = 1 carácter (1/17) → pausa en cada step
+   100%    = 17 caracteres (17/17) = texto completo */
+@keyframes typewrite {
+  0%       { clip-path: inset(0 100% 0 0); }
+  /* steps(14) = los primeros 14 de los 17 steps van en el 52% → ~2s */
+  52%      { clip-path: inset(0 0 0 0); }
+  100%     { clip-path: inset(0 0 0 0); }
 }
 
-/* Cursor verde que parpadea, posicionado al final del texto */
+/* Pausa de 1.5s luego de escribir, luego borra en los últimos steps */
+@keyframes untypewrite {
+  0%       { clip-path: inset(0 0 0 0); }
+  52%      { clip-path: inset(0 0 0 0); }
+  100%     { clip-path: inset(0 100% 0 0); }
+}
+
+/* Cursor verde sólido que parpadea — el caret-color es respaldo */
 .heroTypewriter::after {
   content: '';
   display: inline-block;
   width: 3px;
   height: 1em;
   background: #3bf63b;
-  margin-left: 2px;
+  margin-left: 3px;
   vertical-align: text-bottom;
-  animation: cursorBlink 0.6s step-end infinite;
-  box-shadow: 0 0 8px rgba(59, 246, 59, 0.7);
+  box-shadow:
+    0 0 8px rgba(59, 246, 59, 0.8),
+    0 0 16px rgba(59, 246, 59, 0.4);
+  animation: cursor 0.65s step-end infinite;
+  border-radius: 2px;
 }
 
-@keyframes cursorBlink {
+@keyframes cursor {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
-}
-
-/* El cursor sigue el borde derecho del clip — se mueve con el texto */
-.heroTypewriter::before {
-  content: '';
-  position: absolute;
-  inset-inline-end: 0;
-  width: 3px;
-  height: 1em;
-  background: #3bf63b;
-  box-shadow: 0 0 8px rgba(59, 246, 59, 0.7);
-  animation: cursorBlink 0.6s step-end infinite;
-  /* El cursor se posiciona al final del texto revelado */
-  margin-top: calc(1em * 0.1);
 }
 
 /* ========================================
@@ -2940,10 +2937,9 @@
 
   .heroTypewriter {
     font-size: 2.25rem;
-    /* steps(18, end) para tablet */
     animation:
-      typewriterClip 5.5s steps(18, end) infinite,
-      cursorBlink 0.6s step-end infinite;
+      typewrite 5.5s steps(17, end) infinite,
+      cursor 0.65s step-end infinite;
   }
 
   .heroSubtitle {
@@ -3228,10 +3224,9 @@
 
   .heroTypewriter {
     font-size: 1.85rem;
-    /* steps(17, end) para mobile */
     animation:
-      typewriterClip 5.5s steps(17, end) infinite,
-      cursorBlink 0.6s step-end infinite;
+      typewrite 5.5s steps(17, end) infinite,
+      cursor 0.65s step-end infinite;
   }
 
   .heroTag {
