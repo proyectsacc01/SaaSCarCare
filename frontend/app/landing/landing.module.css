@@ -379,58 +379,178 @@
   letter-spacing: -0.03em;
   color: #ffffff;
   margin-bottom: 1.5rem;
+  /* Flex para que typewriter y highlight fluyan naturalmente */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.5rem;
+  position: relative;
 }
 
 /* ========================================
-   HERO LETTER WAVE — cada letra brilla
-   en secuencia creando una ola continua
+   TYPING LOOP — ciclo completo:
+   escribir → esperar → borrar → repetir
+   La máscara clip-path revela carácter a
+   carácter SIN oscurecer el texto de abajo.
    ======================================== */
+.heroTypewriter {
+  position: relative;
+  display: inline-block;
+  /* white-space: nowrap mantiene las palabras juntas */
+  white-space: nowrap;
+  /* La animación de clip-path revela carácter a carácter */
+  animation:
+    typewriterClip 5.5s steps(1, end) infinite,
+    cursorBlink 0.6s step-end infinite;
+  /* Cada "step" es un carácter; 18 pasos para escribir, 18 para borrar */
+  /* steps(18, end) escribe, steps(18, end) desde 50% borra */
+  animation-timing-function:
+    steps(18, end),
+    steps(1, end);
+  will-change: clip-path;
+}
+
+/* La animación clip-path abre/cierra desde la izquierda */
+@keyframes typewriterClip {
+  0%   { clip-path: inset(0 100% 0 0); }
+  /* Escribir: 17 pasos → ~1.8s, Esperar hasta 55% → ~0.6s */
+  50%  { clip-path: inset(0 0 0 0); }
+  /* Borrar: 17 pasos → ~1.8s */
+  100% { clip-path: inset(0 100% 0 0); }
+}
+
+/* Cursor verde que parpadea, posicionado al final del texto */
+.heroTypewriter::after {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  background: #3bf63b;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 0.6s step-end infinite;
+  box-shadow: 0 0 8px rgba(59, 246, 59, 0.7);
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* El cursor sigue el borde derecho del clip — se mueve con el texto */
+.heroTypewriter::before {
+  content: '';
+  position: absolute;
+  inset-inline-end: 0;
+  width: 3px;
+  height: 1em;
+  background: #3bf63b;
+  box-shadow: 0 0 8px rgba(59, 246, 59, 0.7);
+  animation: cursorBlink 0.6s step-end infinite;
+  /* El cursor se posiciona al final del texto revelado */
+  margin-top: calc(1em * 0.1);
+}
+
+/* ========================================
+   WAVE LETTERS — ola verde sobre las letras
+   blancas. Se ve a través del clip del
+   typewriter para dar vida sin romper el
+   efecto de escritura.
+   ======================================== */
+.heroWaveContainer {
+  display: inline-flex;
+  position: absolute;
+  /* Encima del typewriter para que la ola se vea BIEN */
+  z-index: 1;
+  pointer-events: none;
+}
+
 .heroLetter {
   display: inline-block;
-  animation: letterWave 3.8s ease-in-out infinite;
-  animation-delay: calc(var(--char-index, 0) * 0.035s);
-  will-change: opacity, transform;
+  /* Onda más rápida y agresiva para que se note */
+  animation: letterWave 1.8s ease-in-out infinite;
+  animation-delay: calc(var(--char-index, 0) * 0.055s);
+  will-change: opacity, transform, text-shadow;
 }
 
 @keyframes letterWave {
   0%, 100% {
-    opacity: 0.45;
-    transform: translateY(0);
+    opacity: 0.3;
+    transform: translateY(0) scale(0.9);
+    text-shadow: none;
+    color: rgba(255, 255, 255, 0.6);
   }
-  14% {
+  10% {
     opacity: 1;
-    transform: translateY(-1.5px);
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    transform: translateY(-4px) scale(1.12);
+    text-shadow:
+      0 0 14px rgba(59, 246, 59, 1),
+      0 0 32px rgba(59, 246, 59, 0.6),
+      0 0 60px rgba(59, 246, 59, 0.25);
+    color: #3bf63b;
   }
-  30% {
-    opacity: 0.8;
-    transform: translateY(0);
-    text-shadow: 0 0 0 transparent;
+  25% {
+    opacity: 0.85;
+    transform: translateY(0) scale(1.02);
+    text-shadow: 0 0 8px rgba(59, 246, 59, 0.4);
+    color: #6ef76e;
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.45;
+    transform: translateY(2px) scale(0.94);
+    text-shadow: none;
+    color: rgba(255, 255, 255, 0.5);
+  }
+  72% {
+    opacity: 0.75;
+    transform: translateY(-2px) scale(1.04);
+    text-shadow: 0 0 10px rgba(59, 246, 59, 0.3);
+    color: #a3f7a3;
   }
 }
 
-/* El highlight "con inteligencia" respira como un solo bloque,
-   sincronizado para que la ola llegue justo después del
-   recorrido por las letras blancas. */
+/* ========================================
+   HIGHLIGHT — explota en verde sincronizado
+   con la ola cuando la ola pasa por el
+   final del title
+   ======================================== */
 .heroHighlight {
   display: inline-block;
-  animation: highlightBreathe 3.8s ease-in-out infinite;
-  will-change: opacity;
+  position: relative;
+  animation: highlightBreathe 1.8s ease-in-out infinite;
+  animation-delay: 0.55s;
+  will-change: opacity, transform, text-shadow;
 }
 
 @keyframes highlightBreathe {
-  0%, 100% { opacity: 0.45; }
-  18%  { opacity: 1; }
-  38%  { opacity: 0.8; }
-  55%  { opacity: 0.55; }
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.96);
+    text-shadow: none;
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.1);
+    text-shadow:
+      0 0 20px rgba(59, 246, 59, 1),
+      0 0 44px rgba(59, 246, 59, 0.7),
+      0 0 80px rgba(59, 246, 59, 0.3);
+  }
+  30% {
+    opacity: 0.92;
+    transform: scale(1.02);
+    text-shadow: 0 0 12px rgba(59, 246, 59, 0.6);
+  }
+  60% {
+    opacity: 0.6;
+    transform: scale(0.97);
+    text-shadow: none;
+  }
 }
 
+/* gradientText ahora es verde sólido con glow — la animación de flujo se maneja
+   vía heroHighlight / highlightBreathe, así que no necesitamos gradientFlow aquí */
 .gradientText {
-  /* Gradient en MOVIMIENTO — el verde "fluye" suavemente. background-size > 100%
-     y animamos background-position para que el gradiente se desplace. */
   background: linear-gradient(
     100deg,
     #3bf63b 0%,
@@ -443,12 +563,6 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: gradientFlow 6s linear infinite;
-}
-
-@keyframes gradientFlow {
-  0%   { background-position: 0% center; }
-  100% { background-position: -200% center; }
 }
 
 .heroSubtitle {
@@ -2816,7 +2930,20 @@
   }
 
   .heroLetter {
-    animation-delay: calc(var(--char-index, 0) * 0.028s);
+    animation-delay: calc(var(--char-index, 0) * 0.035s);
+    animation-duration: 2s;
+  }
+
+  .heroHighlight {
+    animation-duration: 2s;
+  }
+
+  .heroTypewriter {
+    font-size: 2.25rem;
+    /* steps(18, end) para tablet */
+    animation:
+      typewriterClip 5.5s steps(18, end) infinite,
+      cursorBlink 0.6s step-end infinite;
   }
 
   .heroSubtitle {
@@ -3091,7 +3218,20 @@
   }
 
   .heroLetter {
-    animation-delay: calc(var(--char-index, 0) * 0.022s);
+    animation-delay: calc(var(--char-index, 0) * 0.035s);
+    animation-duration: 2s;
+  }
+
+  .heroHighlight {
+    animation-duration: 2s;
+  }
+
+  .heroTypewriter {
+    font-size: 1.85rem;
+    /* steps(17, end) para mobile */
+    animation:
+      typewriterClip 5.5s steps(17, end) infinite,
+      cursorBlink 0.6s step-end infinite;
   }
 
   .heroTag {

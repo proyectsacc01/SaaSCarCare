@@ -421,16 +421,24 @@ export default function LandingPage() {
             <span>{t.landing.heroTag}</span>
           </div>
 
-          <h1 className={styles.heroTitle} style={{ '--letter-count': t.landing.heroTitle.length } as React.CSSProperties}>
-            {t.landing.heroTitle.split('').map((char, i) => (
-              <span
-                key={i}
-                className={styles.heroLetter}
-                style={{ '--char-index': i } as React.CSSProperties}
-              >
-                {char === ' ' ? '\u00A0' : char}
-              </span>
-            ))}
+          <h1 className={styles.heroTitle}>
+            {/* Typing loop animado: CSS puro, no necesita JS */}
+            <span className={styles.heroTypewriter} aria-label={t.landing.heroTitle}>
+              {t.landing.heroTitle}
+            </span>
+            {/* Wave letters debajo del cursor, offset para que no se pisen */}
+            <span className={styles.heroWaveContainer} aria-hidden="true">
+              {t.landing.heroTitle.split('').map((char, i) => (
+                <span
+                  key={i}
+                  className={styles.heroLetter}
+                  style={{ '--char-index': i } as React.CSSProperties}
+                >
+                  {char === ' ' ? '\u00A0' : char}
+                </span>
+              ))}
+            </span>
+            {/* Highlight sincronizado con el wave */}
             <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
               {' '}{t.landing.heroTitleHighlight}
             </span>
