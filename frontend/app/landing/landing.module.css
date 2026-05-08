@@ -381,6 +381,53 @@
   margin-bottom: 1.5rem;
 }
 
+/* ========================================
+   HERO LETTER WAVE — cada letra brilla
+   en secuencia creando una ola continua
+   ======================================== */
+.heroLetter {
+  display: inline-block;
+  animation: letterWave 3.8s ease-in-out infinite;
+  animation-delay: calc(var(--char-index, 0) * 0.035s);
+  will-change: opacity, transform;
+}
+
+@keyframes letterWave {
+  0%, 100% {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(-1.5px);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+  }
+  30% {
+    opacity: 0.8;
+    transform: translateY(0);
+    text-shadow: 0 0 0 transparent;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* El highlight "con inteligencia" respira como un solo bloque,
+   sincronizado para que la ola llegue justo después del
+   recorrido por las letras blancas. */
+.heroHighlight {
+  display: inline-block;
+  animation: highlightBreathe 3.8s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes highlightBreathe {
+  0%, 100% { opacity: 0.45; }
+  18%  { opacity: 1; }
+  38%  { opacity: 0.8; }
+  55%  { opacity: 0.55; }
+}
+
 .gradientText {
   /* Gradient en MOVIMIENTO — el verde "fluye" suavemente. background-size > 100%
      y animamos background-position para que el gradiente se desplace. */
@@ -2768,6 +2815,10 @@
     letter-spacing: -0.02em;
   }
 
+  .heroLetter {
+    animation-delay: calc(var(--char-index, 0) * 0.028s);
+  }
+
   .heroSubtitle {
     font-size: 1rem;
   }
@@ -3039,6 +3090,10 @@
     font-size: 1.85rem;
   }
 
+  .heroLetter {
+    animation-delay: calc(var(--char-index, 0) * 0.022s);
+  }
+
   .heroTag {
     font-size: 0.7rem;
     padding: 0.35rem 0.75rem;
@@ -3211,6 +3266,8 @@
   .logoIcon,
   .heroTag,
   .gradientText,
+  .heroLetter,
+  .heroHighlight,
   .primaryCta,
   .statNumber,
   .dashCardsWrap,

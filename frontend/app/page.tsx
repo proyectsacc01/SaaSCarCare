@@ -421,9 +421,19 @@ export default function LandingPage() {
             <span>{t.landing.heroTag}</span>
           </div>
 
-          <h1 className={styles.heroTitle}>
-            {t.landing.heroTitle}
-            <span className={styles.gradientText}> {t.landing.heroTitleHighlight}</span>
+          <h1 className={styles.heroTitle} style={{ '--letter-count': t.landing.heroTitle.length } as React.CSSProperties}>
+            {t.landing.heroTitle.split('').map((char, i) => (
+              <span
+                key={i}
+                className={styles.heroLetter}
+                style={{ '--char-index': i } as React.CSSProperties}
+              >
+                {char === ' ' ? '\u00A0' : char}
+              </span>
+            ))}
+            <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
+              {' '}{t.landing.heroTitleHighlight}
+            </span>
           </h1>
 
           <p className={styles.heroSubtitle}>
