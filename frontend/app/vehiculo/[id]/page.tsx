@@ -690,10 +690,23 @@ export default function VehiculoDetalle() {
               onClick={() => router.push(DASHBOARD_ROUTE)}
               style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", padding: "0.5rem 1rem", borderRadius: "8px", color: "white", cursor: "pointer", marginBottom: "1rem" }}
             >← {t.vehicle.backToDashboard}</button>
-            <div className="vehiculo-header-main">
-              <div className={styles.title}>
-                <h1>{vehiculo.marca} {vehiculo.modelo}</h1>
-                <p className={styles.subtitle}>{t.vehicle.plate || t.vehicle.licensePlate}: {vehiculo.matricula}</p>
+            <div className="vehiculo-header-main" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+              {vehiculo.imagenUrl && (
+                <div style={{
+                  width: '80px', height: '80px', borderRadius: '12px', overflow: 'hidden',
+                  flexShrink: 0, border: '2px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.03)',
+                }}>
+                  <img
+                    src={vehiculo.imagenUrl}
+                    alt={`${vehiculo.marca} ${vehiculo.modelo}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{ margin: 0 }}>{vehiculo.marca} {vehiculo.modelo}</h1>
+                <p className={styles.subtitle} style={{ margin: '0.25rem 0 0 0' }}>{t.vehicle.plate || t.vehicle.licensePlate}: {vehiculo.matricula}</p>
               </div>
               <button
                 onClick={abrirEdicion}
