@@ -69,7 +69,7 @@ export default function LanguageSwitcher() {
   const locales = Object.keys(LOCALE_LABELS) as Locale[];
 
   return (
-    <div ref={ref} style={{ position: "relative", zIndex: 9999 }}>
+    <div ref={ref} style={{ position: "relative", zIndex: 100 }}>
       <button
         onClick={() => setOpen(!open)}
         style={{
