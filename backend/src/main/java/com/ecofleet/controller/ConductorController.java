@@ -581,7 +581,7 @@ public class ConductorController {
                 + "<p style='margin:0 0 18px;font-size:14px;'><strong>Ruta ID:</strong> " + escapeHtml(rutaId) + "</p>"
                 + "<div style='background:#050608;border:1px solid rgba(59,246,59,0.18);border-radius:12px;padding:16px;'>"
                 + "<div style='font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'>Mensaje</div>"
-                + "<div style='font-size:14px;line-height:1.65;color:#f3f4f6;white-space:pre-wrap;">" + escapeHtml(mensaje) + "</div>"
+                + "<div style='font-size:14px;line-height:1.65;color:#f3f4f6;white-space:pre-wrap;'>" + escapeHtml(mensaje) + "</div>"
                 + "</div>"
                 + "</div>"
                 + "</td></tr>"
