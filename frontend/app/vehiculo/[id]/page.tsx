@@ -17,6 +17,7 @@ interface Vehiculo {
   combustibleActual: number;
   capacidadDeposito?: number;
   costeKmReferencia?: number;
+  imagenUrl?: string;
   activo: boolean;
 }
 
@@ -369,6 +370,7 @@ export default function VehiculoDetalle() {
       combustibleActual: vehiculo?.combustibleActual,
       capacidadDeposito: vehiculo?.capacidadDeposito,
       costeKmReferencia: vehiculo?.costeKmReferencia,
+      imagenUrl: vehiculo?.imagenUrl,
       activo: vehiculo?.activo,
     });
     setActiveTab('editar');
@@ -1706,6 +1708,71 @@ export default function VehiculoDetalle() {
                       value={editData.costeKmReferencia || ''}
                       onChange={e => setEditData({ ...editData, costeKmReferencia: Number(e.target.value) || undefined })} />
                     <span style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginTop: '0.25rem' }}>{t.vehicle.refCostDesc}</span>
+                  </div>
+
+                  {/* ── Vehicle Photo (edit) ── */}
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>{t.vehicle.vehiclePhoto} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({t.common.optional})</span></label>
+                    <div
+                      style={{
+                        border: '2px dashed rgba(255,255,255,0.15)',
+                        borderRadius: '12px',
+                        padding: '1.5rem',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        background: 'rgba(255,255,255,0.02)',
+                        position: 'relative',
+                        overflow: 'hidden',
+                      }}
+                      onClick={() => document.getElementById('edit-vehiculo-image-input')?.click()}
+                    >
+                      {editData.imagenUrl ? (
+                        <>
+                          <img src={editData.imagenUrl} alt="Preview" style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '10px', marginBottom: '0.75rem' }} />
+                          <button
+                            type="button"
+                            style={{
+                              position: 'absolute', top: '8px', right: '8px',
+                              background: 'rgba(239,68,68,0.8)', border: 'none', color: 'white',
+                              width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer',
+                              fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditData({ ...editData, imagenUrl: '' });
+                            }}
+                          >
+                            ✕
+                          </button>
+                          <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)' }}>{t.vehicle.clickToChangePhoto}</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>📸</div>
+                          <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>{t.vehicle.uploadPhotoHint}</div>
+                        </>
+                      )}
+                      <input
+                        id="edit-vehiculo-image-input"
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast.warning(t.vehicle.photoTooLarge);
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            setEditData({ ...editData, imagenUrl: ev.target?.result as string });
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className={styles.formGroup}>

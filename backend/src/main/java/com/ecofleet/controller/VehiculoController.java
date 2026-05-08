@@ -54,6 +54,7 @@ public class VehiculoController {
                     if (datos.getCapacidadDeposito() != null) v.setCapacidadDeposito(datos.getCapacidadDeposito());
                     if (datos.getConsumoPor100km() != null)   v.setConsumoPor100km(datos.getConsumoPor100km());
                     if (datos.getCosteKmReferencia() != null) v.setCosteKmReferencia(datos.getCosteKmReferencia());
+                    if (datos.getImagenUrl() != null)        v.setImagenUrl(datos.getImagenUrl());
                     if (datos.getActivo() != null)           v.setActivo(datos.getActivo());
                     return ResponseEntity.ok(vehiculoRepository.save(v));
                 })

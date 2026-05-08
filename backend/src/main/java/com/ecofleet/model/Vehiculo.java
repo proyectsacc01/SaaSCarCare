@@ -21,6 +21,7 @@ public class Vehiculo {
     private Double consumoPor100km;     // Litros consumidos por cada 100 km (ej: 8.0)
     private Double costeKmReferencia;   // €/km presupuestado de referencia
     private String tipoCombustible;
+    private String imagenUrl;       // URL de imagen del vehículo (opcional)
     
     
     private Boolean activo; 

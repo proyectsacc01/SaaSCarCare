@@ -39,6 +39,7 @@ interface Vehiculo {
   capacidadDeposito?: number; // Litros totales del depósito (ej: 60)
   consumoPor100km?: number;   // L/100km — calculado automáticamente, no editable
   costeKmReferencia?: number; // €/km presupuestado de referencia
+  imagenUrl?: string;         // URL o base64 de la imagen del vehículo (opcional)
   activo: boolean;
 }
 
@@ -567,7 +568,7 @@ export default function Dashboard() {
     : 0;
 
   const [nuevoVehiculo, setNuevoVehiculo] = useState<Partial<Vehiculo>>({
-    marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true
+    marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true, imagenUrl: ''
   });
   const [nuevaRuta, setNuevaRuta] = useState<Partial<Ruta>>({
     origen: '', destino: '', distanciaEstimadaKm: 0, vehiculoId: '', conductorId: '', conductorNombre: '', fecha: new Date().toISOString().split('T')[0]
@@ -807,7 +808,7 @@ export default function Dashboard() {
         toast.success(t.dashboard.vehicleAddedMsg);
         setActiveTab('flota');
         cargarDatos();
-        setNuevoVehiculo({ marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true });
+        setNuevoVehiculo({ marca: '', modelo: '', matricula: '', kilometraje: 0, combustibleActual: 50, activo: true, imagenUrl: '' });
       }
     } catch (error) {
       toast.error(t.dashboard.errorCreateVehicle);
@@ -1069,10 +1070,28 @@ export default function Dashboard() {
                   onClick={() => router.push(`/vehiculo/${v.id}`)}
                   style={{ cursor: 'pointer' }}
                 >
+                  {/* ── Vehicle Image Banner ── */}
+                  <div className={styles.cardImageWrapper}>
+                    {v.imagenUrl ? (
+                      <>
+                        <img
+                          src={v.imagenUrl}
+                          alt={`${v.marca} ${v.modelo}`}
+                          className={styles.cardImage}
+                          loading="lazy"
+                        />
+                        <div className={styles.cardImageOverlay} />
+                      </>
+                    ) : (
+                      <div className={styles.cardImagePlaceholder}>🚗</div>
+                    )}
+                    <span className={styles.cardImageBadge}>{v.tipoCombustible || '—'}</span>
+                  </div>
+
                   <div className={styles.cardHeader}>
                     <div>
                       <h2 className={styles.cardTitle}>{v.marca} {v.modelo}</h2>
-                      <span className={styles.cardSubtitle}>Matrícula: {v.matricula}</span>
+                      <span className={styles.cardSubtitle}>{t.vehicle.plate}: {v.matricula}</span>
                     </div>
                     <button
                       onClick={(e) => {
@@ -1080,7 +1099,7 @@ export default function Dashboard() {
                         handleEliminarVehiculo(v.id);
                       }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '1.2rem' }}
-                      title="Eliminar Vehículo"
+                      title={t.dashboard.deleteVehicle}
                     >
                       X
                     </button>
@@ -1255,6 +1274,57 @@ export default function Dashboard() {
                     <span style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '0.25rem', display: 'block' }}>{t.dashboard.refCostDesc}</span>
                   </div>
                 </div>
+
+                {/* ── Vehicle Photo (optional) ── */}
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>{t.vehicle.vehiclePhoto} <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>({t.common.optional})</span></label>
+                  <div
+                    className={styles.imageUploadArea}
+                    onClick={() => document.getElementById('vehiculo-image-input')?.click()}
+                  >
+                    {nuevoVehiculo.imagenUrl ? (
+                      <>
+                        <img src={nuevoVehiculo.imagenUrl} alt="Preview" className={styles.imagePreview} />
+                        <button
+                          type="button"
+                          className={styles.imageRemoveBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNuevoVehiculo({ ...nuevoVehiculo, imagenUrl: '' });
+                          }}
+                        >
+                          ✕
+                        </button>
+                        <div className={styles.imageUploadText}>{t.vehicle.clickToChangePhoto}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className={styles.imageUploadIcon}>📸</div>
+                        <div className={styles.imageUploadText}>{t.vehicle.uploadPhotoHint}</div>
+                      </>
+                    )}
+                    <input
+                      id="vehiculo-image-input"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          toast.warning(t.vehicle.photoTooLarge);
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setNuevoVehiculo({ ...nuevoVehiculo, imagenUrl: ev.target?.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </div>
+                </div>
+
                 <WavyButton type="submit" variant="success" radius="sm" className="w-full">{t.vehicle.saveVehicle}</WavyButton>
               </form>
             </div>

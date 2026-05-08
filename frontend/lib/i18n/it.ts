@@ -500,6 +500,10 @@ const it: TranslationKeys = {
     licensePlate: "Targa",
     editVehicle: "Modifica",
     saveVehicle: "Salva Veicolo",
+    vehiclePhoto: "Foto del Veicolo",
+    clickToChangePhoto: "Clicca per cambiare la foto",
+    uploadPhotoHint: "Clicca o trascina un'immagine del veicolo (max. 2MB)",
+    photoTooLarge: "L'immagine è troppo grande (massimo 2MB)",
   },
 
   fuel: {

@@ -618,6 +618,10 @@ const de: TranslationKeys = {
     licensePlate: "Kennzeichen",
     editVehicle: "Bearbeiten",
     saveVehicle: "Fahrzeug speichern",
+    vehiclePhoto: "Fahrzeugfoto",
+    clickToChangePhoto: "Klicken Sie, um das Foto zu ändern",
+    uploadPhotoHint: "Klicken oder ziehen Sie ein Fahrzeugbild (max. 2MB)",
+    photoTooLarge: "Das Bild ist zu groß (maximal 2MB)",
   },
 
   // ── Documents ──

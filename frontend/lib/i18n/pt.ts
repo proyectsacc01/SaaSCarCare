@@ -544,6 +544,10 @@ const pt: TranslationKeys = {
     onRoute: "Em Rota",
     stopped: "Parado",
     saveVehicle: "Guardar Veículo",
+    vehiclePhoto: "Foto do Veículo",
+    clickToChangePhoto: "Clique para alterar a foto",
+    uploadPhotoHint: "Clique ou arraste uma imagem do veículo (máx. 2MB)",
+    photoTooLarge: "A imagem é muito grande (máximo 2MB)",
   },
   routes: {
     newRoute: "Nova Rota",

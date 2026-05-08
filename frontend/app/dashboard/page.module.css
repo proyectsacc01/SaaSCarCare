@@ -152,6 +152,133 @@
   }
 }
 
+/* ── Vehicle Image Banner ── */
+.cardImageWrapper {
+  position: relative;
+  width: calc(100% + 3rem);
+  margin: -1.5rem -1.5rem 1.25rem -1.5rem;
+  height: 160px;
+  overflow: hidden;
+  border-radius: 16px 16px 0 0;
+}
+
+.cardImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), filter 0.4s ease;
+  filter: brightness(0.85);
+}
+
+.card:hover .cardImage {
+  transform: scale(1.08);
+  filter: brightness(0.95);
+}
+
+.cardImageOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60%;
+  background: linear-gradient(to top, #0f1923 0%, rgba(15, 25, 35, 0.6) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+.cardImagePlaceholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(59, 246, 59, 0.06) 0%, rgba(14, 165, 233, 0.08) 50%, rgba(167, 139, 250, 0.06) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.8rem;
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.card:hover .cardImagePlaceholder {
+  opacity: 0.7;
+}
+
+.cardImageBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 2;
+}
+
+/* ── Image Upload Area (Form) ── */
+.imageUploadArea {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.02);
+  position: relative;
+  overflow: hidden;
+}
+
+.imageUploadArea:hover {
+  border-color: rgba(59, 246, 59, 0.4);
+  background: rgba(59, 246, 59, 0.04);
+}
+
+.imagePreview {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 0.75rem;
+}
+
+.imageUploadIcon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.5;
+}
+
+.imageUploadText {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.4;
+}
+
+.imageRemoveBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(239, 68, 68, 0.8);
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.imageRemoveBtn:hover {
+  background: rgba(239, 68, 68, 1);
+}
+
 .cardHeader {
   display: flex;
   justify-content: space-between;
@@ -471,6 +598,10 @@
   .cardTitle {
     font-size: 1.1rem;
   }
+
+  .cardImageWrapper {
+    height: 130px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -502,6 +633,10 @@
     top: auto;
     right: 12px;
     bottom: 12px;
+  }
+
+  .cardImageWrapper {
+    height: 110px;
   }
 }
 

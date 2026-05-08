@@ -616,6 +616,10 @@ const es = {
     licensePlate: "Matrícula",
     editVehicle: "Editar",
     saveVehicle: "Guardar Vehículo",
+    vehiclePhoto: "Foto del Vehículo",
+    clickToChangePhoto: "Click para cambiar la foto",
+    uploadPhotoHint: "Click o arrastra una imagen del vehículo (máx. 2MB)",
+    photoTooLarge: "La imagen es demasiado grande (máximo 2MB)",
   },
 
   // ── Documents ──

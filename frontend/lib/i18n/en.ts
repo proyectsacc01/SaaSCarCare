@@ -532,6 +532,10 @@ const en: TranslationKeys = {
     licensePlate: "License Plate",
     editVehicle: "Edit",
     saveVehicle: "Save Vehicle",
+    vehiclePhoto: "Vehicle Photo",
+    clickToChangePhoto: "Click to change the photo",
+    uploadPhotoHint: "Click or drag a vehicle image (max. 2MB)",
+    photoTooLarge: "The image is too large (maximum 2MB)",
   },
 
   fuel: {
