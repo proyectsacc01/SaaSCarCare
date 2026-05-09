@@ -386,95 +386,139 @@
   position: relative;
 }
 
-.heroConstructWrapper {
-  display: inline-block;
+.heroTitleText {
+  display: inline;
   position: relative;
 }
 
-.heroConstructInner {
-  display: inline-block;
-  position: relative;
-  animation: constructText 3s ease-in-out infinite;
-}
-
-.heroConstructInner::before {
-  content: '';
+/* ========================================
+   CONSTRUCTION REVEAL — dos garras (horizontal +
+   vertical) entran desde fuera del título,
+   colocan marcas (cruz horizontal + punto vertical),
+   abren los dedos, y se retiran. Las marcas se
+   desvanecen al final del ciclo y todo se repite.
+   Inspirado en el efecto de Jhey Tompkins.
+   ======================================== */
+.heroConstruct {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(59, 246, 59, 0.4) 45%, rgba(59, 246, 59, 0.4) 55%, transparent 100%);
-  animation: constructScan 3s ease-in-out infinite;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  z-index: 2;
+  overflow: visible;
+  z-index: 5;
+  /* La SVG no debe interferir con el layout flex del título */
+  contain: layout;
 }
 
-.heroConstructInner::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, #3bf63b, transparent);
-  transform: translateY(-50%);
-  animation: constructLine 3s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 1;
-  box-shadow: 0 0 10px #3bf63b, 0 0 20px rgba(59, 246, 59, 0.5);
+.heroCable {
+  stroke: rgba(59, 246, 59, 0.7);
+  stroke-width: 3;
+  fill: none;
 }
 
-@keyframes constructText {
-  0%, 100% {
-    opacity: 0.2;
-    filter: blur(1px);
-  }
-  20% {
-    opacity: 1;
-    filter: blur(0);
-    text-shadow: 0 0 20px rgba(59, 246, 59, 0.8), 0 0 40px rgba(59, 246, 59, 0.4);
-  }
-  80% {
-    opacity: 1;
-    filter: blur(0);
-    text-shadow: 0 0 20px rgba(59, 246, 59, 0.8), 0 0 40px rgba(59, 246, 59, 0.4);
-  }
+.heroClawHead {
+  fill: #0a0f0a;
+  stroke: #3bf63b;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px rgba(59, 246, 59, 0.6));
 }
 
-@keyframes constructScan {
-  0%, 100% {
-    transform: translateX(-120%);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  50% {
-    transform: translateX(120%);
-    opacity: 0;
-  }
+.heroFingerH1,
+.heroFingerH2,
+.heroFingerV1,
+.heroFingerV2 {
+  stroke: #3bf63b;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  transform-box: fill-box;
+  filter: drop-shadow(0 0 4px rgba(59, 246, 59, 0.7));
 }
 
-@keyframes constructLine {
-  0%, 100% {
-    transform: translateY(-50%) scaleX(0);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  50% {
-    transform: translateY(-50%) scaleX(1);
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-50%) scaleX(0);
-    opacity: 0;
-  }
+.heroMarkCross,
+.heroMarkDot {
+  fill: #3bf63b;
+  filter: drop-shadow(0 0 8px rgba(59, 246, 59, 0.85)) drop-shadow(0 0 16px rgba(59, 246, 59, 0.4));
+}
+
+.heroConstructH,
+.heroConstructV,
+.heroClawH,
+.heroClawV {
+  transform-box: fill-box;
+  will-change: transform, opacity;
+}
+
+/* Cycle = 9s. Phases:
+   0%-22%   slide-in (claw + mark together, from off-screen)
+   22%-30%  arrived, fingers grip the mark
+   30%-38%  let-go (fingers rotate open, mark released)
+   38%-58%  claw slides out alone, mark stays in place
+   58%-86%  rest — text "built", marks visible
+   86%-96%  marks fade out
+   96%-100% empty pause before restart */
+
+.heroConstructH {
+  animation: heroConstructHCycle 9s cubic-bezier(.22,.61,.36,1) infinite both;
+}
+.heroClawH {
+  animation: heroClawHCycle 9s cubic-bezier(.22,.61,.36,1) infinite both;
+}
+.heroConstructV {
+  animation: heroConstructVCycle 9s cubic-bezier(.22,.61,.36,1) infinite both;
+  animation-delay: 0.6s;
+}
+.heroClawV {
+  animation: heroClawVCycle 9s cubic-bezier(.22,.61,.36,1) infinite both;
+  animation-delay: 0.6s;
+}
+
+.heroFingerH1 { transform-origin: 0% 100%; animation: heroLetGoH1 9s cubic-bezier(.22,.61,.36,1) infinite both; }
+.heroFingerH2 { transform-origin: 0% 0%;   animation: heroLetGoH2 9s cubic-bezier(.22,.61,.36,1) infinite both; }
+.heroFingerV1 { transform-origin: 0% 0%;   animation: heroLetGoV1 9s cubic-bezier(.22,.61,.36,1) infinite both; animation-delay: 0.6s; }
+.heroFingerV2 { transform-origin: 100% 0%; animation: heroLetGoV2 9s cubic-bezier(.22,.61,.36,1) infinite both; animation-delay: 0.6s; }
+
+@keyframes heroConstructHCycle {
+  0%        { transform: translateX(-150vw); opacity: 1; }
+  22%, 86%  { transform: translateX(0); opacity: 1; }
+  96%, 100% { transform: translateX(0); opacity: 0; }
+}
+
+@keyframes heroClawHCycle {
+  0%        { transform: translateX(-150vw); }
+  22%, 38%  { transform: translateX(0); }
+  58%, 100% { transform: translateX(-150vw); }
+}
+
+@keyframes heroConstructVCycle {
+  0%        { transform: translateY(-150vh); opacity: 1; }
+  22%, 86%  { transform: translateY(0); opacity: 1; }
+  96%, 100% { transform: translateY(0); opacity: 0; }
+}
+
+@keyframes heroClawVCycle {
+  0%        { transform: translateY(-150vh); }
+  22%, 38%  { transform: translateY(0); }
+  58%, 100% { transform: translateY(-150vh); }
+}
+
+@keyframes heroLetGoH1 {
+  0%, 30%   { rotate: 0deg; }
+  38%, 100% { rotate: -28deg; }
+}
+@keyframes heroLetGoH2 {
+  0%, 30%   { rotate: 0deg; }
+  38%, 100% { rotate: 28deg; }
+}
+@keyframes heroLetGoV1 {
+  0%, 30%   { rotate: 0deg; }
+  38%, 100% { rotate: 28deg; }
+}
+@keyframes heroLetGoV2 {
+  0%, 30%   { rotate: 0deg; }
+  38%, 100% { rotate: -28deg; }
 }
 
 /* ========================================
@@ -3374,6 +3418,14 @@
   .gradientText,
   .heroLetter,
   .heroHighlight,
+  .heroConstructH,
+  .heroConstructV,
+  .heroClawH,
+  .heroClawV,
+  .heroFingerH1,
+  .heroFingerH2,
+  .heroFingerV1,
+  .heroFingerV2,
   .primaryCta,
   .statNumber,
   .dashCardsWrap,
@@ -3397,5 +3449,11 @@
     transform: none !important;
     opacity: 1 !important;
     filter: none !important;
+  }
+
+  /* Hide the construction SVG entirely under reduced motion — the title alone
+     reads cleanly and the claws would just freeze in mid-position otherwise. */
+  .heroConstruct {
+    display: none !important;
   }
 }

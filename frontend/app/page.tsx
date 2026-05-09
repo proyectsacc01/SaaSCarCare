@@ -372,14 +372,63 @@ export default function LandingPage() {
           </div>
 
           <h1 className={styles.heroTitle}>
-            <span className={styles.heroConstructWrapper}>
-              <span className={styles.heroConstructInner}>
-                {t.landing.heroTitle}
-              </span>
-            </span>
+            <span className={styles.heroTitleText}>{t.landing.heroTitle}</span>
             <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
               {' '}{t.landing.heroTitleHighlight}
             </span>
+
+            {/* Construction reveal — claws drop in, place marks, release, slide out, loop */}
+            <svg
+              className={styles.heroConstruct}
+              viewBox="0 0 1000 260"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <defs>
+                <linearGradient id="heroHGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stopColor="#fff" stopOpacity="0" />
+                  <stop offset="0.28" stopColor="#fff" stopOpacity="1" />
+                  <stop offset="1" stopColor="#fff" stopOpacity="1" />
+                </linearGradient>
+                <linearGradient id="heroVGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#fff" stopOpacity="0" />
+                  <stop offset="0.28" stopColor="#fff" stopOpacity="1" />
+                  <stop offset="1" stopColor="#fff" stopOpacity="1" />
+                </linearGradient>
+                <mask id="heroHMask" maskUnits="userSpaceOnUse" x="-3000" y="-100" width="4100" height="460">
+                  <rect x="-3000" y="-100" width="4100" height="460" fill="url(#heroHGrad)" />
+                </mask>
+                <mask id="heroVMask" maskUnits="userSpaceOnUse" x="-100" y="-3000" width="1200" height="3360">
+                  <rect x="-100" y="-3000" width="1200" height="3360" fill="url(#heroVGrad)" />
+                </mask>
+              </defs>
+
+              {/* Horizontal claw + cross — enters from the left, places mark, releases, slides back */}
+              <g mask="url(#heroHMask)">
+                <g className={styles.heroConstructH}>
+                  <rect className={styles.heroMarkCross} x="468" y="58" width="46" height="11" />
+                </g>
+                <g className={styles.heroClawH}>
+                  <line className={styles.heroCable} x1="446" y1="63" x2="-3000" y2="63" />
+                  <circle className={styles.heroClawHead} cx="455" cy="63" r="8" />
+                  <path className={styles.heroFingerH1} d="M484 56 L468 48 L450 56" />
+                  <path className={styles.heroFingerH2} d="M484 70 L468 78 L450 70" />
+                </g>
+              </g>
+
+              {/* Vertical claw + dot — drops from the top, places mark, releases, slides back */}
+              <g mask="url(#heroVMask)">
+                <g className={styles.heroConstructV}>
+                  <rect className={styles.heroMarkDot} x="318" y="180" width="14" height="22" />
+                </g>
+                <g className={styles.heroClawV}>
+                  <line className={styles.heroCable} x1="325" y1="170" x2="325" y2="-3000" />
+                  <circle className={styles.heroClawHead} cx="325" cy="170" r="8" />
+                  <path className={styles.heroFingerV1} d="M334 188 L344 174 L334 156" />
+                  <path className={styles.heroFingerV2} d="M316 188 L306 174 L316 156" />
+                </g>
+              </g>
+            </svg>
           </h1>
 
           <p className={styles.heroSubtitle}>
