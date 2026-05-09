@@ -292,11 +292,10 @@ export default function LandingPage() {
     t.landing.feature5Title,
   ];
 
-const heroSignals = [
-    { label: t.landing.statModules, value: "6" },
+  const heroSignals = [
+    { label: t.landing.liveMap, value: t.landing.activeVehiclesCount },
     { label: t.landing.statRefresh, value: "3s" },
-    { label: t.landing.statLimitless, value: "∞" },
-    { label: t.landing.statMonitoring, value: "24/7" },
+    { label: t.landing.useCaseApp, value: "Android" },
   ];
 
   const motionBandItems = [
