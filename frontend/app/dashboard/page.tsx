@@ -4,15 +4,16 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import styles from "./page.module.css";
-import BackgroundMeteors from "@/componentes/BackgroundMeteors";
-import LocationInput from "@/componentes/LocationInput";
-import AlertasPanel from "@/componentes/AlertasPanel";
-import ConfiguracionPanel from "@/componentes/ConfiguracionPanel";
-import LanguageSwitcher from "@/componentes/LanguageSwitcher";
 import WavyButton from "@/components/ui/wavy-button";
 import { useI18n } from "@/lib/i18n";
 import { formatConnectionStateLabel, formatRouteStateLabel } from "@/lib/status-labels";
 import dynamic from "next/dynamic";
+
+const BackgroundMeteors = dynamic(() => import("@/componentes/BackgroundMeteors"), { ssr: false });
+const LocationInput = dynamic(() => import("@/componentes/LocationInput"), { ssr: false });
+const AlertasPanel = dynamic(() => import("@/componentes/AlertasPanel"), { ssr: false });
+const ConfiguracionPanel = dynamic(() => import("@/componentes/ConfiguracionPanel"), { ssr: false });
+const LanguageSwitcher = dynamic(() => import("@/componentes/LanguageSwitcher"), { ssr: false });
 
 const XAxis = dynamic(() => import("recharts").then(mod => mod.XAxis), { ssr: false });
 const YAxis = dynamic(() => import("recharts").then(mod => mod.YAxis), { ssr: false });
