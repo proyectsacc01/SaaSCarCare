@@ -411,18 +411,6 @@ const heroSignals = [
               className={styles.navCtaMobile}
               onClick={() => router.push('/login')}
             >{t.auth.login}</button>
-</div>
-
-          <div className={styles.heroSignalRow}>
-            {heroSignals.map((signal) => (
-              <div key={`${signal.label}-${signal.value}`} className={styles.heroSignalCard}>
-                <span className={styles.heroSignalPulse}></span>
-                <div className={styles.heroSignalText}>
-                  <strong>{signal.value}</strong>
-                  <span>{signal.label}</span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </nav>
@@ -477,7 +465,19 @@ const heroSignals = [
               <span className={styles.androidIcon}><AndroidIcon /></span>
               <span>{t.landing.downloadCta}</span>
             </a>
-</div>
+          </div>
+
+          <div className={styles.heroSignalRow}>
+            {heroSignals.map((signal) => (
+              <div key={`${signal.label}-${signal.value}`} className={styles.heroSignalCard}>
+                <span className={styles.heroSignalPulse}></span>
+                <div className={styles.heroSignalText}>
+                  <strong>{signal.value}</strong>
+                  <span>{signal.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
 
           <div className={styles.heroStats}>
             {stats.map((stat, index) => (
