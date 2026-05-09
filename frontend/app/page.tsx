@@ -93,49 +93,6 @@ const AndroidIcon = () => (
 
 
 
-/**
- * Cuenta de 0 al número final cuando entra en viewport. Si el "número" no es
- * numérico (ej: "24/7", "∞"), se muestra tal cual con un fade.
- * Usa requestAnimationFrame con easeOutCubic para una curva natural.
- */
-function AnimatedStat({ value }: { value: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [display, setDisplay] = useState<string>(value);
-  const numericTarget = parseFloat(value);
-  const suffix = value.replace(/^[\d.]+/, '');
-  const isNumeric = !Number.isNaN(numericTarget) && /^[\d.]+/.test(value);
-
-  useEffect(() => {
-    if (!isNumeric) { setDisplay(value); return; }
-    setDisplay('0' + suffix);
-    const node = ref.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting) return;
-        observer.disconnect();
-        const start = performance.now();
-        const duration = 1400;
-        const tick = (now: number) => {
-          const t = Math.min(1, (now - start) / duration);
-          const eased = 1 - Math.pow(1 - t, 3);
-          const current = numericTarget * eased;
-          const decimals = numericTarget % 1 === 0 ? 0 : 1;
-          setDisplay(current.toFixed(decimals) + suffix);
-          if (t < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      },
-      { threshold: 0.4 }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  return <span ref={ref}>{display}</span>;
-}
-
 function getCurrentLandingWeekDayIndex(date = new Date()) {
   const jsDay = date.getDay();
   return jsDay === 0 ? 6 : jsDay - 1;
@@ -362,13 +319,6 @@ export default function LandingPage() {
     setIsDashboardPrecisionMode(false);
   };
 
-  const stats = [
-    { number: "6", label: t.landing.statModules },
-    { number: "3s", label: t.landing.statRefresh },
-    { number: "∞", label: t.landing.statLimitless },
-    { number: "24/7", label: t.landing.statMonitoring }
-  ];
-
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setActiveHeroKeywordIndex((current) => (current + 1) % heroKeywords.length);
@@ -478,16 +428,6 @@ export default function LandingPage() {
             ))}
           </div>
 
-          <div className={styles.heroStats}>
-            {stats.map((stat, index) => (
-              <div key={index} className={styles.statItem}>
-                <span className={styles.statNumber}>
-                  <AnimatedStat value={stat.number} />
-                </span>
-                <span className={styles.statLabel}>{stat.label}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Hero Visual - 3D Dashboard con tilt parallax al mover el mouse */}
