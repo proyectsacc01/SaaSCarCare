@@ -379,7 +379,6 @@
   letter-spacing: -0.03em;
   color: #ffffff;
   margin-bottom: 1.5rem;
-  /* Flex para que typewriter y highlight fluyan naturalmente */
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -387,98 +386,195 @@
   position: relative;
 }
 
-/* ========================================
-   TYPING LOOP — CSS puro, sin JS.
-   Estructura correcta con steps() en los
-   keyframes para controlar carácter a
-   carácter con precisión.
-
-   Ciclo: escribir(2s) → esperar(1.5s) →
-          borrar(1.5s) → esperar(0.5s) →
-          repetir
-   ======================================== */
-.heroTypewriter {
+.heroConstructWrapper {
   display: inline-block;
-  white-space: nowrap;
-  animation: typeLoop 5s steps(17, end) infinite;
-  will-change: clip-path;
-  caret-color: #3bf63b;
+  vertical-align: baseline;
+  position: relative;
 }
 
-/* LOOP COMPLETO: escribir → pausar → borrar → pausar → repetir
-   17 chars = steps(17)
-   0-40%: escribir (2s)
-   40-55%: mantener escrito (0.75s)
-   55-80%: borrar (1.25s)
-   80-100%: mantener vacío (1s) */
-@keyframes typeLoop {
-  0%       { clip-path: inset(0 100% 0 0); }
-  40%      { clip-path: inset(0 0 0 0); }
-  55%      { clip-path: inset(0 0 0 0); }
-  80%      { clip-path: inset(0 100% 0 0); }
-  100%     { clip-path: inset(0 100% 0 0); }
+.heroConstructSvg {
+  display: block;
+  height: 1.2em;
+  width: auto;
+  overflow: visible;
 }
 
-/* Cursor verde con glow que parpadea */
-.heroTypewriter::after {
-  content: '';
-  display: inline-block;
-  width: 3px;
-  height: 1.1em;
-  background: #3bf63b;
-  margin-left: 4px;
-  vertical-align: text-bottom;
-  box-shadow:
-    0 0 6px rgba(59, 246, 59, 1),
-    0 0 14px rgba(59, 246, 59, 0.7),
-    0 0 26px rgba(59, 246, 59, 0.4);
-  animation: cursorPulse 1s step-end infinite;
-  border-radius: 2px;
+.heroConstructText {
+  font-family: inherit;
+  font-weight: 800;
+  font-size: inherit;
+  fill: #ffffff;
 }
 
-/* Cursor que parpadea Y se mueve con el typing */
-@keyframes cursorPulse {
-  0%, 45% { opacity: 1; transform: scaleY(1); }
-  46%, 100% { opacity: 0; transform: scaleY(0.5); }
+.heroConstructMask {
+  animation: maskSlide 2.8s ease-in-out infinite;
 }
 
-/* ========================================
-   WAVE LETTERS — ola verde sobre las letras
-   blancas. Se ve a través del clip del
-   typewriter para dar vida sin romper el
-   efecto de escritura.
-   ======================================== */
-.heroWaveContainer {
-  display: inline-flex;
-  position: absolute;
-  /* Encima del typewriter para que la ola se vea BIEN */
-  z-index: 1;
-  pointer-events: none;
+.heroConstructMaskV {
+  animation: maskSlideV 2.8s ease-in-out infinite;
+  animation-delay: 0.15s;
 }
 
-.heroLetter {
-  display: inline-block;
-  /* Onda más rápida y agresiva para que se note */
-  animation: letterWave 1.8s ease-in-out infinite;
-  animation-delay: calc(var(--char-index, 0) * 0.055s);
-  will-change: opacity, transform, text-shadow;
+.heroConstructLine {
+  stroke: #3bf63b;
+  stroke-width: 3;
+  stroke-linecap: round;
 }
 
-@keyframes letterWave {
-  0%, 100% {
-    opacity: 0.3;
-    transform: translateY(0) scale(0.9);
-    text-shadow: none;
-    color: rgba(255, 255, 255, 0.6);
+.heroConstructLineV {
+  stroke: #3bf63b;
+  stroke-width: 3;
+  stroke-linecap: round;
+  animation: lineSlideV 2.8s ease-in-out infinite;
+}
+
+@keyframes maskSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  15% {
+    transform: translateX(0);
+  }
+  85% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes maskSlideV {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  15% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  85% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+
+@keyframes lineSlideV {
+  0% {
+    transform: scaleY(0);
+    transform-origin: top;
+    opacity: 0;
   }
   10% {
     opacity: 1;
-    transform: translateY(-4px) scale(1.12);
-    text-shadow:
-      0 0 14px rgba(59, 246, 59, 1),
-      0 0 32px rgba(59, 246, 59, 0.6),
-      0 0 60px rgba(59, 246, 59, 0.25);
-    color: #3bf63b;
+  }
+  50% {
+    transform: scaleY(1);
+    transform-origin: top;
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(0);
+    transform-origin: bottom;
+    opacity: 0;
+  }
+}
+
+.heroConstructGlow {
+  animation: textGlow 2.8s ease-in-out infinite;
+}
+
+@keyframes textGlow {
+  0%, 100% {
+    fill: rgba(255, 255, 255, 0.3);
+    filter: none;
+  }
+  20%, 80% {
+    fill: #ffffff;
+    filter: drop-shadow(0 0 8px rgba(59, 246, 59, 0.9)) drop-shadow(0 0 16px rgba(59, 246, 59, 0.5));
+  }
+}
+  font-weight: 800;
+  fill: #ffffff;
+  font-size: inherit;
+}
+
+.heroConstructMask {
+  animation: constructReveal 2.5s ease-out infinite;
+}
+
+@keyframes constructReveal {
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  30% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  70% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+}
+
+.heroConstructLine {
+  stroke: #3bf63b;
+  stroke-width: 3;
+  stroke-linecap: round;
+  animation: constructLineAnim 2.5s ease-out infinite;
+}
+
+@keyframes constructLineAnim {
+  0% {
+    stroke-dasharray: 0 1000;
+    opacity: 1;
+  }
+  30% {
+    stroke-dasharray: 1000 0;
+    opacity: 1;
+  }
+  70% {
+    stroke-dasharray: 1000 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dasharray: 0 1000;
+    opacity: 0;
+  }
+}
+
+.heroConstructGlow {
+  filter: drop-shadow(0 0 8px rgba(59, 246, 59, 0.8)) drop-shadow(0 0 16px rgba(59, 246, 59, 0.4));
+  animation: constructGlow 2.5s ease-out infinite;
+}
+
+@keyframes constructGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(59, 246, 59, 0.3));
+    opacity: 0.3;
+  }
+  30%, 70% {
+    filter: drop-shadow(0 0 12px rgba(59, 246, 59, 1)) drop-shadow(0 0 24px rgba(59, 246, 59, 0.6));
+    opacity: 1;
+  }
+}
+
+/* ========================================
+   CONSTRUCTION EFFECT — SVG con reveal
+   animación de construcción de texto
+   con línea horizontal y glow verde
+   ======================================== */
   }
   25% {
     opacity: 0.85;

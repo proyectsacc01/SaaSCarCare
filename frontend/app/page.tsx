@@ -422,23 +422,49 @@ export default function LandingPage() {
           </div>
 
           <h1 className={styles.heroTitle}>
-            {/* Typing loop animado: CSS puro, no necesita JS */}
-            <span className={styles.heroTypewriter} aria-label={t.landing.heroTitle}>
-              {t.landing.heroTitle}
-            </span>
-            {/* Wave letters debajo del cursor, offset para que no se pisen */}
-            <span className={styles.heroWaveContainer} aria-hidden="true">
-              {t.landing.heroTitle.split('').map((char, i) => (
-                <span
-                  key={i}
-                  className={styles.heroLetter}
-                  style={{ '--char-index': i } as React.CSSProperties}
+            <span className={styles.heroConstructWrapper}>
+              <svg
+                className={styles.heroConstructSvg}
+                viewBox="0 0 700 70"
+                preserveAspectRatio="xMidYMid meet"
+                aria-label={t.landing.heroTitle}
+              >
+                <defs>
+                  <linearGradient id="constructGradH" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="white" stopOpacity="0" />
+                    <stop offset="50%" stopColor="white" stopOpacity="1" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="constructGradV" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="white" stopOpacity="0" />
+                    <stop offset="50%" stopColor="white" stopOpacity="1" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0" />
+                  </linearGradient>
+                  <mask id="maskConstructH">
+                    <rect x="0" y="0" width="700" height="70" fill="url(#constructGradH)" className={styles.heroConstructMask} />
+                  </mask>
+                  <mask id="maskConstructV">
+                    <rect x="0" y="0" width="700" height="70" fill="url(#constructGradV)" className={styles.heroConstructMaskV} />
+                  </mask>
+                </defs>
+                <text
+                  x="5"
+                  y="52"
+                  className={`${styles.heroConstructText} ${styles.heroConstructGlow}`}
+                  mask="url(#maskConstructH)"
                 >
-                  {char === ' ' ? '\u00A0' : char}
-                </span>
-              ))}
+                  {t.landing.heroTitle}
+                </text>
+                <line
+                  x1="0"
+                  y1="35"
+                  x2="700"
+                  y2="35"
+                  className={`${styles.heroConstructLine} ${styles.heroConstructLineV}`}
+                  mask="url(#maskConstructV)"
+                />
+              </svg>
             </span>
-            {/* Highlight sincronizado con el wave */}
             <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
               {' '}{t.landing.heroTitleHighlight}
             </span>
