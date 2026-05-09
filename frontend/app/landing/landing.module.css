@@ -475,6 +475,7 @@
     transform: translateY(-50%) scaleX(0);
     opacity: 0;
   }
+}
 
 /* ========================================
    HIGHLIGHT — explota en verde sincronizado
