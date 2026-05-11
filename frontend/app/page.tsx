@@ -6,7 +6,7 @@ import styles from "./landing/landing.module.css";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LanguageSwitcher from "@/componentes/LanguageSwitcher";
 import WavyButton from "@/components/ui/wavy-button";
-import { useTranslation, useI18n } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n";
 // SVG Icons
 const CarIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -115,7 +115,6 @@ function easeTiltAxis(value: number) {
 export default function LandingPage() {
   const router = useRouter();
   const t = useTranslation();
-  const { locale } = useI18n();
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [activeWeekDayIndex, setActiveWeekDayIndex] = useState(() => getCurrentLandingWeekDayIndex());
@@ -372,53 +371,10 @@ export default function LandingPage() {
             <span>{t.landing.heroTag}</span>
           </div>
 
-          {locale === 'es' ? (
-            <h1 className={styles.heroTitle}>
-              <span className={styles.heroTitleText}>
-                {'Gestiona tu '}
-                <span className={styles.letterF} aria-hidden="true">
-                  {'f'}
-                  <span className={styles.fCrossbarMask} />
-                  <span className={styles.fCrossbarMark} />
-                  <span className={styles.miniClawH}>
-                    <svg viewBox="0 0 180 26" preserveAspectRatio="none" aria-hidden="true">
-                      <line className={styles.clawCableStroke} x1="0" y1="13" x2="146" y2="13" />
-                      <circle className={styles.clawHeadStroke} cx="154" cy="13" r="5.5" />
-                      <path className={styles.fingerH1} d="M169 10 L157 6 L150 10" />
-                      <path className={styles.fingerH2} d="M169 16 L157 20 L150 16" />
-                    </svg>
-                  </span>
-                </span>
-                <span className={styles.srOnly}>f</span>
-                {'lota'}
-              </span>
-              <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
-                {' con '}
-                <span className={styles.letterI} aria-hidden="true">
-                  {'i'}
-                  <span className={styles.iDotMask} />
-                  <span className={styles.iDotMark} />
-                  <span className={styles.miniClawV}>
-                    <svg viewBox="0 0 26 140" preserveAspectRatio="none" aria-hidden="true">
-                      <line className={styles.clawCableStroke} x1="13" y1="0" x2="13" y2="112" />
-                      <circle className={styles.clawHeadStroke} cx="13" cy="120" r="5.5" />
-                      <path className={styles.fingerV1} d="M10 135 L6 123 L10 116" />
-                      <path className={styles.fingerV2} d="M16 135 L20 123 L16 116" />
-                    </svg>
-                  </span>
-                </span>
-                <span className={styles.srOnly}>i</span>
-                {'nteligencia'}
-              </span>
-            </h1>
-          ) : (
-            <h1 className={styles.heroTitle}>
-              <span>{t.landing.heroTitle}</span>
-              <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
-                {' '}{t.landing.heroTitleHighlight}
-              </span>
-            </h1>
-          )}
+<h1 className={styles.heroTitle}>
+            {t.landing.heroTitle}{" "}
+            <span className={styles.heroHighlight}>{t.landing.heroTitleHighlight}</span>
+          </h1>
 
           <p className={styles.heroSubtitle}>
             {t.landing.heroSubtitle}
