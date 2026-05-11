@@ -395,14 +395,15 @@ export default function LandingPage() {
               <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
                 {' con '}
                 <span className={styles.letterI} aria-hidden="true">
-                  {'ı'}
+                  {'i'}
+                  <span className={styles.iDotMask} />
                   <span className={styles.iDotMark} />
                   <span className={styles.miniClawV}>
-                    <svg viewBox="0 0 26 180" preserveAspectRatio="none" aria-hidden="true">
-                      <line className={styles.clawCableStroke} x1="13" y1="0" x2="13" y2="146" />
-                      <circle className={styles.clawHeadStroke} cx="13" cy="154" r="5.5" />
-                      <path className={styles.fingerV1} d="M10 169 L6 157 L10 150" />
-                      <path className={styles.fingerV2} d="M16 169 L20 157 L16 150" />
+                    <svg viewBox="0 0 26 140" preserveAspectRatio="none" aria-hidden="true">
+                      <line className={styles.clawCableStroke} x1="13" y1="0" x2="13" y2="112" />
+                      <circle className={styles.clawHeadStroke} cx="13" cy="120" r="5.5" />
+                      <path className={styles.fingerV1} d="M10 135 L6 123 L10 116" />
+                      <path className={styles.fingerV2} d="M16 135 L20 123 L16 116" />
                     </svg>
                   </span>
                 </span>
