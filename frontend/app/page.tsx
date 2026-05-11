@@ -6,7 +6,7 @@ import styles from "./landing/landing.module.css";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LanguageSwitcher from "@/componentes/LanguageSwitcher";
 import WavyButton from "@/components/ui/wavy-button";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, useI18n } from "@/lib/i18n";
 // SVG Icons
 const CarIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -115,6 +115,7 @@ function easeTiltAxis(value: number) {
 export default function LandingPage() {
   const router = useRouter();
   const t = useTranslation();
+  const { locale } = useI18n();
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [activeWeekDayIndex, setActiveWeekDayIndex] = useState(() => getCurrentLandingWeekDayIndex());
@@ -371,65 +372,65 @@ export default function LandingPage() {
             <span>{t.landing.heroTag}</span>
           </div>
 
-          <h1 className={styles.heroTitle}>
-            <span className={styles.heroTitleText}>{t.landing.heroTitle}</span>
-            <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
-              {' '}{t.landing.heroTitleHighlight}
-            </span>
-
-            {/* Construction reveal — claws drop in, place marks, release, slide out, loop */}
-            <svg
-              className={styles.heroConstruct}
-              viewBox="0 0 1000 260"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <defs>
-                <linearGradient id="heroHGrad" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0" stopColor="#fff" stopOpacity="0" />
-                  <stop offset="0.28" stopColor="#fff" stopOpacity="1" />
-                  <stop offset="1" stopColor="#fff" stopOpacity="1" />
-                </linearGradient>
-                <linearGradient id="heroVGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#fff" stopOpacity="0" />
-                  <stop offset="0.28" stopColor="#fff" stopOpacity="1" />
-                  <stop offset="1" stopColor="#fff" stopOpacity="1" />
-                </linearGradient>
-                <mask id="heroHMask" maskUnits="userSpaceOnUse" x="-3000" y="-100" width="4100" height="460">
-                  <rect x="-3000" y="-100" width="4100" height="460" fill="url(#heroHGrad)" />
-                </mask>
-                <mask id="heroVMask" maskUnits="userSpaceOnUse" x="-100" y="-3000" width="1200" height="3360">
-                  <rect x="-100" y="-3000" width="1200" height="3360" fill="url(#heroVGrad)" />
-                </mask>
-              </defs>
-
-              {/* Horizontal claw + cross — enters from the left, places mark, releases, slides back */}
-              <g mask="url(#heroHMask)">
-                <g className={styles.heroConstructH}>
-                  <rect className={styles.heroMarkCross} x="468" y="58" width="46" height="11" />
-                </g>
-                <g className={styles.heroClawH}>
-                  <line className={styles.heroCable} x1="446" y1="63" x2="-3000" y2="63" />
-                  <circle className={styles.heroClawHead} cx="455" cy="63" r="8" />
-                  <path className={styles.heroFingerH1} d="M484 56 L468 48 L450 56" />
-                  <path className={styles.heroFingerH2} d="M484 70 L468 78 L450 70" />
-                </g>
-              </g>
-
-              {/* Vertical claw + dot — drops from the top, places mark, releases, slides back */}
-              <g mask="url(#heroVMask)">
-                <g className={styles.heroConstructV}>
-                  <rect className={styles.heroMarkDot} x="318" y="180" width="14" height="22" />
-                </g>
-                <g className={styles.heroClawV}>
-                  <line className={styles.heroCable} x1="325" y1="170" x2="325" y2="-3000" />
-                  <circle className={styles.heroClawHead} cx="325" cy="170" r="8" />
-                  <path className={styles.heroFingerV1} d="M334 188 L344 174 L334 156" />
-                  <path className={styles.heroFingerV2} d="M316 188 L306 174 L316 156" />
-                </g>
-              </g>
-            </svg>
-          </h1>
+          {locale === 'es' ? (
+            <h1 className={styles.heroTitle}>
+              <span className={styles.heroTitleText}>
+                {'Ges'}
+                <span className={styles.letterBuildT} aria-hidden="true">
+                  {'l'}
+                  <span className={styles.tCrossbar} />
+                  <span className={styles.miniClawH}>
+                    <svg viewBox="0 0 1000 100" preserveAspectRatio="xMidYMid meet">
+                      <defs>
+                        <linearGradient id="cableHGrad" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0" stopColor="#3bf63b" stopOpacity="0" />
+                          <stop offset="0.45" stopColor="#3bf63b" stopOpacity="0.9" />
+                          <stop offset="1" stopColor="#3bf63b" stopOpacity="0.9" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" y1="50" x2="940" y2="50" stroke="url(#cableHGrad)" strokeWidth="6" />
+                      <circle cx="950" cy="50" r="14" fill="#0a0f0a" stroke="#3bf63b" strokeWidth="5" />
+                      <path className={styles.fingerH1} d="M980 36 L965 22 L948 36" stroke="#3bf63b" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      <path className={styles.fingerH2} d="M980 64 L965 78 L948 64" stroke="#3bf63b" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </span>
+                <span className={styles.srOnlyT}>t</span>
+                {'iona tu flota'}
+              </span>
+              <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
+                {' con '}
+                <span className={styles.letterBuildI} aria-hidden="true">
+                  {'ı'}
+                  <span className={styles.iDot} />
+                  <span className={styles.miniClawV}>
+                    <svg viewBox="0 0 100 1000" preserveAspectRatio="xMidYMid meet">
+                      <defs>
+                        <linearGradient id="cableVGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stopColor="#3bf63b" stopOpacity="0" />
+                          <stop offset="0.45" stopColor="#3bf63b" stopOpacity="0.9" />
+                          <stop offset="1" stopColor="#3bf63b" stopOpacity="0.9" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="50" y1="0" x2="50" y2="940" stroke="url(#cableVGrad)" strokeWidth="6" />
+                      <circle cx="50" cy="950" r="14" fill="#0a0f0a" stroke="#3bf63b" strokeWidth="5" />
+                      <path className={styles.fingerV1} d="M64 980 L78 965 L64 948" stroke="#3bf63b" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                      <path className={styles.fingerV2} d="M36 980 L22 965 L36 948" stroke="#3bf63b" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </span>
+                <span className={styles.srOnlyI}>i</span>
+                {'nteligencia'}
+              </span>
+            </h1>
+          ) : (
+            <h1 className={styles.heroTitle}>
+              <span>{t.landing.heroTitle}</span>
+              <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
+                {' '}{t.landing.heroTitleHighlight}
+              </span>
+            </h1>
+          )}
 
           <p className={styles.heroSubtitle}>
             {t.landing.heroSubtitle}
