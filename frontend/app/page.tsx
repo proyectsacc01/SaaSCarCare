@@ -6,7 +6,7 @@ import styles from "./landing/landing.module.css";
 import BackgroundMeteors from "@/componentes/BackgroundMeteors";
 import LanguageSwitcher from "@/componentes/LanguageSwitcher";
 import WavyButton from "@/components/ui/wavy-button";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, useI18n } from "@/lib/i18n";
 // SVG Icons
 const CarIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -115,6 +115,7 @@ function easeTiltAxis(value: number) {
 export default function LandingPage() {
   const router = useRouter();
   const t = useTranslation();
+  const { locale } = useI18n();
   const [isVisible, setIsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [activeWeekDayIndex, setActiveWeekDayIndex] = useState(() => getCurrentLandingWeekDayIndex());
@@ -371,75 +372,66 @@ export default function LandingPage() {
             <span>{t.landing.heroTag}</span>
           </div>
 
-          <h1 className={styles.heroTitle}>
-            <span className={styles.heroTitleText}>{t.landing.heroTitle}</span>
-            <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
-              {' '}{t.landing.heroTitleHighlight}
-            </span>
-
-            {/* Construction reveal — claws enter, place marks, release, slide out, loop.
-                Coordinates are tuned so the marks land near the "t" of "Gestiona" and
-                the first "i" of "inteligencia" in the Spanish hero title. */}
-            <svg
-              className={styles.heroConstruct}
-              viewBox="0 0 1000 260"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <defs>
-                <linearGradient id="heroHGrad" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0" stopColor="#fff" stopOpacity="0" />
-                  <stop offset="0.28" stopColor="#fff" stopOpacity="1" />
-                  <stop offset="1" stopColor="#fff" stopOpacity="1" />
-                </linearGradient>
-                <linearGradient id="heroVGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#fff" stopOpacity="0" />
-                  <stop offset="0.28" stopColor="#fff" stopOpacity="1" />
-                  <stop offset="1" stopColor="#fff" stopOpacity="1" />
-                </linearGradient>
-                <mask id="heroHMask" maskUnits="userSpaceOnUse" x="-3000" y="-100" width="4100" height="460">
-                  <rect x="-3000" y="-100" width="4100" height="460" fill="url(#heroHGrad)" />
-                </mask>
-                <mask id="heroVMask" maskUnits="userSpaceOnUse" x="-100" y="-3000" width="1200" height="3360">
-                  <rect x="-100" y="-3000" width="1200" height="3360" fill="url(#heroVGrad)" />
-                </mask>
-              </defs>
-
-              {/* Horizontal claw lands on the "t" of "Gestiona" (center ≈ viewBox x=222,
-                  y=42 which is the top of x-height where a t-crossbar sits).
-                  Head sits LEFT of the cross at (192, 42); cable extends far LEFT,
-                  fading out via mask gradient. Fingers wrap over the cross from the
-                  RIGHT side back toward the head. */}
-              <g mask="url(#heroHMask)">
-                <g className={styles.heroConstructH}>
-                  <rect className={styles.heroMarkCross} x="200" y="38" width="44" height="8" rx="1.5" />
-                </g>
-                <g className={styles.heroClawH}>
-                  <line className={styles.heroCable} x1="183" y1="42" x2="-3000" y2="42" vectorEffect="non-scaling-stroke" />
-                  <circle className={styles.heroClawHead} cx="192" cy="42" r="9" vectorEffect="non-scaling-stroke" />
-                  <path className={styles.heroFingerH1} d="M244 38 L220 28 L192 38" vectorEffect="non-scaling-stroke" />
-                  <path className={styles.heroFingerH2} d="M244 46 L220 56 L192 46" vectorEffect="non-scaling-stroke" />
-                </g>
-              </g>
-
-              {/* Vertical claw lands on the first "i" of "inteligencia" (center ≈ viewBox
-                  x=247, y=147 — above ascender height where an i-dot sits).
-                  Head sits ABOVE the dot at (247, 125); cable extends far UP, fading
-                  via mask gradient. Fingers wrap over the dot from BELOW back up to
-                  the head. */}
-              <g mask="url(#heroVMask)">
-                <g className={styles.heroConstructV}>
-                  <rect className={styles.heroMarkDot} x="240" y="138" width="14" height="18" rx="2" />
-                </g>
-                <g className={styles.heroClawV}>
-                  <line className={styles.heroCable} x1="247" y1="116" x2="247" y2="-3000" vectorEffect="non-scaling-stroke" />
-                  <circle className={styles.heroClawHead} cx="247" cy="125" r="9" vectorEffect="non-scaling-stroke" />
-                  <path className={styles.heroFingerV1} d="M254 156 L266 142 L256 125" vectorEffect="non-scaling-stroke" />
-                  <path className={styles.heroFingerV2} d="M240 156 L228 142 L238 125" vectorEffect="non-scaling-stroke" />
-                </g>
-              </g>
-            </svg>
-          </h1>
+          {locale === 'es' ? (
+            <h1 className={styles.heroTitle}>
+              <span className={styles.heroTitleText}>
+                {'Gestiona tu '}
+                <span className={styles.letterF} aria-hidden="true">
+                  {'f'}
+                  <span className={styles.fCrossbarMask} />
+                  <span className={styles.fCrossbarMark} />
+                  <span className={styles.miniClawH}>
+                    <svg viewBox="0 0 1000 100" preserveAspectRatio="xMidYMid meet">
+                      <defs>
+                        <linearGradient id="cableHGrad" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0" stopColor="#3bf63b" stopOpacity="0" />
+                          <stop offset="0.5" stopColor="#3bf63b" stopOpacity="1" />
+                          <stop offset="1" stopColor="#3bf63b" stopOpacity="1" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" y1="50" x2="940" y2="50" stroke="url(#cableHGrad)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
+                      <circle cx="950" cy="50" r="14" fill="#0a0f0a" stroke="#3bf63b" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+                      <path className={styles.fingerH1} d="M998 36 L975 22 L955 36" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                      <path className={styles.fingerH2} d="M998 64 L975 78 L955 64" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    </svg>
+                  </span>
+                </span>
+                <span className={styles.srOnly}>f</span>
+                {'lota'}
+              </span>
+              <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
+                {' con '}
+                <span className={styles.letterI} aria-hidden="true">
+                  {'ı'}
+                  <span className={styles.iDotMark} />
+                  <span className={styles.miniClawV}>
+                    <svg viewBox="0 0 100 1000" preserveAspectRatio="xMidYMid meet">
+                      <defs>
+                        <linearGradient id="cableVGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stopColor="#3bf63b" stopOpacity="0" />
+                          <stop offset="0.5" stopColor="#3bf63b" stopOpacity="1" />
+                          <stop offset="1" stopColor="#3bf63b" stopOpacity="1" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="50" y1="0" x2="50" y2="940" stroke="url(#cableVGrad)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
+                      <circle cx="50" cy="950" r="14" fill="#0a0f0a" stroke="#3bf63b" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+                      <path className={styles.fingerV1} d="M64 998 L78 975 L64 955" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                      <path className={styles.fingerV2} d="M36 998 L22 975 L36 955" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    </svg>
+                  </span>
+                </span>
+                <span className={styles.srOnly}>i</span>
+                {'nteligencia'}
+              </span>
+            </h1>
+          ) : (
+            <h1 className={styles.heroTitle}>
+              <span>{t.landing.heroTitle}</span>
+              <span className={`${styles.gradientText} ${styles.heroHighlight}`}>
+                {' '}{t.landing.heroTitleHighlight}
+              </span>
+            </h1>
+          )}
 
           <p className={styles.heroSubtitle}>
             {t.landing.heroSubtitle}
