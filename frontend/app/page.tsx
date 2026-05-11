@@ -381,10 +381,12 @@ export default function LandingPage() {
                   <span className={styles.fCrossbarMask} />
                   <span className={styles.fCrossbarMark} />
                   <span className={styles.miniClawH}>
-                    <span className={styles.clawCableH} />
-                    <span className={styles.clawHeadH} />
-                    <span className={`${styles.clawFinger} ${styles.fingerH1}`} />
-                    <span className={`${styles.clawFinger} ${styles.fingerH2}`} />
+                    <svg viewBox="0 0 180 26" preserveAspectRatio="none" aria-hidden="true">
+                      <line className={styles.clawCableStroke} x1="0" y1="13" x2="146" y2="13" />
+                      <circle className={styles.clawHeadStroke} cx="154" cy="13" r="5.5" />
+                      <path className={styles.fingerH1} d="M169 10 L157 6 L150 10" />
+                      <path className={styles.fingerH2} d="M169 16 L157 20 L150 16" />
+                    </svg>
                   </span>
                 </span>
                 <span className={styles.srOnly}>f</span>
@@ -396,10 +398,12 @@ export default function LandingPage() {
                   {'ı'}
                   <span className={styles.iDotMark} />
                   <span className={styles.miniClawV}>
-                    <span className={styles.clawCableV} />
-                    <span className={styles.clawHeadV} />
-                    <span className={`${styles.clawFinger} ${styles.fingerV1}`} />
-                    <span className={`${styles.clawFinger} ${styles.fingerV2}`} />
+                    <svg viewBox="0 0 26 180" preserveAspectRatio="none" aria-hidden="true">
+                      <line className={styles.clawCableStroke} x1="13" y1="0" x2="13" y2="146" />
+                      <circle className={styles.clawHeadStroke} cx="13" cy="154" r="5.5" />
+                      <path className={styles.fingerV1} d="M10 169 L6 157 L10 150" />
+                      <path className={styles.fingerV2} d="M16 169 L20 157 L16 150" />
+                    </svg>
                   </span>
                 </span>
                 <span className={styles.srOnly}>i</span>

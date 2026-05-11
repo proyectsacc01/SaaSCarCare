@@ -433,38 +433,23 @@
 
 .miniClawH {
   position: absolute;
-  top: 0.02em;
-  right: -0.28em;
-  width: 7.2em;
-  height: 0.95em;
+  top: 0.06em;
+  right: -0.36em;
+  width: 6.8em;
+  height: 0.78em;
   pointer-events: none;
   z-index: 4;
   transform-origin: right center;
   animation: clawHSlide 9s cubic-bezier(.22,.61,.36,1) infinite both;
 }
 
-.clawCableH {
-  position: absolute;
-  top: 50%;
-  left: -6.4em;
-  width: 6.5em;
-  height: 3px;
-  transform: translateY(-50%);
-  background: linear-gradient(90deg, rgba(59, 246, 59, 0) 0%, rgba(59, 246, 59, 0.55) 35%, rgba(59, 246, 59, 0.95) 100%);
-  box-shadow: 0 0 10px rgba(59, 246, 59, 0.25);
-}
-
-.clawHeadH {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: 0.34em;
-  height: 0.34em;
-  transform: translateY(-50%);
-  border-radius: 999px;
-  background: #0a0f0a;
-  border: 2px solid #3bf63b;
-  box-shadow: 0 0 8px rgba(59, 246, 59, 0.55);
+.miniClawH > svg,
+.miniClawV > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 4px rgba(59, 246, 59, 0.65));
 }
 
 .iDotMark {
@@ -488,11 +473,11 @@
 
 .miniClawV {
   position: absolute;
-  bottom: 0.34em;
+  bottom: 0.36em;
   left: 50%;
-  width: 0.95em;
-  height: 7.2em;
-  margin-left: -0.475em;
+  width: 0.78em;
+  height: 6.8em;
+  margin-left: -0.39em;
   pointer-events: none;
   z-index: 4;
   transform-origin: center bottom;
@@ -500,78 +485,55 @@
   animation-delay: 0.45s;
 }
 
-.clawCableV {
-  position: absolute;
-  left: 50%;
-  top: -5.9em;
-  width: 3px;
-  height: 6em;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(59, 246, 59, 0) 0%, rgba(59, 246, 59, 0.55) 35%, rgba(59, 246, 59, 0.95) 100%);
-  box-shadow: 0 0 10px rgba(59, 246, 59, 0.25);
+.clawCableStroke {
+  stroke: rgba(59, 246, 59, 0.98);
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  fill: none;
 }
 
-.clawHeadV {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 0.34em;
-  height: 0.34em;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: #0a0f0a;
-  border: 2px solid #3bf63b;
-  box-shadow: 0 0 8px rgba(59, 246, 59, 0.55);
-}
-
-.clawFinger {
-  position: absolute;
-  display: block;
-  width: 0.26em;
-  height: 0.26em;
-  border: 2px solid #3bf63b;
-  border-left: 0;
-  border-bottom: 0;
-  box-shadow: 0 0 6px rgba(59, 246, 59, 0.45);
+.clawHeadStroke {
+  fill: #081108;
+  stroke: #3bf63b;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 5px rgba(59, 246, 59, 0.65));
 }
 
 .fingerH1,
 .fingerH2,
 .fingerV1,
 .fingerV2 {
+  stroke: #3bf63b;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  transform-box: fill-box;
   will-change: rotate;
 }
 
 .fingerH1 {
-  top: 50%;
-  right: 0.17em;
   transform-origin: 100% 100%;
-  transform: translateY(-120%) rotate(-42deg);
+  transform: rotate(0deg);
   animation: letGoFH1 9s cubic-bezier(.22,.61,.36,1) infinite both;
 }
 
 .fingerH2 {
-  top: 50%;
-  right: 0.17em;
   transform-origin: 100% 0%;
-  transform: translateY(20%) rotate(132deg);
+  transform: rotate(0deg);
   animation: letGoFH2 9s cubic-bezier(.22,.61,.36,1) infinite both;
 }
 
 .fingerV1 {
-  left: 50%;
-  bottom: 0.16em;
   transform-origin: 100% 100%;
-  transform: translate(-110%, 0) rotate(48deg);
+  transform: rotate(0deg);
   animation: letGoFV1 9s cubic-bezier(.22,.61,.36,1) infinite both;
   animation-delay: 0.45s;
 }
 
 .fingerV2 {
-  left: 50%;
-  bottom: 0.16em;
   transform-origin: 0% 100%;
-  transform: translate(10%, 0) rotate(222deg);
+  transform: rotate(0deg);
   animation: letGoFV2 9s cubic-bezier(.22,.61,.36,1) infinite both;
   animation-delay: 0.45s;
 }
@@ -589,49 +551,53 @@
 }
 
 @keyframes clawHSlide {
-  0%        { transform: translateX(-110%); }
-  18%, 32%  { transform: translateX(0); }
-  50%, 100% { transform: translateX(-110%); }
+  0%, 78%   { transform: translateX(0); }
+  88%, 93%  { transform: translateX(-112%); }
+  100%      { transform: translateX(0); }
 }
 
 @keyframes clawVSlide {
-  0%        { transform: translateY(-110%); }
-  18%, 32%  { transform: translateY(0); }
-  50%, 100% { transform: translateY(-110%); }
+  0%, 78%   { transform: translateY(0); }
+  88%, 93%  { transform: translateY(-112%); }
+  100%      { transform: translateY(0); }
 }
 
 @keyframes markCrossbarPlace {
-  0%, 22%   { opacity: 0; transform: scaleX(0); }
-  28%       { opacity: 1; transform: scaleX(1.18); }
-  34%, 86%  { opacity: 1; transform: scaleX(1); }
-  94%, 100% { opacity: 0; transform: scaleX(0); }
+  0%, 80%   { opacity: 1; transform: scaleX(1); }
+  86%, 94%  { opacity: 0; transform: scaleX(0); }
+  98%       { opacity: 1; transform: scaleX(1.14); }
+  100%      { opacity: 1; transform: scaleX(1); }
 }
 
 @keyframes markDotPlace {
-  0%, 22%   { opacity: 0; transform: scale(0); }
-  28%       { opacity: 1; transform: scale(1.25); }
-  34%, 86%  { opacity: 1; transform: scale(1); }
-  94%, 100% { opacity: 0; transform: scale(0); }
+  0%, 80%   { opacity: 1; transform: scale(1); }
+  86%, 94%  { opacity: 0; transform: scale(0); }
+  98%       { opacity: 1; transform: scale(1.2); }
+  100%      { opacity: 1; transform: scale(1); }
 }
 
 @keyframes letGoFH1 {
-  0%, 28% { transform: translateY(-120%) rotate(-42deg); }
-  36%, 100% { transform: translateY(-120%) rotate(-74deg); }
+  0%, 78% { transform: rotate(0deg); }
+  88%, 93% { transform: rotate(-24deg); }
+  100% { transform: rotate(0deg); }
 }
 
 @keyframes letGoFH2 {
-  0%, 28% { transform: translateY(20%) rotate(132deg); }
-  36%, 100% { transform: translateY(20%) rotate(164deg); }
+  0%, 78% { transform: rotate(0deg); }
+  88%, 93% { transform: rotate(24deg); }
+  100% { transform: rotate(0deg); }
 }
 
 @keyframes letGoFV1 {
-  0%, 28% { transform: translate(-110%, 0) rotate(48deg); }
-  36%, 100% { transform: translate(-120%, -4%) rotate(18deg); }
+  0%, 78% { transform: rotate(0deg); }
+  88%, 93% { transform: rotate(-24deg); }
+  100% { transform: rotate(0deg); }
 }
 
 @keyframes letGoFV2 {
-  0%, 28% { transform: translate(10%, 0) rotate(222deg); }
-  36%, 100% { transform: translate(20%, -4%) rotate(252deg); }
+  0%, 78% { transform: rotate(0deg); }
+  88%, 93% { transform: rotate(24deg); }
+  100% { transform: rotate(0deg); }
 }
 
 /* ========================================
