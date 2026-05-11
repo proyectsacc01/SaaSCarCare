@@ -381,19 +381,10 @@ export default function LandingPage() {
                   <span className={styles.fCrossbarMask} />
                   <span className={styles.fCrossbarMark} />
                   <span className={styles.miniClawH}>
-                    <svg viewBox="0 0 1000 100" preserveAspectRatio="xMidYMid meet">
-                      <defs>
-                        <linearGradient id="cableHGrad" x1="0" y1="0" x2="1" y2="0">
-                          <stop offset="0" stopColor="#3bf63b" stopOpacity="0" />
-                          <stop offset="0.5" stopColor="#3bf63b" stopOpacity="1" />
-                          <stop offset="1" stopColor="#3bf63b" stopOpacity="1" />
-                        </linearGradient>
-                      </defs>
-                      <line x1="0" y1="50" x2="940" y2="50" stroke="url(#cableHGrad)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
-                      <circle cx="950" cy="50" r="14" fill="#0a0f0a" stroke="#3bf63b" strokeWidth="4" vectorEffect="non-scaling-stroke" />
-                      <path className={styles.fingerH1} d="M998 36 L975 22 L955 36" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                      <path className={styles.fingerH2} d="M998 64 L975 78 L955 64" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                    </svg>
+                    <span className={styles.clawCableH} />
+                    <span className={styles.clawHeadH} />
+                    <span className={`${styles.clawFinger} ${styles.fingerH1}`} />
+                    <span className={`${styles.clawFinger} ${styles.fingerH2}`} />
                   </span>
                 </span>
                 <span className={styles.srOnly}>f</span>
@@ -405,19 +396,10 @@ export default function LandingPage() {
                   {'ı'}
                   <span className={styles.iDotMark} />
                   <span className={styles.miniClawV}>
-                    <svg viewBox="0 0 100 1000" preserveAspectRatio="xMidYMid meet">
-                      <defs>
-                        <linearGradient id="cableVGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0" stopColor="#3bf63b" stopOpacity="0" />
-                          <stop offset="0.5" stopColor="#3bf63b" stopOpacity="1" />
-                          <stop offset="1" stopColor="#3bf63b" stopOpacity="1" />
-                        </linearGradient>
-                      </defs>
-                      <line x1="50" y1="0" x2="50" y2="940" stroke="url(#cableVGrad)" strokeWidth="5" vectorEffect="non-scaling-stroke" />
-                      <circle cx="50" cy="950" r="14" fill="#0a0f0a" stroke="#3bf63b" strokeWidth="4" vectorEffect="non-scaling-stroke" />
-                      <path className={styles.fingerV1} d="M64 998 L78 975 L64 955" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                      <path className={styles.fingerV2} d="M36 998 L22 975 L36 955" stroke="#3bf63b" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                    </svg>
+                    <span className={styles.clawCableV} />
+                    <span className={styles.clawHeadV} />
+                    <span className={`${styles.clawFinger} ${styles.fingerV1}`} />
+                    <span className={`${styles.clawFinger} ${styles.fingerV2}`} />
                   </span>
                 </span>
                 <span className={styles.srOnly}>i</span>
