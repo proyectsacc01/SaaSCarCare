@@ -230,6 +230,11 @@ export default function ConductorDashboard() {
     const [selectedHistoryRoute, setSelectedHistoryRoute] = useState<Ruta | null>(null);
     const [completingRoute, setCompletingRoute] = useState(false);
     const trackedRouteIdRef = useRef<string | null>(null);
+    // Anti-spam de toasts cuando el polling de rutas falla por red intermitente.
+    // Solo notificamos al conductor en la PRIMERA falla y silenciamos los reintentos
+    // sucesivos. Después de 60s sin éxito, volvemos a notificar (por si sigue caído).
+    const consecutiveRoutesFailuresRef = useRef(0);
+    const lastRoutesErrorToastAtRef = useRef(0);
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -414,7 +419,9 @@ export default function ConductorDashboard() {
         try {
             setError(null);
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            // Timeout amplio (15s) — los conductores suelen estar en redes móviles
+            // y un timeout corto solo genera falsos positivos que disparaban el toast.
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             const res = await fetch(`${API_URL}/api/rutas`, {
                 signal: controller.signal,
                 mode: 'cors',
@@ -446,6 +453,14 @@ export default function ConductorDashboard() {
                 setRutas(activas);
                 setRutasCompletadas(completadas);
                 setLoading(false);
+
+                // Volvió la conexión: reseteamos contador y descartamos cualquier
+                // toast de error pendiente para no asustar al conductor.
+                if (consecutiveRoutesFailuresRef.current > 0) {
+                    consecutiveRoutesFailuresRef.current = 0;
+                    lastRoutesErrorToastAtRef.current = 0;
+                    toast.dismiss('routes-network-error');
+                }
             } else {
                 if (res.status === 401 || res.status === 403) {
                     toast.error("Sesión expirada");
@@ -460,7 +475,22 @@ export default function ConductorDashboard() {
                 ? "Tiempo de espera agotado — el servidor no responde"
                 : `Error de conexión: ${getErrorMessage(err, 'Error desconocido')}`;
             setError(errorMsg);
-            toast.error(errorMsg);
+
+            // Anti-spam: solo notificamos al conductor en la PRIMERA falla o
+            // si pasaron >60s desde el último aviso. El estado de error en UI
+            // sigue marcado vía setError(), así que el conductor puede ver el
+            // problema en la pantalla principal sin que le aparezcan toasts cada
+            // 10 segundos durante una zona de mala cobertura.
+            consecutiveRoutesFailuresRef.current += 1;
+            const now = Date.now();
+            const sinceLastToast = now - lastRoutesErrorToastAtRef.current;
+            const shouldNotify =
+                consecutiveRoutesFailuresRef.current === 1 ||
+                sinceLastToast > 60_000;
+            if (shouldNotify) {
+                toast.error(errorMsg, { id: 'routes-network-error', duration: 5000 });
+                lastRoutesErrorToastAtRef.current = now;
+            }
         } finally {
             setLoading(false);
         }
@@ -500,7 +530,22 @@ export default function ConductorDashboard() {
         cargarRutas();
         cargarVehiculos();
         cargarRepostajes();
-        const interval = setInterval(cargarRutas, 10000);
+        // El polling se pausa cuando la pestaña/app está oculta para no agotar
+        // batería ni acumular fallos de red en background. Al volver a primer
+        // plano, refrescamos rutas de inmediato.
+        const tickRutas = () => {
+            if (typeof document !== 'undefined' && document.hidden) return;
+            cargarRutas();
+        };
+        const interval = setInterval(tickRutas, 10000);
+        const onVisibility = () => {
+            if (typeof document !== 'undefined' && !document.hidden) {
+                cargarRutas();
+            }
+        };
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', onVisibility);
+        }
 
         const cachedPhone = readLocalUrgentPhone();
         if (cachedPhone) {
@@ -532,6 +577,9 @@ export default function ConductorDashboard() {
             clearInterval(interval);
             clearInterval(phoneInterval);
             window.removeEventListener('storage', onStorage);
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('visibilitychange', onVisibility);
+            }
             stopBrowserGPS();
         };
     }, []);
