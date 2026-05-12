@@ -1136,7 +1136,7 @@ export default function ConductorDashboard() {
                 </div>
                 <div style={{ textAlign: 'center' }}>
                     <p style={{ color: '#e5e7eb', fontSize: '0.9rem', margin: '0 0 0.25rem', fontWeight: '700', letterSpacing: '0.2px' }}>CarCare Driver</p>
-                    <p style={{ color: '#4b5563', fontSize: '0.68rem', margin: 0 }}>Conectando con la flota...</p>
+                    <p style={{ color: '#4b5563', fontSize: '0.68rem', margin: 0 }}>{t.conductor.connectingToFlota}</p>
                 </div>
             </div>
         </BackgroundMeteors>
@@ -1147,14 +1147,14 @@ export default function ConductorDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem', textAlign: 'center', gap: '1.2rem' }}>
                 <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>📡</div>
                 <div>
-                    <h2 style={{ fontSize: '1.1rem', color: '#ef4444', margin: '0 0 0.4rem', fontWeight: '800' }}>Sin conexión</h2>
+                    <h2 style={{ fontSize: '1.1rem', color: '#ef4444', margin: '0 0 0.4rem', fontWeight: '800' }}>{t.conductor.noConnection}</h2>
                     <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0, maxWidth: '280px', lineHeight: 1.5 }}>{error}</p>
                 </div>
                 <button
                     onClick={() => { setLoading(true); setError(null); cargarRutas(); }}
                     style={{ padding: '0.9rem 2.5rem', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', color: '#000', border: 'none', borderRadius: '14px', fontWeight: '800', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 6px 20px rgba(59,246,59,0.3)', transition: 'transform 0.2s', letterSpacing: '0.3px' }}
                 >
-                    Reintentar
+                    {t.conductor.retry}
                 </button>
             </div>
         </BackgroundMeteors>
@@ -1302,9 +1302,9 @@ export default function ConductorDashboard() {
                             {/* STATS STRIP */}
                             <div className="driver-home-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.7rem' }}>
                                 {[
-                                    { label: `Hoy · ${completadasHoy.length}`, value: kmHoyReales > 0 ? `${kmHoyReales.toFixed(0)}` : '0', sub: 'km', color: '#3bf63b' },
-                                    { label: 'Pendientes', value: rutasPendientes.length, sub: 'rutas', color: '#f59e0b' },
-                                    { label: 'Total', value: rutasCompletadas.length, sub: 'completadas', color: '#60a5fa' },
+                                    { label: `${t.conductor.today} · ${completadasHoy.length}`, value: kmHoyReales > 0 ? `${kmHoyReales.toFixed(0)}` : '0', sub: 'km', color: '#3bf63b' },
+                                    { label: t.conductor.pendingRoutes, value: rutasPendientes.length, sub: t.conductor.routePlural, color: '#f59e0b' },
+                                    { label: t.common.total, value: rutasCompletadas.length, sub: t.conductor.completed, color: '#60a5fa' },
                                 ].map((s, i) => (
                                     <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.9rem 0.6rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
                                         <div style={{ position: 'absolute', top: '-8px', right: '-8px', width: '48px', height: '48px', background: `radial-gradient(circle, ${s.color}1f 0%, transparent 70%)` }} />
@@ -1359,11 +1359,11 @@ export default function ConductorDashboard() {
                                             </div>
                                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden', gap: '12px' }}>
                                                 <div>
-                                                    <p style={{ fontSize: '0.6rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Origen</p>
+                                                    <p style={{ fontSize: '0.6rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>{t.conductor.origin}</p>
                                                     <p style={{ fontSize: '1rem', fontWeight: '800', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#fff' }}>{rutaActiva.origen}</p>
                                                 </div>
                                                 <div>
-                                                    <p style={{ fontSize: '0.6rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>Destino</p>
+                                                    <p style={{ fontSize: '0.6rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>{t.conductor.destination}</p>
                                                     <p style={{ fontSize: '1rem', fontWeight: '800', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#ef4444' }}>{rutaActiva.destino}</p>
                                                 </div>
                                             </div>
@@ -1376,19 +1376,19 @@ export default function ConductorDashboard() {
                                                     {liveGps ? Math.round(liveGps.speed) : '—'}
                                                     <span style={{ fontSize: '0.5rem', color: '#6b7280', marginLeft: '2px', fontWeight: 600 }}>km/h</span>
                                                 </div>
-                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Velocidad</div>
+                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>{t.conductor.speed}</div>
                                             </div>
                                             <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
                                                 <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
                                                     {getRouteTotalKm(rutaActiva).toFixed(1)}<span style={{ fontSize: '0.55rem', color: '#6b7280', marginLeft: '2px' }}>km</span>
                                                 </div>
-                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Distancia</div>
+                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>{t.conductor.distance}</div>
                                             </div>
                                             <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '0.55rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.04)' }}>
                                                 <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#e5e7eb', lineHeight: 1.2 }}>
                                                     {formatElapsed(elapsedSeconds)}
                                                 </div>
-                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>Tiempo</div>
+                                                <div style={{ fontSize: '0.5rem', color: '#4b5563', textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.3px' }}>{t.conductor.time}</div>
                                             </div>
                                         </div>
 
@@ -1438,7 +1438,7 @@ export default function ConductorDashboard() {
                                 ) : (
                                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '2px dashed rgba(255,255,255,0.06)', borderRadius: '18px', padding: '2.5rem 2rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', filter: 'grayscale(1)', opacity: 0.35 }}>🛣️</div>
-                                        <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: '0 0 0.3rem', fontWeight: '600' }}>Sin trayecto activo</p>
+                                        <p style={{ color: '#4b5563', fontSize: '0.9rem', margin: '0 0 0.3rem', fontWeight: '600' }}>{t.conductor.noActiveTrip}</p>
                                         <p style={{ color: '#374151', fontSize: '0.75rem', margin: 0 }}>Inicia un servicio desde Próximos</p>
                                     </div>
                                 )}
@@ -1521,14 +1521,14 @@ export default function ConductorDashboard() {
                                             <div style={{ marginTop: '0.75rem', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '16px', padding: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                                 {/* Selector de vehículo — muestra matrícula + marca modelo */}
                                                 <div>
-                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Vehículo</label>
+                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>{t.conductor.vehicle}</label>
                                                     {hayVehiculos ? (
                                                         <select
                                                             value={refuelData.vehiculoId}
                                                             onChange={e => setRefuelData(d => ({ ...d, vehiculoId: e.target.value }))}
                                                             style={{ width: '100%', padding: '0.7rem 0.6rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: '#fff', fontSize: '0.85rem', appearance: 'none', WebkitAppearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.7rem center', paddingRight: '2rem', cursor: 'pointer', transition: 'border-color 0.2s' }}
                                                         >
-                                                            <option value="">Selecciona un vehículo</option>
+                                                            <option value="">{t.conductor.selectVehiclePlaceholder}</option>
                                                             {vehiculos.length > 0 && (
                                                                 <optgroup label="Flota disponible">
                                                                     {vehiculos.map(v => (
@@ -1578,7 +1578,7 @@ export default function ConductorDashboard() {
 
                                                 <div className="driver-refuel-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                                                     <div>
-                                                        <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Litros</label>
+                                                        <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>{t.conductor.liters}</label>
                                                         <input type="number" step="0.1" min="0.1" placeholder="45.0"
                                                             value={refuelData.litros}
                                                             onChange={e => setRefuelData(d => ({ ...d, litros: e.target.value }))}
@@ -1601,7 +1601,7 @@ export default function ConductorDashboard() {
                                                 )}
 
                                                 <div>
-                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Km del vehículo <span style={{ color: '#374151' }}>(opcional)</span></label>
+                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>{t.conductor.kmVehicle} <span style={{ color: '#374151' }}>({t.common.optional})</span></label>
                                                     <input type="number" min="0" placeholder="125000"
                                                         value={refuelData.kmActual}
                                                         onChange={e => setRefuelData(d => ({ ...d, kmActual: e.target.value }))}
@@ -1609,7 +1609,7 @@ export default function ConductorDashboard() {
                                                 </div>
 
                                                 <div>
-                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>Estación <span style={{ color: '#374151' }}>(opcional)</span></label>
+                                                    <label style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '0.4rem' }}>{t.conductor.station} <span style={{ color: '#374151' }}>({t.common.optional})</span></label>
                                                     <input type="text" placeholder="Ej: Repsol Autovía A-3"
                                                         value={refuelData.estacion}
                                                         onChange={e => setRefuelData(d => ({ ...d, estacion: e.target.value }))}
@@ -1715,11 +1715,11 @@ export default function ConductorDashboard() {
                             <div className="driver-history-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.7rem' }}>
                                 <div style={{ background: 'rgba(59,246,59,0.06)', border: '1px solid rgba(59,246,59,0.15)', borderRadius: '14px', padding: '0.9rem', textAlign: 'center' }}>
                                     <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#3bf63b', lineHeight: 1 }}>{rutasHistorialFiltradas.length}</div>
-                                    <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>Rutas</div>
+                                    <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>{t.conductor.routes}</div>
                                 </div>
                                 <div style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: '14px', padding: '0.9rem', textAlign: 'center' }}>
                                     <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#60a5fa', lineHeight: 1 }}>{kmTotalesPeriodo.toFixed(0)}</div>
-                                    <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>Km totales</div>
+                                    <div style={{ fontSize: '0.55rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.3rem' }}>{t.conductor.totalKm}</div>
                                 </div>
                             </div>
 
@@ -1802,7 +1802,7 @@ export default function ConductorDashboard() {
                                     ).map(([dia, items]) => (
                                         <div key={dia}>
                                             <div style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700, marginBottom: '0.5rem', paddingLeft: '0.2rem' }}>
-                                                {dia} <span style={{ color: '#374151', fontWeight: 500 }}>· {items.length} {items.length === 1 ? 'ruta' : 'rutas'}</span>
+                                                {dia} <span style={{ color: '#374151', fontWeight: 500 }}>· {items.length} {items.length === 1 ? t.conductor.routeSingular : t.conductor.routePlural}</span>
                                             </div>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                                                 {items.map(r => (
@@ -1984,7 +1984,7 @@ export default function ConductorDashboard() {
 
                             {/* Info */}
                             <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1rem', overflow: 'hidden' }}>
-                                <h3 style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.75rem', fontWeight: '700' }}>Información</h3>
+                                <h3 style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.75rem', fontWeight: '700' }}>{t.conductor.information}</h3>
                                 {[
                                     { label: 'Nombre', value: driverUser?.nombre || '—' },
                                     { label: 'Email', value: driverUser?.email || '—' },
@@ -2002,15 +2002,15 @@ export default function ConductorDashboard() {
                             <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showEmpresaForm ? '0.75rem' : 0 }}>
                                     <div>
-                                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>Empresa vinculada</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>{t.conductor.linkedCompany}</div>
                                         <div style={{ fontSize: '0.85rem', fontWeight: '700', color: driverUser?.nombreEmpresa ? '#e5e7eb' : '#4b5563', marginTop: '2px' }}>
-                                            {driverUser?.nombreEmpresa || 'Sin empresa'}
+                                            {driverUser?.nombreEmpresa || t.conductor.noCompany}
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => setShowEmpresaForm(v => !v)}
                                         style={{ padding: '0.35rem 0.75rem', background: 'rgba(59,246,59,0.08)', border: '1px solid rgba(59,246,59,0.2)', borderRadius: '8px', color: '#3bf63b', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}
-                                    >{showEmpresaForm ? 'Cancelar' : 'Cambiar'}</button>
+                                    >{showEmpresaForm ? t.common.cancel : t.conductor.change}</button>
                                 </div>
                                 {showEmpresaForm && (
                                     <form className="driver-company-form" onSubmit={cambiarEmpresa} style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2057,9 +2057,9 @@ export default function ConductorDashboard() {
                                     },
 
                                     {
-                                        icon: '🔄', label: 'Recargar datos',
-                                        sub: 'Forzar sincronización con la central',
-                                        action: () => { setLoading(true); cargarRutas(); toast.success('Sincronizando...'); },
+                                        icon: '🔄', label: t.conductor.reloadData,
+                                        sub: t.conductor.forceSyncCentral,
+                                        action: () => { setLoading(true); cargarRutas(); toast.success(t.conductor.syncing); },
                                     },
                                 ].map((row, i, arr) => (
                                     <button
@@ -2120,16 +2120,16 @@ export default function ConductorDashboard() {
                     boxShadow: '0 -4px 14px -8px rgba(0,0,0,0.6)'
                 }}>
                     {([
-                        { id: 'inicio', label: 'Inicio', icon: (a: boolean) => (
+                        { id: 'inicio', label: t.conductor.navHome, icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill={a ? '#3bf63b' : 'none'} stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                         )},
-                        { id: 'historial', label: 'Historial', icon: (a: boolean) => (
+                        { id: 'historial', label: t.conductor.navHistory, icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                         )},
-                        { id: 'chat', label: 'Chat', icon: (a: boolean) => (
+                        { id: 'chat', label: t.conductor.navChat, icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill={a ? 'rgba(59,246,59,0.15)' : 'none'} stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                         )},
-                        { id: 'perfil', label: 'Perfil', icon: (a: boolean) => (
+                        { id: 'perfil', label: t.conductor.navProfile, icon: (a: boolean) => (
                             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={a ? '#3bf63b' : '#4b5563'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         )},
                     ] satisfies Array<{ id: DriverTab; label: string; icon: (active: boolean) => ReactNode }>).map(tab => {
@@ -2473,15 +2473,15 @@ export default function ConductorDashboard() {
                                 <div style={{ background: 'rgba(59,246,59,0.06)', border: '1px solid rgba(59,246,59,0.15)', borderRadius: '14px', padding: '0.95rem' }}>
                                     <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>Km recorridos GPS</div>
                                     <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#3bf63b', lineHeight: 1.1 }}>{routeKm.toFixed(1)} <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>km</span></div>
-                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>Solo cuenta lo recorrido realmente por el conductor</div>
+                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>{t.conductor.onlyDriverCounts}</div>
                                 </div>
                                 <div style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: '14px', padding: '0.95rem' }}>
-                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>Km planificados</div>
+                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>{t.conductor.plannedKm}</div>
                                     <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#60a5fa', lineHeight: 1.1 }}>{plannedKm.toFixed(1)} <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>km</span></div>
-                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>Referencia de la ruta asignada</div>
+                                    <div style={{ fontSize: '0.64rem', color: '#9ca3af', marginTop: '0.35rem' }}>{t.conductor.routeReference}</div>
                                 </div>
                                 <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '14px', padding: '0.95rem' }}>
-                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>Vehículo</div>
+                                    <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '0.25rem' }}>{t.conductor.vehicle}</div>
                                     <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#e5e7eb', lineHeight: 1.2 }}>
                                         {vehicle ? `${vehicle.matricula} · ${vehicle.marca} ${vehicle.modelo}` : `ID ${selectedHistoryRoute.vehiculoId?.slice(-8) || '—'}`}
                                     </div>
@@ -2512,7 +2512,7 @@ export default function ConductorDashboard() {
                                 </div>
 
                                 <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.95rem' }}>
-                                    <div style={{ fontSize: '0.68rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '0.45rem' }}>Registro contado en historial</div>
+                                    <div style={{ fontSize: '0.68rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '0.45rem' }}>{t.conductor.countedInHistory}</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 0.9rem', fontSize: '0.78rem', color: '#cbd5e1' }}>
                                         <span><strong style={{ color: '#fff' }}>Km reales:</strong> {routeKm.toFixed(1)} km</span>
                                         <span><strong style={{ color: '#fff' }}>Km plan:</strong> {plannedKm.toFixed(1)} km</span>
