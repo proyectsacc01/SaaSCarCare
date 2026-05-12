@@ -1306,7 +1306,7 @@ export default function ConductorDashboard() {
                                     { label: t.conductor.pendingRoutes, value: rutasPendientes.length, sub: t.conductor.routePlural, color: '#f59e0b' },
                                     { label: t.common.total, value: rutasCompletadas.length, sub: t.conductor.completed, color: '#60a5fa' },
                                 ].map((s, i) => (
-                                    <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.9rem 0.6rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+                                    <div className="driver-home-stat-card" key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '0.9rem 0.6rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
                                         <div style={{ position: 'absolute', top: '-8px', right: '-8px', width: '48px', height: '48px', background: `radial-gradient(circle, ${s.color}1f 0%, transparent 70%)` }} />
                                         <div style={{ fontSize: '1.6rem', fontWeight: '900', color: s.color, lineHeight: 1 }}>{s.value}</div>
                                         <div style={{ fontSize: '0.5rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: '0.15rem', fontWeight: 600 }}>{s.sub}</div>
@@ -2229,7 +2229,12 @@ export default function ConductorDashboard() {
                     }
                 }
                 @media (max-width: 480px) {
-                    .driver-home-stats,
+                    .driver-home-stats {
+                        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                    }
+                    .driver-home-stat-card:last-child {
+                        grid-column: 1 / -1;
+                    }
                     .driver-active-mini-stats,
                     .driver-active-actions,
                     .driver-history-summary,
