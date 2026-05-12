@@ -2235,10 +2235,12 @@ export default function ConductorDashboard() {
                     .driver-home-stat-card:last-child {
                         grid-column: 1 / -1;
                     }
+                    .driver-profile-stats {
+                        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                    }
                     .driver-active-mini-stats,
                     .driver-active-actions,
-                    .driver-history-summary,
-                    .driver-profile-stats {
+                    .driver-history-summary {
                         grid-template-columns: 1fr !important;
                     }
                     .driver-history-filters {
