@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CarCare Tracker">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#3bf63b"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="#0b0f14"/>
+  <rect x="7" y="7" width="50" height="50" rx="14" fill="url(#bg)" opacity="0.15"/>
+  <path d="M20 38l3-9c.7-2.1 2.7-3.5 4.9-3.5h8.2c2.2 0 4.2 1.4 4.9 3.5l3 9" fill="none" stroke="#3bf63b" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 38h28a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1.5a2.5 2.5 0 0 1-5 0h-15a2.5 2.5 0 0 1-5 0H18a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2Z" fill="none" stroke="#d9ffe0" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24.5" cy="42.5" r="1.8" fill="#3bf63b"/>
+  <circle cx="39.5" cy="42.5" r="1.8" fill="#3bf63b"/>
+  <path d="M25.5 31h13" stroke="#d9ffe0" stroke-width="3" stroke-linecap="round"/>
+</svg>
