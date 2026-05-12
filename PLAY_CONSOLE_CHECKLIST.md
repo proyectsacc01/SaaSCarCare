@@ -72,7 +72,7 @@ El AAB sale en `android/app/build/outputs/bundle/release/app-release.aab`. Ese e
 | Descripción larga | Ver plantilla abajo. |
 | Categoría | Productividad / Negocios |
 | Idioma principal | Español |
-| Email de contacto | `elenarodriguez0097@gmail.com` |
+| Email de contacto | `volitancrooss@gmail.com` |
 | Política de privacidad (URL) | `https://<TU_FRONTEND>/privacy` |
 
 **Plantilla descripción larga:**
@@ -118,7 +118,7 @@ Datos que recopilás → declarar:
 
 Marcá:
 - ✅ Datos cifrados en tránsito
-- ✅ Usuario puede solicitar borrado (escribir a `elenarodriguez0097@gmail.com`)
+- ✅ Usuario puede solicitar borrado (escribir a `volitancrooss@gmail.com`)
 
 ### 3.4 Content rating
 
