@@ -3,18 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
+import BrandIcon from "@/componentes/BrandIcon";
 import styles from "../../login/login.module.css";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
+import { useTranslation } from "@/lib/i18n";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://saascarcare-production.up.railway.app";
 
-const CarIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.6-1.1-1-1.9-1H5c-.8 0-1.4.4-1.9 1L1 10l-.6 1c-.6.9-.4 2.1.5 2.6.2.1.5.2.8.2H3v1c0 .6.4 1 1 1h1" />
-        <circle cx="7" cy="17" r="2" />
-        <circle cx="17" cy="17" r="2" />
-    </svg>
-);
+const CarIcon = () => <BrandIcon size={32} />;
 
 const GoogleIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
@@ -27,17 +23,18 @@ const GoogleIcon = () => (
 
 const GOOGLE_REDIRECT_URI = "https://saa-s-car-care-85l6.vercel.app/conductor/login";
 
-function GoogleButton({ onSuccess, disabled, label }: {
+function GoogleButton({ onSuccess, disabled, label, errorLabel }: {
     onSuccess: (resp: { access_token: string }) => void;
     disabled: boolean;
     label: string;
+    errorLabel: string;
 }) {
     const isAndroid = typeof window !== "undefined" && !!(window as any).AndroidTracker;
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
     const login = useGoogleLogin({
         onSuccess,
-        onError: () => toast.error("Error al iniciar sesión con Google"),
+        onError: () => toast.error(errorLabel),
     });
 
     const handleClick = () => {
@@ -72,6 +69,7 @@ function GoogleButton({ onSuccess, disabled, label }: {
 }
 
 function DriverLoginInner() {
+    const t = useTranslation();
     const [isRegistering, setIsRegistering] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -101,7 +99,7 @@ function DriverLoginInner() {
             return res;
         } catch (err: any) {
             clearTimeout(timeout);
-            if (err.name === 'AbortError') throw new Error('El servidor está tardando en responder. Intenta de nuevo.');
+            if (err.name === 'AbortError') throw new Error(t.auth.connectionError);
             throw err;
         }
     };
@@ -128,7 +126,7 @@ function DriverLoginInner() {
                 localStorage.setItem("user", JSON.stringify(data));
                 if (data.token) localStorage.setItem("token", data.token);
                 if (data.picture) localStorage.setItem("profilePhoto", data.picture);
-                toast.success(`¡Bienvenido, ${data.nombre}!`);
+                toast.success(t.conductor.welcomeDriver.replace('{name}', data.nombre));
                 window.dispatchEvent(new Event("storage"));
                 window.location.href = "/conductor";
             } else if (data.error === "NEEDS_EMPRESA_EMAIL") {
@@ -136,12 +134,12 @@ function DriverLoginInner() {
                 setPendingToken(token);
                 setPendingTokenIsId(!!tokenResponse.id_token);
                 setNeedsEmpresaEmail(true);
-                toast.info("Introduce el email de tu empresa para vincularte a la flota.");
+                toast.info(t.conductor.errorGoogleNeedsEmail);
             } else {
-                toast.error(data.message || data.error || "Error al iniciar sesión con Google");
+                toast.error(data.message || data.error || t.auth.googleError);
             }
         } catch (error) {
-            toast.error("Error de conexión con el servidor");
+            toast.error(t.auth.connectionError);
         } finally {
             setLoading(false);
         }
@@ -203,14 +201,14 @@ function DriverLoginInner() {
             if (res.ok) {
                 localStorage.setItem("user", JSON.stringify(data));
                 if (data.token) localStorage.setItem("token", data.token);
-                toast.success(`¡Bienvenido, ${data.nombre}!`);
+                toast.success(t.conductor.welcomeDriver.replace('{name}', data.nombre));
                 window.dispatchEvent(new Event("storage"));
                 window.location.href = "/conductor";
             } else {
-                toast.error(data.error || "Error al iniciar sesión");
+                toast.error(data.error || t.auth.loginError);
             }
         } catch (error: any) {
-            toast.error(error.message || "Error de conexión");
+            toast.error(error.message || t.auth.connectionError);
         } finally {
             setLoading(false);
         }
@@ -219,7 +217,7 @@ function DriverLoginInner() {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         if (registerData.password.length < 6) {
-            toast.error("La contraseña debe tener mínimo 6 caracteres");
+            toast.error(t.auth.passwordMinLength);
             return;
         }
         setLoading(true);
@@ -236,15 +234,15 @@ function DriverLoginInner() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success("✅ ¡Cuenta creada! Ahora inicia sesión.");
+                toast.success(t.auth.accountCreated);
                 setIsRegistering(false);
                 setLoginData({ email: registerData.email.trim().toLowerCase(), password: "" });
                 setRegisterData({ nombre: "", email: "", password: "", empresaEmail: "" });
             } else {
-                toast.error(data.error || "Error al registrarse");
+                toast.error(data.error || t.auth.registerError);
             }
         } catch (error: any) {
-            toast.error(error.message || "Error de conexión");
+            toast.error(error.message || t.auth.connectionError);
         } finally {
             setLoading(false);
         }
@@ -266,14 +264,14 @@ function DriverLoginInner() {
                 <div className={styles.formPanel}>
                     <div className={styles.formContent}>
                         <div className={styles.header}>
-                            <h2 className={styles.title}>Vincular a la flota</h2>
-                            <p className={styles.subtitle}>Introduce el email de tu empresa para completar el registro.</p>
+                            <h2 className={styles.title}>{t.conductor.linkToFleet}</h2>
+                            <p className={styles.subtitle}>{t.conductor.enterCompanyEmail}</p>
                         </div>
                         <form onSubmit={handleConfirmEmpresaEmail} className={styles.form}>
                             <div className={styles.inputGroup}>
-                                <label style={{ color: '#3bf63b' }}>Email de la Empresa</label>
+                                <label style={{ color: '#3bf63b' }}>{t.conductor.companyEmail}</label>
                                 <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
-                                    Pídeselo a tu gestor de flota.
+                                    {t.conductor.askFleetManagerShort}
                                 </p>
                                 <input
                                     type="email"
@@ -287,14 +285,14 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <button type="submit" className={styles.submitBtn} disabled={loading}>
-                                {loading ? "Vinculando..." : "Unirse a la Flota"}
+                                {loading ? t.conductor.linking : t.conductor.joinFleet}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => { setNeedsEmpresaEmail(false); setPendingToken(null); }}
                                 style={{ width: '100%', marginTop: '0.75rem', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.85rem' }}
                             >
-                                Cancelar
+                                {t.common.cancel}
                             </button>
                         </form>
                     </div>
@@ -316,14 +314,14 @@ function DriverLoginInner() {
                         <span>CarCare Driver</span>
                     </div>
                     <div className={styles.quoteBox}>
-                        <h1>Tu ruta, optimizada.</h1>
-                        <p>Únete a la flota de tu empresa y recibe tus rutas en tiempo real.</p>
+                        <h1>{t.conductor.heroTitle}</h1>
+                        <p>{t.conductor.heroSubtitle}</p>
                         <div style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                            <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#3bf63b' }}>¿Cómo funciona?</h3>
+                            <h3 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#3bf63b' }}>{t.conductor.howItWorks}</h3>
                             <ul style={{ fontSize: '0.8rem', color: '#94a3b8', paddingLeft: '1.2rem', lineHeight: '1.6' }}>
-                                <li>Pide el email de administrador a tu jefe.</li>
-                                <li>Regístrate usando ese email para vincularte.</li>
-                                <li>¡Recibe rutas al instante!</li>
+                                <li>{t.conductor.step1}</li>
+                                <li>{t.conductor.step2}</li>
+                                <li>{t.conductor.step3}</li>
                             </ul>
                         </div>
                     </div>
@@ -335,15 +333,15 @@ function DriverLoginInner() {
             <div className={styles.formPanel}>
                 <div className={styles.formContent}>
                     <div className={styles.header}>
-                        <h2 className={styles.title}>{isRegistering ? 'Alta de Conductor' : 'Acceso Conductor'}</h2>
+                        <h2 className={styles.title}>{isRegistering ? t.conductor.driverSignup : t.conductor.driverLogin}</h2>
                         <p className={styles.subtitle}>
-                            {isRegistering ? "¿Ya tienes cuenta? " : "¿Nuevo en la flota? "}
+                            {isRegistering ? `${t.conductor.alreadyHaveAccount} ` : `${t.conductor.newInFleet} `}
                             <button
                                 onClick={() => setIsRegistering(!isRegistering)}
                                 style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: 'bold' }}
                                 disabled={loading}
                             >
-                                {isRegistering ? "Inicia sesión aquí" : "Regístrate aquí"}
+                                {isRegistering ? t.conductor.loginHere : t.conductor.registerHere}
                             </button>
                         </p>
                     </div>
@@ -352,13 +350,14 @@ function DriverLoginInner() {
                     {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
                         <>
                             <GoogleButton
-                                onSuccess={(t) => handleGoogleSuccess(t)}
+                                onSuccess={(token) => handleGoogleSuccess(token)}
                                 disabled={loading}
-                                label={isRegistering ? "Registrarse con Google" : "Continuar con Google"}
+                                label={isRegistering ? t.auth.registerWithGoogle : t.auth.continueWithGoogle}
+                                errorLabel={t.auth.googleError}
                             />
 
                             <div className={styles.oauthDivider}>
-                                <span>o continuar con email</span>
+                                <span>{t.conductor.orContinueWithEmail}</span>
                             </div>
                         </>
                     )}
@@ -366,7 +365,7 @@ function DriverLoginInner() {
                     {!isRegistering ? (
                         <form onSubmit={handleLogin} className={styles.form}>
                             <div className={styles.inputGroup}>
-                                <label>Tu Email</label>
+                                <label>{t.conductor.yourEmail}</label>
                                 <input
                                     type="email"
                                     required
@@ -377,7 +376,7 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <div className={styles.inputGroup}>
-                                <label>Contraseña</label>
+                                <label>{t.auth.password}</label>
                                 <input
                                     type="password"
                                     required
@@ -388,13 +387,13 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <button type="submit" className={styles.submitBtn} disabled={loading}>
-                                {loading ? "Conectando..." : "Iniciar Turno"}
+                                {loading ? t.conductor.connecting : t.conductor.startShift}
                             </button>
                         </form>
                     ) : (
                         <form onSubmit={handleRegister} className={styles.form}>
                             <div className={styles.inputGroup}>
-                                <label>Nombre Completo</label>
+                                <label>{t.auth.fullName}</label>
                                 <input
                                     type="text"
                                     required
@@ -405,7 +404,7 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <div className={styles.inputGroup}>
-                                <label>Tu Email</label>
+                                <label>{t.conductor.yourEmail}</label>
                                 <input
                                     type="email"
                                     required
@@ -416,7 +415,7 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <div className={styles.inputGroup}>
-                                <label>Contraseña (mín. 6 caracteres)</label>
+                                <label>{t.auth.password} ({t.auth.minChars})</label>
                                 <input
                                     type="password"
                                     required
@@ -428,9 +427,9 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <div className={styles.inputGroup} style={{ borderTop: '1px solid #334155', paddingTop: '1rem', marginTop: '0.5rem' }}>
-                                <label style={{ color: '#3bf63b' }}>Email de la Empresa</label>
+                                <label style={{ color: '#3bf63b' }}>{t.conductor.companyEmail}</label>
                                 <p style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.5rem' }}>
-                                    Pídeselo a tu gestor para vincularte a la flota.
+                                    {t.conductor.askFleetManager}
                                 </p>
                                 <input
                                     type="email"
@@ -443,14 +442,14 @@ function DriverLoginInner() {
                                 />
                             </div>
                             <button type="submit" className={styles.submitBtn} disabled={loading}>
-                                {loading ? "Registrando..." : "Unirse a la Flota"}
+                                {loading ? t.conductor.registering : t.conductor.joinFleet}
                             </button>
                         </form>
                     )}
 
                     <div className={styles.footerLink} style={{ marginTop: '2rem' }}>
                         <Link href="/login">
-                            ¿Eres Administrador? Accede al Panel de Control
+                            {t.conductor.adminPanel}
                         </Link>
                     </div>
                 </div>
