@@ -235,6 +235,12 @@ export default function ConductorDashboard() {
     // sucesivos. Después de 60s sin éxito, volvemos a notificar (por si sigue caído).
     const consecutiveRoutesFailuresRef = useRef(0);
     const lastRoutesErrorToastAtRef = useRef(0);
+    // Una vez cargadas con éxito las rutas al menos una vez, NUNCA volvemos a
+    // mostrar la pantalla full-screen de "Sin conexión" ni toasts disruptivos por
+    // fallos del polling. La app sigue funcionando con datos en caché y el próximo
+    // tick exitoso los refresca. Esto es lo que pidieron los conductores: que el
+    // error "no se entrometa" durante el uso normal de la app.
+    const hasLoadedRoutesRef = useRef(false);
 
     const getAuthHeaders = (): Record<string, string> => {
         const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -415,12 +421,17 @@ export default function ConductorDashboard() {
         setShowCallDialog({ open: true, reason: kind, phone });
     };
 
-    const cargarRutas = async () => {
+    // `cargarRutas` puede llamarse de tres formas:
+    //   1) Initial load (mount): puede mostrar pantalla "Sin conexión" si falla.
+    //   2) Manual retry / botón: igual que initial load.
+    //   3) Polling automático (cada 10s): NUNCA debe mostrar pantalla de error
+    //      ni toast disruptivo aunque falle — la app sigue con datos en caché.
+    // El parámetro `isPolling` distingue el caso 3.
+    const cargarRutas = async (isPolling = false) => {
         try {
-            setError(null);
             const controller = new AbortController();
             // Timeout amplio (15s) — los conductores suelen estar en redes móviles
-            // y un timeout corto solo genera falsos positivos que disparaban el toast.
+            // y un timeout corto solo genera falsos positivos.
             const timeoutId = setTimeout(() => controller.abort(), 15000);
             const res = await fetch(`${API_URL}/api/rutas`, {
                 signal: controller.signal,
@@ -453,9 +464,11 @@ export default function ConductorDashboard() {
                 setRutas(activas);
                 setRutasCompletadas(completadas);
                 setLoading(false);
+                hasLoadedRoutesRef.current = true;
 
-                // Volvió la conexión: reseteamos contador y descartamos cualquier
-                // toast de error pendiente para no asustar al conductor.
+                // Recuperación: limpiamos cualquier error/toast remanente para
+                // que la UI vuelva al estado normal sin intervención del usuario.
+                setError(null);
                 if (consecutiveRoutesFailuresRef.current > 0) {
                     consecutiveRoutesFailuresRef.current = 0;
                     lastRoutesErrorToastAtRef.current = 0;
@@ -470,17 +483,22 @@ export default function ConductorDashboard() {
                 throw new Error(`Error del servidor: ${res.status}`);
             }
         } catch (err: unknown) {
+            // Si ya cargamos rutas con éxito al menos una vez Y esto es un poll
+            // automático en background, fallamos en SILENCIO. La app sigue
+            // funcionando con los datos en caché. El conductor no se entera —
+            // que es exactamente lo que pidió ("no me entrometas con errores").
+            if (isPolling && hasLoadedRoutesRef.current) {
+                return;
+            }
+
             const isAbort = err instanceof Error && err.name === 'AbortError';
             const errorMsg = isAbort
                 ? "Tiempo de espera agotado — el servidor no responde"
                 : `Error de conexión: ${getErrorMessage(err, 'Error desconocido')}`;
             setError(errorMsg);
 
-            // Anti-spam: solo notificamos al conductor en la PRIMERA falla o
-            // si pasaron >60s desde el último aviso. El estado de error en UI
-            // sigue marcado vía setError(), así que el conductor puede ver el
-            // problema en la pantalla principal sin que le aparezcan toasts cada
-            // 10 segundos durante una zona de mala cobertura.
+            // Anti-spam de toasts incluso en los caminos no-silenciosos:
+            // solo notificamos en la primera falla o después de 60s sin éxito.
             consecutiveRoutesFailuresRef.current += 1;
             const now = Date.now();
             const sinceLastToast = now - lastRoutesErrorToastAtRef.current;
@@ -532,15 +550,16 @@ export default function ConductorDashboard() {
         cargarRepostajes();
         // El polling se pausa cuando la pestaña/app está oculta para no agotar
         // batería ni acumular fallos de red en background. Al volver a primer
-        // plano, refrescamos rutas de inmediato.
+        // plano, refrescamos rutas de inmediato. Pasamos isPolling=true para que
+        // los fallos sean silenciosos y no taparen la UI con "Sin conexión".
         const tickRutas = () => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            cargarRutas();
+            cargarRutas(true);
         };
         const interval = setInterval(tickRutas, 10000);
         const onVisibility = () => {
             if (typeof document !== 'undefined' && !document.hidden) {
-                cargarRutas();
+                cargarRutas(true);
             }
         };
         if (typeof document !== 'undefined') {
