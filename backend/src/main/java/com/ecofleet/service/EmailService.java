@@ -32,8 +32,22 @@ public class EmailService {
     @Value("${RESEND_FROM_EMAIL:CarCare <onboarding@resend.dev>}")
     private String fromEmail;
 
+    // Workaround para cuando Resend está en modo sandbox (sin dominio verificado).
+    // Si el FROM apunta al dominio sandbox de Resend (`onboarding@resend.dev` /
+    // `*@resend.dev`), Resend SOLO permite enviar al email registrado como dueño
+    // de la cuenta API. Si seteás esta env var con ese email, en modo sandbox
+    // todos los destinatarios se redirigen acá y se le añade un banner al HTML
+    // indicando el destino original. Sin esta var, el envío falla con el error
+    // estándar de Resend y se devuelve un mensaje accionable al usuario.
+    @Value("${RESEND_SANDBOX_FALLBACK_EMAIL:}")
+    private String sandboxFallbackEmail;
+
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
+    }
+
+    private boolean isSandboxFrom() {
+        return fromEmail != null && fromEmail.toLowerCase().contains("resend.dev");
     }
 
     public void enviar(String to, String subject, String html) throws Exception {
@@ -41,17 +55,39 @@ public class EmailService {
             throw new RuntimeException("Servicio de email no disponible. Contacta al administrador del sistema.");
         }
 
-        List<String> destinatarios = parseDestinatarios(to);
-        String htmlEscaped = escapeJson(html).replace("\n", "\\n").replace("\r", "");
+        List<String> destinatariosOriginales = parseDestinatarios(to);
+        List<String> destinatarios = destinatariosOriginales;
+        String htmlFinal = html;
+
+        // Si seguimos en sandbox de Resend (sin dominio verificado), redirigimos
+        // al email de fallback. Si no hay fallback configurado, dejamos que Resend
+        // devuelva su error y traducimos el mensaje en resolveErrorMessage().
+        boolean redirigido = false;
+        if (isSandboxFrom() && sandboxFallbackEmail != null && !sandboxFallbackEmail.isBlank()) {
+            String fallback = sandboxFallbackEmail.trim();
+            boolean yaCoincide = destinatariosOriginales.size() == 1
+                    && destinatariosOriginales.get(0).equalsIgnoreCase(fallback);
+            if (!yaCoincide) {
+                destinatarios = List.of(fallback);
+                htmlFinal = buildSandboxBanner(destinatariosOriginales) + html;
+                redirigido = true;
+                log.warn("Resend en modo sandbox — redirigiendo email de [{}] a [{}]",
+                        String.join(", ", destinatariosOriginales), fallback);
+            }
+        }
+
+        String htmlEscaped = escapeJson(htmlFinal).replace("\n", "\\n").replace("\r", "");
         String toJson = destinatarios.stream()
                 .map(destino -> "\"" + escapeJson(destino) + "\"")
                 .collect(Collectors.joining(","));
+
+        String subjectFinal = redirigido ? "[SANDBOX] " + subject : subject;
 
         String json = String.format(
                 "{\"from\":\"%s\",\"to\":[%s],\"subject\":\"%s\",\"html\":\"%s\"}",
                 escapeJson(fromEmail),
                 toJson,
-                escapeJson(subject),
+                escapeJson(subjectFinal),
                 htmlEscaped
         );
 
@@ -107,11 +143,27 @@ public class EmailService {
     private String resolveErrorMessage(String responseBody) {
         String body = responseBody == null ? "" : responseBody;
         if (body.contains("You can only send testing emails to your own email address")) {
-            return "Resend esta en modo de prueba. Para enviar a otros correos debes verificar tu dominio en Resend y configurar RESEND_FROM_EMAIL con ese dominio.";
+            return "Resend esta en modo de prueba (sin dominio verificado). Opciones: "
+                    + "(1) verifica tu dominio en https://resend.com/domains y configura RESEND_FROM_EMAIL "
+                    + "con un email de ese dominio; o (2) configura la variable RESEND_SANDBOX_FALLBACK_EMAIL "
+                    + "en Railway con el email registrado en tu cuenta de Resend — los emails se redirigiran "
+                    + "a esa bandeja mientras testeas.";
         }
         if (body.contains("domain is not verified")) {
-            return "El dominio configurado para enviar emails no esta verificado en Resend.";
+            return "El dominio configurado para enviar emails no esta verificado en Resend. "
+                    + "Verificalo en https://resend.com/domains o usa RESEND_SANDBOX_FALLBACK_EMAIL como fallback.";
         }
         return "No se pudo enviar el email. Intenta de nuevo mas tarde.";
+    }
+
+    private String buildSandboxBanner(List<String> destinatariosOriginales) {
+        String destinos = String.join(", ", destinatariosOriginales);
+        return "<div style=\"background:#fef3c7;border:1px solid #f59e0b;color:#92400e;"
+                + "padding:12px 16px;border-radius:8px;margin-bottom:16px;font-family:sans-serif;font-size:14px;\">"
+                + "<strong>Modo sandbox de Resend.</strong> "
+                + "Este email iba destinado a: <code>" + destinos + "</code>. "
+                + "Se redirigio a esta bandeja porque el dominio remitente no esta verificado. "
+                + "Verifica tu dominio en https://resend.com/domains para enviar a destinatarios reales."
+                + "</div>";
     }
 }
