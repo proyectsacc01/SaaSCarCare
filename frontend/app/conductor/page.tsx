@@ -55,6 +55,7 @@ interface DriverUser {
     id: string;
     nombre?: string;
     email?: string;
+    telefono?: string;
     // El backend siempre envía `role` (inglés). `rol` (español) se mantiene
     // por compatibilidad con localStorage viejo. El guard del panel lee
     // ambos para no kickear sesiones anteriores al cambio.
@@ -62,6 +63,9 @@ interface DriverUser {
     rol?: string;
     empresaId?: string;
     nombreEmpresa?: string;
+    // false/undefined → entró por Google y nunca eligió password propia.
+    // true → ya tiene una password real elegida por el conductor.
+    tienePasswordPropia?: boolean;
 }
 
 type DriverTab = 'inicio' | 'historial' | 'chat' | 'perfil';
@@ -200,6 +204,11 @@ export default function ConductorDashboard() {
     const [refuelData, setRefuelData] = useState({ vehiculoId: '', litros: '', precioPorLitro: '1.650', estacion: '', kmActual: '' });
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
     const profileFileRef = useRef<HTMLInputElement>(null);
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [profileForm, setProfileForm] = useState({ nombre: '', email: '', telefono: '' });
+    const [showPasswordChange, setShowPasswordChange] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    const [savingProfile, setSavingProfile] = useState(false);
 
     // GPS en vivo durante ruta — para mostrar velocidad y posición real al conductor
     const [liveGps, setLiveGps] = useState<{ lat: number; lng: number; speed: number; accuracy: number } | null>(null);
@@ -1033,6 +1042,107 @@ export default function ConductorDashboard() {
             toast.error('Error de conexión');
         } finally {
             setEmpresaLoading(false);
+        }
+    };
+
+    const abrirEdicionPerfil = () => {
+        setProfileForm({
+            nombre: driverUser?.nombre || '',
+            email: driverUser?.email || '',
+            telefono: driverUser?.telefono || '',
+        });
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setShowPasswordChange(false);
+        setIsEditingProfile(true);
+    };
+
+    const cancelarEdicionPerfil = () => {
+        setIsEditingProfile(false);
+        setShowPasswordChange(false);
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    };
+
+    const guardarPerfil = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!driverUser?.id || savingProfile) return;
+
+        const nombre = profileForm.nombre.trim();
+        const email = profileForm.email.trim().toLowerCase();
+        const telefono = profileForm.telefono.trim();
+
+        if (!nombre) {
+            toast.error('El nombre no puede quedar vacío');
+            return;
+        }
+        if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+            toast.error('Ingresá un email válido');
+            return;
+        }
+
+        const payload: Record<string, string> = { nombre, email, telefono };
+
+        if (showPasswordChange) {
+            const { currentPassword, newPassword, confirmPassword } = passwordForm;
+            const requiereActual = driverUser?.tienePasswordPropia === true;
+
+            if (!newPassword) {
+                toast.error('Ingresá la nueva contraseña');
+                return;
+            }
+            if (requiereActual && !currentPassword) {
+                toast.error('Ingresá la contraseña actual para poder cambiarla');
+                return;
+            }
+            if (newPassword.length < 6) {
+                toast.error('La nueva contraseña debe tener al menos 6 caracteres');
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                toast.error('La confirmación no coincide con la nueva contraseña');
+                return;
+            }
+            if (requiereActual) {
+                payload.currentPassword = currentPassword;
+            }
+            payload.newPassword = newPassword;
+        }
+
+        setSavingProfile(true);
+        try {
+            const res = await fetch(`${API_URL}/api/conductores/me/profile`, {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                toast.error(data.error || 'No se pudo guardar el perfil');
+                return;
+            }
+
+            if (data.token) localStorage.setItem('token', data.token);
+
+            const updated: DriverUser = {
+                ...driverUser,
+                nombre: data.nombre ?? nombre,
+                email: data.email ?? email,
+                telefono: data.telefono ?? telefono,
+                nombreEmpresa: data.nombreEmpresa ?? driverUser.nombreEmpresa,
+                empresaId: data.empresaId ?? driverUser.empresaId,
+                tienePasswordPropia: typeof data.tienePasswordPropia === 'boolean'
+                    ? data.tienePasswordPropia
+                    : driverUser.tienePasswordPropia,
+            };
+            setDriverUser(updated);
+            localStorage.setItem('user', JSON.stringify(updated));
+            toast.success('Perfil actualizado');
+            setIsEditingProfile(false);
+            setShowPasswordChange(false);
+            setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        } catch {
+            toast.error('Error de conexión');
+        } finally {
+            setSavingProfile(false);
         }
     };
 
@@ -2050,18 +2160,112 @@ export default function ConductorDashboard() {
 
                             {/* Info */}
                             <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1rem', overflow: 'hidden' }}>
-                                <h3 style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.75rem', fontWeight: '700' }}>{t.conductor.information}</h3>
-                                {[
-                                    { label: 'Nombre', value: driverUser?.nombre || '—' },
-                                    { label: 'Email', value: driverUser?.email || '—' },
-                                    { label: 'Rol', value: driverUser?.role || driverUser?.rol || 'CONDUCTOR' },
-                                    { label: 'ID', value: `#${driverUser?.id?.slice(-8).toUpperCase() || '—'}` },
-                                ].map((row, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{row.label}</span>
-                                        <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#e5e7eb', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{row.value}</span>
-                                    </div>
-                                ))}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                    <h3 style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, fontWeight: '700' }}>{t.conductor.information}</h3>
+                                    {!isEditingProfile ? (
+                                        <button
+                                            onClick={abrirEdicionPerfil}
+                                            style={{ padding: '0.35rem 0.75rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '8px', color: '#60a5fa', fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer' }}
+                                        >Editar</button>
+                                    ) : (
+                                        <button
+                                            onClick={cancelarEdicionPerfil}
+                                            disabled={savingProfile}
+                                            style={{ padding: '0.35rem 0.75rem', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: '#ef4444', fontSize: '0.7rem', fontWeight: '700', cursor: savingProfile ? 'not-allowed' : 'pointer', opacity: savingProfile ? 0.5 : 1 }}
+                                        >{t.common.cancel}</button>
+                                    )}
+                                </div>
+
+                                {!isEditingProfile ? (
+                                    <>
+                                        {[
+                                            { label: 'Nombre', value: driverUser?.nombre || '—' },
+                                            { label: 'Email', value: driverUser?.email || '—' },
+                                            { label: 'Teléfono', value: driverUser?.telefono || '—' },
+                                            { label: 'Rol', value: driverUser?.role || driverUser?.rol || 'CONDUCTOR' },
+                                            { label: 'ID', value: `#${driverUser?.id?.slice(-8).toUpperCase() || '—'}` },
+                                        ].map((row, i, arr) => (
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0', borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                                                <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{row.label}</span>
+                                                <span style={{ fontSize: '0.8rem', fontWeight: '600', color: '#e5e7eb', maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{row.value}</span>
+                                            </div>
+                                        ))}
+                                    </>
+                                ) : (
+                                    <form onSubmit={guardarPerfil} style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                        {[
+                                            { key: 'nombre' as const, label: 'Nombre', type: 'text', placeholder: 'Tu nombre' },
+                                            { key: 'email' as const, label: 'Email', type: 'email', placeholder: 'tu@email.com' },
+                                            { key: 'telefono' as const, label: 'Teléfono', type: 'tel', placeholder: '+34 600 000 000' },
+                                        ].map(field => (
+                                            <label key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>{field.label}</span>
+                                                <input
+                                                    type={field.type}
+                                                    value={profileForm[field.key]}
+                                                    onChange={e => setProfileForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                                    placeholder={field.placeholder}
+                                                    disabled={savingProfile}
+                                                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '0.6rem 0.75rem', color: '#e5e7eb', fontSize: '0.85rem', outline: 'none' }}
+                                                />
+                                            </label>
+                                        ))}
+
+                                        {(() => {
+                                            const tienePropia = driverUser?.tienePasswordPropia === true;
+                                            const labelToggleOff = tienePropia ? '+ Cambiar contraseña' : '+ Establecer contraseña';
+                                            const labelToggleOn = tienePropia ? '− Cancelar cambio de contraseña' : '− Cancelar';
+                                            const passwordFields = tienePropia
+                                                ? [
+                                                    { key: 'currentPassword' as const, label: 'Contraseña actual' },
+                                                    { key: 'newPassword' as const, label: 'Nueva contraseña (mín. 6)' },
+                                                    { key: 'confirmPassword' as const, label: 'Repetir nueva contraseña' },
+                                                ]
+                                                : [
+                                                    { key: 'newPassword' as const, label: 'Nueva contraseña (mín. 6)' },
+                                                    { key: 'confirmPassword' as const, label: 'Repetir nueva contraseña' },
+                                                ];
+                                            return (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPasswordChange(v => !v)}
+                                                        style={{ alignSelf: 'flex-start', padding: '0.4rem 0.75rem', background: 'transparent', border: '1px dashed rgba(96,165,250,0.35)', borderRadius: '8px', color: '#60a5fa', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.25rem' }}
+                                                    >{showPasswordChange ? labelToggleOn : labelToggleOff}</button>
+
+                                                    {showPasswordChange && (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '0.75rem', background: 'rgba(96,165,250,0.04)', border: '1px solid rgba(96,165,250,0.15)', borderRadius: '12px' }}>
+                                                            {!tienePropia && (
+                                                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                                                                    Iniciaste sesión con Google y todavía no tenés una contraseña propia. Elegí una para poder entrar también con email y contraseña.
+                                                                </div>
+                                                            )}
+                                                            {passwordFields.map(field => (
+                                                                <label key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                                    <span style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>{field.label}</span>
+                                                                    <input
+                                                                        type="password"
+                                                                        value={passwordForm[field.key]}
+                                                                        onChange={e => setPasswordForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                                                        disabled={savingProfile}
+                                                                        autoComplete={field.key === 'currentPassword' ? 'current-password' : 'new-password'}
+                                                                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '10px', padding: '0.6rem 0.75rem', color: '#e5e7eb', fontSize: '0.85rem', outline: 'none' }}
+                                                                    />
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+
+                                        <button
+                                            type="submit"
+                                            disabled={savingProfile}
+                                            style={{ marginTop: '0.4rem', padding: '0.7rem', background: 'linear-gradient(135deg,#3bf63b,#22c55e)', border: 'none', borderRadius: '10px', color: '#000', fontWeight: 800, fontSize: '0.8rem', cursor: savingProfile ? 'not-allowed' : 'pointer', opacity: savingProfile ? 0.6 : 1 }}
+                                        >{savingProfile ? 'Guardando...' : 'Guardar cambios'}</button>
+                                    </form>
+                                )}
                             </div>
 
                             {/* Vincular a empresa */}

@@ -18,6 +18,7 @@ import com.ecofleet.service.GroqChatService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -58,6 +59,121 @@ public class ConductorController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    private static final java.util.regex.Pattern EMAIL_PATTERN =
+            java.util.regex.Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
+    /**
+     * El conductor edita sus propios datos de perfil: nombre, email, teléfono
+     * y opcionalmente contraseña. Solo puede modificarse a sí mismo (lo
+     * identifica el conductorId del JWT).
+     *
+     * Si cambia el email, se reemite el JWT (mismo flujo que cambiarEmpresa)
+     * porque el token va vinculado a la identidad del conductor y conviene
+     * que el frontend lo refresque.
+     *
+     * Para cambiar la contraseña se exige la actual — no alcanza con tener un
+     * JWT válido, porque un token robado no debería poder cambiar la clave.
+     */
+    @PutMapping("/me/profile")
+    public ResponseEntity<?> editarMiPerfil(
+            @RequestBody Map<String, String> payload,
+            HttpServletRequest request) {
+
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = trimToNull((String) request.getAttribute("conductorId"));
+
+        if (!"CONDUCTOR".equals(role) || conductorId == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores pueden usar este endpoint"));
+        }
+
+        Optional<Conductor> opt = conductorRepository.findById(conductorId);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
+        }
+        Conductor conductor = opt.get();
+
+        String nuevoNombre = trimToNull(payload.get("nombre"));
+        String nuevoEmailRaw = trimToNull(payload.get("email"));
+        String nuevoTelefono = payload.get("telefono"); // permito blank para borrar
+        String currentPassword = payload.get("currentPassword");
+        String newPassword = payload.get("newPassword");
+
+        boolean emailCambio = false;
+        String nuevoEmail = null;
+
+        if (nuevoEmailRaw != null) {
+            nuevoEmail = nuevoEmailRaw.toLowerCase();
+            if (!EMAIL_PATTERN.matcher(nuevoEmail).matches()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El email no tiene un formato válido"));
+            }
+            String emailActual = conductor.getEmail() != null ? conductor.getEmail().toLowerCase() : "";
+            if (!nuevoEmail.equals(emailActual)) {
+                Optional<Conductor> duplicado = conductorRepository.findByEmail(nuevoEmail);
+                if (duplicado.isPresent() && !duplicado.get().getId().equals(conductor.getId())) {
+                    return ResponseEntity.status(409).body(Map.of("error", "Ya existe un conductor con ese email"));
+                }
+                emailCambio = true;
+            }
+        }
+
+        if (newPassword != null && !newPassword.isBlank()) {
+            if (newPassword.length() < 6) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La nueva contraseña debe tener al menos 6 caracteres"));
+            }
+            // Solo exigimos la contraseña actual si el conductor YA tenía una
+            // password elegida por él. Los usuarios que entraron por Google
+            // tienen un UUID autogenerado en la base que nunca conocieron, así
+            // que la primera vez pueden setear una sin pedirles nada.
+            //
+            // Para conductores legacy (registrados antes de existir el flag,
+            // `tienePasswordPropia == null`) caemos a una heurística segura
+            // basada en `googleId`:
+            //   - googleId != null → entró por Google → no exigir actual.
+            //   - googleId == null → se registró con email/password → exigirla.
+            boolean tienePropia = resolverTienePasswordPropia(conductor);
+            if (tienePropia) {
+                if (currentPassword == null || currentPassword.isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Para cambiar la contraseña hay que ingresar la actual"));
+                }
+                if (conductor.getPassword() == null || !passwordEncoder.matches(currentPassword, conductor.getPassword())) {
+                    return ResponseEntity.status(401).body(Map.of("error", "La contraseña actual es incorrecta"));
+                }
+            }
+            conductor.setPassword(passwordEncoder.encode(newPassword));
+            conductor.setTienePasswordPropia(true);
+        }
+
+        if (nuevoNombre != null) {
+            conductor.setNombre(nuevoNombre);
+        }
+        if (emailCambio) {
+            conductor.setEmail(nuevoEmail);
+        }
+        if (nuevoTelefono != null) {
+            conductor.setTelefono(nuevoTelefono.trim());
+        }
+
+        conductorRepository.save(conductor);
+
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("id", conductor.getId());
+        response.put("nombre", conductor.getNombre() != null ? conductor.getNombre() : "");
+        response.put("email", conductor.getEmail() != null ? conductor.getEmail() : "");
+        response.put("telefono", conductor.getTelefono() != null ? conductor.getTelefono() : "");
+        response.put("role", "CONDUCTOR");
+        response.put("empresaId", conductor.getEmpresaId());
+        response.put("nombreEmpresa", conductor.getNombreEmpresa() != null ? conductor.getNombreEmpresa() : "");
+        response.put("tienePasswordPropia", resolverTienePasswordPropia(conductor));
+
+        if (emailCambio) {
+            response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR", conductor.getId()));
+        }
+
+        return ResponseEntity.ok(response);
+    }
 
     /**
      * Lista los conductores activos de la empresa del administrador autenticado.
@@ -592,6 +708,20 @@ public class ConductorController {
             "empresaId", admin.getId(),
             "nombreEmpresa", admin.getNombreEmpresa() != null ? admin.getNombreEmpresa() : ""
         ));
+    }
+
+    /**
+     * Resuelve si un conductor ya tiene una contraseña elegida por él mismo.
+     * Para registros nuevos, lee el flag `tienePasswordPropia`. Para registros
+     * legacy donde el flag es null, usa `googleId` como fallback:
+     *   - googleId != null → vino por Google, password autogenerada.
+     *   - googleId == null → registro manual con email/password.
+     */
+    private boolean resolverTienePasswordPropia(Conductor c) {
+        if (c.getTienePasswordPropia() != null) {
+            return c.getTienePasswordPropia();
+        }
+        return trimToNull(c.getGoogleId()) == null;
     }
 
     private String trimToNull(String value) {

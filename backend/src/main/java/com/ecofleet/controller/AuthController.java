@@ -196,6 +196,7 @@ public class AuthController {
             Conductor conductor = new Conductor();
             conductor.setEmail(email);
             conductor.setPassword(passwordEncoder.encode(password));
+            conductor.setTienePasswordPropia(true);
             conductor.setNombre(nombre.trim());
             conductor.setEmpresaId(admin.getId());
             conductor.setNombreEmpresa(admin.getNombreEmpresa());
@@ -430,9 +431,11 @@ public class AuthController {
             response.put("id", conductor.getId());
             response.put("email", conductor.getEmail());
             response.put("nombre", conductor.getNombre());
+            response.put("telefono", conductor.getTelefono() != null ? conductor.getTelefono() : "");
             response.put("nombreEmpresa", conductor.getNombreEmpresa());
             response.put("role", "CONDUCTOR");
             response.put("empresaId", conductor.getEmpresaId());
+            response.put("tienePasswordPropia", tienePasswordPropia(conductor));
             // Token subject = empresaId (multi-tenant) + conductorId claim para filtrar rutas
             response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR", conductor.getId()));
             if (picture != null) response.put("picture", picture);
@@ -499,9 +502,11 @@ public class AuthController {
             response.put("id", conductor.getId());
             response.put("email", conductor.getEmail());
             response.put("nombre", conductor.getNombre());
+            response.put("telefono", conductor.getTelefono() != null ? conductor.getTelefono() : "");
             response.put("nombreEmpresa", conductor.getNombreEmpresa());
             response.put("role", "CONDUCTOR");
             response.put("empresaId", conductor.getEmpresaId());
+            response.put("tienePasswordPropia", tienePasswordPropia(conductor));
             response.put("token", jwtUtil.generateToken(conductor.getEmpresaId(), "CONDUCTOR", conductor.getId()));
 
             return ResponseEntity.ok(response);
@@ -509,5 +514,16 @@ public class AuthController {
             logger.warn("Contraseña incorrecta para conductor: {}", email);
             return ResponseEntity.status(401).body(Map.of("error", "Credenciales inválidas"));
         }
+    }
+
+    /**
+     * Misma heurística que ConductorController.resolverTienePasswordPropia:
+     * lee el flag si existe, si no, infiere por googleId. Se duplica acá para
+     * no acoplar Auth con Conductor controllers.
+     */
+    private boolean tienePasswordPropia(Conductor c) {
+        if (c.getTienePasswordPropia() != null) return c.getTienePasswordPropia();
+        String gid = c.getGoogleId();
+        return gid == null || gid.trim().isEmpty();
     }
 }

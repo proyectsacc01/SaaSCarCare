@@ -21,6 +21,13 @@ public class Conductor {
 
     private String password; // BCrypt encoded
 
+    // ¿El conductor eligió su contraseña personalmente?
+    // - true  → registro manual o cambió la password desde su perfil.
+    // - false/null → password autogenerada (login con Google) que el usuario
+    //   NUNCA conoció. En este caso, al setear una password desde el perfil
+    //   no se le exige la actual.
+    private Boolean tienePasswordPropia;
+
     private String nombre;
 
     // ID del administrador/empresa al que pertenece
