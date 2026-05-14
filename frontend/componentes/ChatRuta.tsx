@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "@/lib/i18n";
 
 interface Mensaje {
     id?: string;
-    rutaId: string;
-    remitente: "ADMIN" | "CONDUCTOR";
+    rutaId?: string | null;
+    remitente: "ADMIN" | "CONDUCTOR" | "AI";
     contenido: string;
     mediaBase64?: string;
     mediaType?: string;
@@ -16,6 +17,7 @@ interface Mensaje {
 interface ChatProps {
     rutaId: string;
     rol: "ADMIN" | "CONDUCTOR";
+    mode?: "CENTRAL" | "AI";
     /**
      * Si true, el chat ocupa el 100% del padre (necesita un padre con altura
      * conocida y display:flex). Útil para layouts full-screen del conductor.
@@ -53,7 +55,8 @@ const QUICK_REPLIES_ADMIN = [
     "Actualiza estado cuando puedas",
 ];
 
-export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps) {
+export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", fillParent = false }: ChatProps) {
+    const t = useTranslation();
     const [mensajes, setMensajes] = useState<Mensaje[]>([]);
     const [nuevoMensaje, setNuevoMensaje] = useState("");
     const [mediaPreview, setMediaPreview] = useState<{ base64: string; type: string } | null>(null);
@@ -75,7 +78,16 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
     const [micPermissionDeniedDesktop, setMicPermissionDeniedDesktop] = useState(false);
     const [isBrave, setIsBrave] = useState(false);
 
-    const quickReplies = rol === 'CONDUCTOR' ? QUICK_REPLIES_CONDUCTOR : QUICK_REPLIES_ADMIN;
+    const quickReplies = mode === 'AI'
+        ? [
+            t.conductor.chatAiQuick1,
+            t.conductor.chatAiQuick2,
+            t.conductor.chatAiQuick3,
+            t.conductor.chatAiQuick4,
+        ]
+        : rol === 'CONDUCTOR'
+            ? QUICK_REPLIES_CONDUCTOR
+            : QUICK_REPLIES_ADMIN;
 
     const getAndroidTracker = () => {
         if (typeof window === 'undefined') return null;
@@ -92,7 +104,10 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
 
     const cargarMensajes = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/mensajes/${rutaId}`, { headers: getAuthHeaders() });
+            const endpoint = mode === 'AI'
+                ? `${API_URL}/api/conductores/me/chat-ai`
+                : `${API_URL}/api/mensajes/${rutaId}`;
+            const res = await fetch(endpoint, { headers: getAuthHeaders() });
             if (res.ok) setMensajes(await res.json());
         } catch { /* silencioso */ }
     };
@@ -101,7 +116,17 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         cargarMensajes();
         const interval = setInterval(cargarMensajes, 3000);
         return () => clearInterval(interval);
-    }, [rutaId]);
+    }, [rutaId, mode]);
+
+    useEffect(() => {
+        setShowQuickReplies(true);
+        setMediaPreview(null);
+        setNuevoMensaje("");
+        setMensajes([]);
+        if (isRecording) {
+            stopAudioRecording();
+        }
+    }, [mode]);
 
     // Scroll inteligente: solo auto-scroll si el usuario ya estaba abajo, o si fue él quien envió.
     // Si está leyendo arriba, mostramos botón "ir abajo" + pulso para indicar mensaje nuevo.
@@ -260,12 +285,24 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         if (sending) return;
         setSending(true);
         try {
-            const res = await fetch(`${API_URL}/api/mensajes`, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({ rutaId, remitente: rol, contenido: text })
-            });
+            const res = mode === 'AI'
+                ? await fetch(`${API_URL}/api/conductores/me/chat-ai`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ rutaId, mensaje: text })
+                })
+                : await fetch(`${API_URL}/api/mensajes`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ rutaId, remitente: rol, contenido: text })
+                });
             if (res.ok) {
+                if (mode === 'AI') {
+                    const data = await res.json();
+                    if (data?.escalatedToCentral) {
+                        toast.warning(t.conductor.chatAiEscalated);
+                    }
+                }
                 cargarMensajes();
                 setShowQuickReplies(false);
             }
@@ -564,17 +601,33 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
         }
 
         try {
-            const res = await fetch(`${API_URL}/api/mensajes`, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(mensajeObj)
-            });
+            const res = mode === 'AI'
+                ? await fetch(`${API_URL}/api/conductores/me/chat-ai`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ rutaId, mensaje: mensajeObj.contenido })
+                })
+                : await fetch(`${API_URL}/api/mensajes`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(mensajeObj)
+                });
             if (res.ok) {
+                if (mode === 'AI') {
+                    const data = await res.json();
+                    if (data?.escalatedToCentral) {
+                        toast.warning(t.conductor.chatAiEscalated);
+                    }
+                }
                 setNuevoMensaje("");
                 setMediaPreview(null);
                 cargarMensajes();
             } else {
-                toast.error(`No se pudo enviar el mensaje (${res.status})`);
+                if (mode === 'AI' && res.status === 503) {
+                    toast.error(t.conductor.chatAiUnavailable);
+                } else {
+                    toast.error(`No se pudo enviar el mensaje (${res.status})`);
+                }
             }
         } catch (err) {
             console.error("Error enviando mensaje:", err);
@@ -621,28 +674,36 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                 }}>
                     <div style={{
                         width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
-                        background: rol === 'ADMIN'
+                        background: mode === 'AI'
+                            ? 'linear-gradient(135deg, #a78bfa, #7c3aed)'
+                            : rol === 'ADMIN'
                             ? 'linear-gradient(135deg, #60a5fa, #3b82f6)'
                             : 'linear-gradient(135deg, #3bf63b, #22c55e)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '0.8rem', fontWeight: '900', color: '#000',
-                        boxShadow: rol === 'ADMIN'
+                        boxShadow: mode === 'AI'
+                            ? '0 4px 14px rgba(167,139,250,0.35)'
+                            : rol === 'ADMIN'
                             ? '0 4px 14px rgba(96,165,250,0.3)'
                             : '0 4px 14px rgba(59,246,59,0.3)',
                     }}>
-                        {rol === 'ADMIN' ? '🚗' : '🏢'}
+                        {mode === 'AI' ? '✦' : rol === 'ADMIN' ? '🚗' : '🏢'}
                     </div>
                     <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#fff' }}>
-                            {rol === 'ADMIN' ? 'Conductor' : 'Soporte Admin'}
+                            {mode === 'AI'
+                                ? t.conductor.chatAiTitle
+                                : rol === 'ADMIN'
+                                    ? 'Conductor'
+                                    : t.conductor.chatCentralTitle}
                         </div>
                         <div style={{ fontSize: '0.6rem', color: '#3bf63b', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#3bf63b', display: 'inline-block', boxShadow: '0 0 6px #3bf63b' }} />
-                            En línea
+                            {mode === 'AI' ? t.conductor.chatAiSubtitle : 'En línea'}
                         </div>
                     </div>
                     <div style={{ fontSize: '0.55rem', color: '#374151', fontFamily: 'monospace' }}>
-                        #{rutaId?.slice(-6).toUpperCase()}
+                        {mode === 'AI' ? 'AI' : `#${rutaId?.slice(-6).toUpperCase()}`}
                     </div>
                 </div>
 
@@ -698,18 +759,22 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                             <div style={{
                                 width: '64px', height: '64px', margin: '0 auto 1rem',
                                 borderRadius: '50%',
-                                background: rol === 'CONDUCTOR'
+                                background: mode === 'AI'
+                                    ? 'linear-gradient(135deg, rgba(167,139,250,0.14), rgba(124,58,237,0.05))'
+                                    : rol === 'CONDUCTOR'
                                     ? 'linear-gradient(135deg, rgba(59,246,59,0.12), rgba(34,197,94,0.05))'
                                     : 'linear-gradient(135deg, rgba(96,165,250,0.12), rgba(59,130,246,0.05))',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: '1.8rem',
-                                border: `1px solid ${rol === 'CONDUCTOR' ? 'rgba(59,246,59,0.2)' : 'rgba(96,165,250,0.2)'}`,
+                                border: `1px solid ${mode === 'AI' ? 'rgba(167,139,250,0.22)' : rol === 'CONDUCTOR' ? 'rgba(59,246,59,0.2)' : 'rgba(96,165,250,0.2)'}`,
                             }}>💬</div>
                             <p style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.3rem', color: '#9ca3af' }}>
-                                Empieza la conversación
+                                {mode === 'AI' ? t.conductor.chatStartWithAi : t.conductor.chatStartWithCentral}
                             </p>
                             <p style={{ fontSize: '0.72rem', margin: 0, color: '#4b5563', lineHeight: 1.5 }}>
-                                {rol === 'CONDUCTOR'
+                                {mode === 'AI'
+                                    ? t.conductor.chatAiHint
+                                    : rol === 'CONDUCTOR'
                                     ? 'Toca una respuesta rápida o escribe abajo'
                                     : 'Envía un mensaje al conductor'}
                             </p>
@@ -855,10 +920,10 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                                 style={{
                                     flexShrink: 0,
                                     padding: '0.4rem 0.8rem',
-                                    background: 'rgba(59,246,59,0.06)',
-                                    border: '1px solid rgba(59,246,59,0.18)',
+                                    background: mode === 'AI' ? 'rgba(167,139,250,0.08)' : 'rgba(59,246,59,0.06)',
+                                    border: `1px solid ${mode === 'AI' ? 'rgba(167,139,250,0.22)' : 'rgba(59,246,59,0.18)'}`,
                                     borderRadius: '99px',
-                                    color: '#3bf63b',
+                                    color: mode === 'AI' ? '#c4b5fd' : '#3bf63b',
                                     fontSize: '0.72rem', fontWeight: 600,
                                     cursor: sending ? 'default' : 'pointer',
                                     opacity: sending ? 0.5 : 1,
@@ -953,44 +1018,50 @@ export default function ChatRuta({ rutaId, rol, fillParent = false }: ChatProps)
                         onChange={handleMediaFileSelect}
                         style={{ display: 'none' }}
                     />
-                    <button
-                        type="button"
-                        onClick={openMediaPicker}
-                        disabled={sending || isRecording}
-                        style={{
-                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: '50%', width: '38px', height: '38px', minWidth: '38px',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: sending || isRecording ? 'default' : 'pointer', fontSize: '1rem', color: '#6b7280',
-                            transition: 'all 0.2s', opacity: sending || isRecording ? 0.5 : 1,
-                        }}
-                        title="Adjuntar foto o video"
-                    >🖼</button>
-                    {/* El botón de media abre foto/video. El micrófono SIEMPRE graba
-                        y nunca abre el explorador de archivos. */}
-                    <button
-                        type="button"
-                        onClick={() => {
-                            if (isRecording) {
-                                stopAudioRecording();
-                            } else {
-                                void startAudioRecording();
-                            }
-                        }}
-                        style={{
-                            background: isRecording ? 'rgba(239,68,68,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isRecording ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
-                            borderRadius: '50%', width: '38px', height: '38px', minWidth: '38px',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', fontSize: '1rem', color: isRecording ? '#ef4444' : '#6b7280',
-                            transition: 'all 0.2s',
-                        }}
-                        title={isRecording ? 'Detener grabación' : 'Grabar audio'}
-                    >{isRecording ? '⏹' : '🎙'}</button>
+                    {mode === 'CENTRAL' && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={openMediaPicker}
+                                disabled={sending || isRecording}
+                                style={{
+                                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '50%', width: '38px', height: '38px', minWidth: '38px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: sending || isRecording ? 'default' : 'pointer', fontSize: '1rem', color: '#6b7280',
+                                    transition: 'all 0.2s', opacity: sending || isRecording ? 0.5 : 1,
+                                }}
+                                title="Adjuntar foto o video"
+                            >🖼</button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (isRecording) {
+                                        stopAudioRecording();
+                                    } else {
+                                        void startAudioRecording();
+                                    }
+                                }}
+                                style={{
+                                    background: isRecording ? 'rgba(239,68,68,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isRecording ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                                    borderRadius: '50%', width: '38px', height: '38px', minWidth: '38px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: 'pointer', fontSize: '1rem', color: isRecording ? '#ef4444' : '#6b7280',
+                                    transition: 'all 0.2s',
+                                }}
+                                title={isRecording ? 'Detener grabación' : 'Grabar audio'}
+                            >{isRecording ? '⏹' : '🎙'}</button>
+                        </>
+                    )}
                     <input
                         type="text"
                         value={nuevoMensaje}
                         onChange={(e) => setNuevoMensaje(e.target.value)}
-                        placeholder={isRecording ? 'Pulsa detener para adjuntar el audio...' : 'Escribe un mensaje o graba un audio...'}
+                        placeholder={mode === 'AI'
+                            ? t.conductor.chatAiPlaceholder
+                            : isRecording
+                                ? 'Pulsa detener para adjuntar el audio...'
+                                : t.conductor.chatCentralPlaceholder}
                         // Cuando el teclado de Android aparece, el viewport se reduce y
                         // el input puede quedar oculto detrás del bottom nav fixed.
                         // Forzamos scrollIntoView con un pequeño delay para esperar

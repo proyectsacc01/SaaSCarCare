@@ -1,10 +1,12 @@
 package com.ecofleet.controller;
 
+import com.ecofleet.model.AiChatMessage;
 import com.ecofleet.model.Alerta;
 import com.ecofleet.model.Conductor;
 import com.ecofleet.model.ConfiguracionEmail;
 import com.ecofleet.model.Ruta;
 import com.ecofleet.model.Usuario;
+import com.ecofleet.repository.AiChatMessageRepository;
 import com.ecofleet.repository.AlertaRepository;
 import com.ecofleet.repository.ConfiguracionEmailRepository;
 import com.ecofleet.repository.ConductorRepository;
@@ -12,12 +14,14 @@ import com.ecofleet.repository.RutaRepository;
 import com.ecofleet.repository.UsuarioRepository;
 import com.ecofleet.security.JwtUtil;
 import com.ecofleet.service.EmailService;
+import com.ecofleet.service.GroqChatService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,7 +48,13 @@ public class ConductorController {
     private ConfiguracionEmailRepository configuracionEmailRepository;
 
     @Autowired
+    private AiChatMessageRepository aiChatMessageRepository;
+
+    @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private GroqChatService groqChatService;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -125,6 +135,99 @@ public class ConductorController {
         conductorRepository.save(c);
 
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    @GetMapping("/me/chat-ai")
+    public ResponseEntity<?> obtenerHistorialAi(HttpServletRequest request) {
+        String role = (String) request.getAttribute("userRole");
+        String empresaId = trimToNull((String) request.getAttribute("userId"));
+        String conductorId = trimToNull((String) request.getAttribute("conductorId"));
+
+        if (!"CONDUCTOR".equals(role) || empresaId == null || conductorId == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        }
+
+        return ResponseEntity.ok(
+                aiChatMessageRepository.findByEmpresaIdAndConductorIdOrderByTimestampAsc(empresaId, conductorId)
+        );
+    }
+
+    @PostMapping("/me/chat-ai")
+    public ResponseEntity<?> enviarMensajeAi(@RequestBody Map<String, String> payload, HttpServletRequest request) {
+        String role = (String) request.getAttribute("userRole");
+        String empresaId = trimToNull((String) request.getAttribute("userId"));
+        String conductorId = trimToNull((String) request.getAttribute("conductorId"));
+
+        if (!"CONDUCTOR".equals(role) || empresaId == null || conductorId == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        }
+
+        if (!groqChatService.isConfigured()) {
+            return ResponseEntity.status(503).body(Map.of("error", "La IA no está configurada todavía"));
+        }
+
+        String mensaje = trimToNull(payload.get("mensaje"));
+        if (mensaje == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El mensaje es obligatorio"));
+        }
+
+        Optional<Conductor> conductorOpt = conductorRepository.findById(conductorId)
+                .filter(c -> empresaId.equals(c.getEmpresaId()));
+        if (conductorOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
+        }
+
+        String rutaId = sanitizeOptionalRouteId(payload.get("rutaId"));
+
+        AiChatMessage userMsg = new AiChatMessage();
+        userMsg.setEmpresaId(empresaId);
+        userMsg.setConductorId(conductorId);
+        userMsg.setRutaId(rutaId);
+        userMsg.setRemitente("CONDUCTOR");
+        userMsg.setContenido(mensaje);
+        aiChatMessageRepository.save(userMsg);
+
+        List<AiChatMessage> historialGuardado = aiChatMessageRepository
+                .findByEmpresaIdAndConductorIdOrderByTimestampAsc(empresaId, conductorId);
+        List<String> historialGroq = new ArrayList<>();
+        int max = Math.max(0, historialGuardado.size() - 1);
+        for (int i = 0; i < max; i++) {
+            AiChatMessage item = historialGuardado.get(i);
+            String roleForGroq = "AI".equalsIgnoreCase(item.getRemitente()) ? "assistant" : "user";
+            historialGroq.add(roleForGroq + "::" + item.getContenido());
+        }
+
+        GroqChatService.GroqAiResult aiResult;
+        try {
+            aiResult = groqChatService.responder(historialGroq, mensaje);
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(502).body(Map.of(
+                    "error", "No se pudo consultar la IA",
+                    "detail", ex.getMessage()
+            ));
+        }
+
+        AiChatMessage aiMsg = new AiChatMessage();
+        aiMsg.setEmpresaId(empresaId);
+        aiMsg.setConductorId(conductorId);
+        aiMsg.setRutaId(rutaId);
+        aiMsg.setRemitente("AI");
+        aiMsg.setContenido(aiResult.answer());
+        aiMsg.setEscaladoACentral(aiResult.escalateToCentral());
+        aiMsg.setSeveridadEscalada(aiResult.severity());
+        aiChatMessageRepository.save(aiMsg);
+
+        boolean escalado = false;
+        if (aiResult.escalateToCentral()) {
+            escalado = crearEscaladaAi(empresaId, conductorOpt.get(), rutaId, mensaje, aiResult.reason(), aiResult.severity());
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "message", aiMsg,
+                "escalatedToCentral", escalado,
+                "severity", aiResult.severity(),
+                "reason", aiResult.reason()
+        ));
     }
 
     /**
@@ -554,6 +657,51 @@ public class ConductorController {
         return usuarioRepository.findById(empresaId)
                 .map(Usuario::getEmail)
                 .orElse("");
+    }
+
+    private boolean crearEscaladaAi(String empresaId, Conductor conductor, String rutaId, String mensaje, String reason, String severity) {
+        try {
+            Optional<Ruta> rutaOpt = rutaId == null
+                    ? Optional.empty()
+                    : rutaRepository.findById(rutaId).filter(r -> empresaId.equals(r.getUsuarioId()));
+
+            String nombreConductor = conductor.getNombre() != null && !conductor.getNombre().isBlank()
+                    ? conductor.getNombre()
+                    : (conductor.getEmail() != null ? conductor.getEmail() : "Conductor");
+            String resumenRuta = rutaOpt.map(r -> {
+                String origen = r.getOrigen() != null ? r.getOrigen() : "Origen";
+                String destino = r.getDestino() != null ? r.getDestino() : "Destino";
+                return origen + " → " + destino;
+            }).orElse("Sin ruta activa");
+
+            String grupoKey = "IA_CONDUCTOR_ESCALADA|" + conductor.getId();
+            Optional<Alerta> existente = alertaRepository.findByGrupoKeyAndResueltaFalse(grupoKey);
+
+            Alerta alerta = existente.orElseGet(Alerta::new);
+            alerta.setEmpresaId(empresaId);
+            alerta.setTipo("IA_CONDUCTOR_ESCALADA");
+            alerta.setSeveridad(severity);
+            alerta.setTitulo("La IA derivó a " + nombreConductor + " a la central");
+            alerta.setDescripcion(resumenRuta + " — " + resumir(mensaje, 180)
+                    + (trimToNull(reason) != null ? " — Motivo IA: " + resumir(reason, 80) : ""));
+            alerta.setRutaId(rutaOpt.map(Ruta::getId).orElse(null));
+            alerta.setGrupoKey(grupoKey);
+            alerta.setTimestamp(LocalDateTime.now());
+            alerta.setLeida(false);
+            alerta.setResuelta(false);
+            alertaRepository.save(alerta);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String sanitizeOptionalRouteId(String routeId) {
+        String clean = trimToNull(routeId);
+        if (clean == null || "testing_room".equalsIgnoreCase(clean)) {
+            return null;
+        }
+        return clean;
     }
 
     private String buildSupportEmailHtml(Conductor conductor, Ruta ruta, String mensaje) {

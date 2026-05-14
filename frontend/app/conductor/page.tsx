@@ -215,6 +215,7 @@ export default function ConductorDashboard() {
     const [supportLoading, setSupportLoading] = useState(false);
     const [supportSubject, setSupportSubject] = useState('');
     const [supportMessage, setSupportMessage] = useState('');
+    const [chatMode, setChatMode] = useState<'CENTRAL' | 'AI'>('CENTRAL');
     // Teléfono de la central, cacheado al iniciar y refrescado periódicamente.
     // CACHEADO porque en iOS Safari el tel: SOLO se abre dentro del mismo
     // user-gesture del click — si hacemos `await fetch(...)` antes, el browser
@@ -1859,19 +1860,50 @@ export default function ConductorDashboard() {
                             <div style={{
                                 display: 'flex', alignItems: 'center', gap: '0.6rem',
                                 padding: '0.7rem 0.9rem', borderRadius: '14px',
-                                background: 'rgba(59,246,59,0.04)', border: '1px solid rgba(59,246,59,0.12)',
+                                background: chatMode === 'AI' ? 'rgba(167,139,250,0.06)' : 'rgba(59,246,59,0.04)',
+                                border: chatMode === 'AI' ? '1px solid rgba(167,139,250,0.18)' : '1px solid rgba(59,246,59,0.12)',
                                 flexShrink: 0,
                             }}>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #3bf63b, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#000', flexShrink: 0 }}>🏢</div>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: chatMode === 'AI' ? 'linear-gradient(135deg, #a78bfa, #7c3aed)' : 'linear-gradient(135deg, #3bf63b, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '900', color: chatMode === 'AI' ? '#fff' : '#000', flexShrink: 0 }}>{chatMode === 'AI' ? '✦' : '🏢'}</div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#e5e7eb' }}>Soporte Admin</div>
+                                    <div style={{ fontSize: '0.78rem', fontWeight: '700', color: '#e5e7eb' }}>{chatMode === 'AI' ? t.conductor.chatAiTitle : t.conductor.chatCentralTitle}</div>
                                     <div style={{ fontSize: '0.6rem', color: '#4b5563' }}>
-                                        {rutaActiva ? `Ruta #${rutaActiva.id?.slice(-6).toUpperCase()}` : 'Canal general'}
+                                        {chatMode === 'AI'
+                                            ? t.conductor.chatAiHint
+                                            : rutaActiva
+                                                ? `Ruta #${rutaActiva.id?.slice(-6).toUpperCase()}`
+                                                : 'Canal general'}
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59,246,59,0.08)', padding: '0.2rem 0.5rem', borderRadius: '99px', border: '1px solid rgba(59,246,59,0.2)' }}>
-                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#3bf63b', boxShadow: '0 0 6px #3bf63b' }} />
-                                    <span style={{ fontSize: '0.55rem', color: '#3bf63b', fontWeight: '700' }}>CONECTADO</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.2rem', borderRadius: '999px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    {([
+                                        { id: 'CENTRAL', label: t.conductor.chatModeCentral },
+                                        { id: 'AI', label: t.conductor.chatModeAI },
+                                    ] as const).map(option => {
+                                        const active = chatMode === option.id;
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => setChatMode(option.id)}
+                                                style={{
+                                                    border: 'none',
+                                                    borderRadius: '999px',
+                                                    padding: '0.35rem 0.65rem',
+                                                    fontSize: '0.58rem',
+                                                    fontWeight: 800,
+                                                    cursor: 'pointer',
+                                                    background: active
+                                                        ? (option.id === 'AI' ? 'linear-gradient(135deg, #a78bfa, #7c3aed)' : 'linear-gradient(135deg, #3bf63b, #22c55e)')
+                                                        : 'transparent',
+                                                    color: active ? (option.id === 'AI' ? '#fff' : '#000') : '#9ca3af',
+                                                    transition: 'all 0.2s ease',
+                                                }}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                             {/* Chat component — toma toda la altura sobrante */}
@@ -1879,6 +1911,7 @@ export default function ConductorDashboard() {
                                 <ChatRuta
                                     rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
                                     rol="CONDUCTOR"
+                                    mode={chatMode}
                                     fillParent
                                 />
                             </div>
