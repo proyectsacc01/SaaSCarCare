@@ -9,12 +9,27 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 @Component
 public class JwtFilter extends OncePerRequestFilter {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    // Debe coincidir con WebConfig.addCorsMappings. Lo duplicamos acá porque
+    // cuando el filtro corta la cadena con 401, el CorsFilter de Spring MVC
+    // ya no llega a correr y la respuesta sale sin Access-Control-Allow-Origin.
+    // Sin estos headers, el browser convierte el 401 en "TypeError: Failed to
+    // fetch" y el frontend no puede ver el status real para redirigir a login.
+    private static final Pattern ALLOWED_ORIGIN = Pattern.compile(
+            "^(https://[a-zA-Z0-9-]+\\.vercel\\.app" +
+            "|http://localhost(:\\d+)?" +
+            "|http://10\\.0\\.2\\.2(:\\d+)?" +
+            "|capacitor://localhost" +
+            "|ionic://localhost" +
+            "|file://.*)$"
+    );
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -57,6 +72,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
         // Todos los demás endpoints /api/ requieren token válido
         if (path.startsWith("/api/") && request.getAttribute("userId") == null) {
+            applyCorsHeaders(request, response);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"error\": \"Token de autenticación requerido\"}");
@@ -64,6 +80,19 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    private void applyCorsHeaders(HttpServletRequest request, HttpServletResponse response) {
+        String origin = request.getHeader("Origin");
+        if (origin != null && ALLOWED_ORIGIN.matcher(origin).matches()) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+        } else {
+            response.setHeader("Access-Control-Allow-Origin", "*");
+        }
+        response.setHeader("Vary", "Origin");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+        response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept");
+        response.setHeader("Access-Control-Expose-Headers", "Authorization, Content-Type");
     }
 
     private boolean isAndroidGpsEndpoint(String path, String method) {
