@@ -138,17 +138,29 @@ public class ConductorController {
     }
 
     @GetMapping("/me/chat-ai")
-    public ResponseEntity<?> obtenerHistorialAi(HttpServletRequest request) {
+    public ResponseEntity<?> obtenerHistorialAi(
+            @RequestParam(required = false) String conductorId,
+            @RequestParam(required = false) String conductorEmail,
+            HttpServletRequest request) {
         String role = (String) request.getAttribute("userRole");
         String empresaId = trimToNull((String) request.getAttribute("userId"));
-        String conductorId = trimToNull((String) request.getAttribute("conductorId"));
 
-        if (!"CONDUCTOR".equals(role) || empresaId == null || conductorId == null) {
+        if (!"CONDUCTOR".equals(role) || empresaId == null) {
             return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
         }
 
+        Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, conductorId, conductorEmail);
+        if (conductorOpt.isEmpty()) {
+            return ResponseEntity.status(403).body(Map.of("error", "No se pudo identificar al conductor"));
+        }
+
+        String resolvedConductorId = trimToNull(conductorOpt.get().getId());
+        if (resolvedConductorId == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Conductor sin identificador válido"));
+        }
+
         return ResponseEntity.ok(
-                aiChatMessageRepository.findByEmpresaIdAndConductorIdOrderByTimestampAsc(empresaId, conductorId)
+                aiChatMessageRepository.findByEmpresaIdAndConductorIdOrderByTimestampAsc(empresaId, resolvedConductorId)
         );
     }
 
@@ -156,9 +168,8 @@ public class ConductorController {
     public ResponseEntity<?> enviarMensajeAi(@RequestBody Map<String, String> payload, HttpServletRequest request) {
         String role = (String) request.getAttribute("userRole");
         String empresaId = trimToNull((String) request.getAttribute("userId"));
-        String conductorId = trimToNull((String) request.getAttribute("conductorId"));
 
-        if (!"CONDUCTOR".equals(role) || empresaId == null || conductorId == null) {
+        if (!"CONDUCTOR".equals(role) || empresaId == null) {
             return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
         }
 
@@ -171,10 +182,17 @@ public class ConductorController {
             return ResponseEntity.badRequest().body(Map.of("error", "El mensaje es obligatorio"));
         }
 
-        Optional<Conductor> conductorOpt = conductorRepository.findById(conductorId)
-                .filter(c -> empresaId.equals(c.getEmpresaId()));
+        String payloadConductorId = trimToNull(payload.get("conductorId"));
+        String payloadConductorEmail = trimToNull(payload.get("conductorEmail"));
+
+        Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payloadConductorId, payloadConductorEmail);
         if (conductorOpt.isEmpty()) {
             return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
+        }
+
+        String conductorId = trimToNull(conductorOpt.get().getId());
+        if (conductorId == null) {
+            return ResponseEntity.status(403).body(Map.of("error", "Conductor sin identificador válido"));
         }
 
         String rutaId = sanitizeOptionalRouteId(payload.get("rutaId"));

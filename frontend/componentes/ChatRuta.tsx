@@ -18,6 +18,11 @@ interface ChatProps {
     rutaId: string;
     rol: "ADMIN" | "CONDUCTOR";
     mode?: "CENTRAL" | "AI";
+    actorContext?: {
+        conductorId?: string | null;
+        conductorEmail?: string | null;
+        conductorNombre?: string | null;
+    };
     /**
      * Si true, el chat ocupa el 100% del padre (necesita un padre con altura
      * conocida y display:flex). Útil para layouts full-screen del conductor.
@@ -55,7 +60,7 @@ const QUICK_REPLIES_ADMIN = [
     "Actualiza estado cuando puedas",
 ];
 
-export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", fillParent = false }: ChatProps) {
+export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", actorContext, fillParent = false }: ChatProps) {
     const t = useTranslation();
     const [mensajes, setMensajes] = useState<Mensaje[]>([]);
     const [nuevoMensaje, setNuevoMensaje] = useState("");
@@ -105,7 +110,10 @@ export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", fillParent = f
     const cargarMensajes = async () => {
         try {
             const endpoint = mode === 'AI'
-                ? `${API_URL}/api/conductores/me/chat-ai`
+                ? `${API_URL}/api/conductores/me/chat-ai?${new URLSearchParams({
+                    ...(actorContext?.conductorId ? { conductorId: actorContext.conductorId } : {}),
+                    ...(actorContext?.conductorEmail ? { conductorEmail: actorContext.conductorEmail } : {}),
+                }).toString()}`
                 : `${API_URL}/api/mensajes/${rutaId}`;
             const res = await fetch(endpoint, { headers: getAuthHeaders() });
             if (res.ok) setMensajes(await res.json());
@@ -289,7 +297,13 @@ export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", fillParent = f
                 ? await fetch(`${API_URL}/api/conductores/me/chat-ai`, {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({ rutaId, mensaje: text })
+                    body: JSON.stringify({
+                        rutaId,
+                        mensaje: text,
+                        conductorId: actorContext?.conductorId,
+                        conductorEmail: actorContext?.conductorEmail,
+                        conductorNombre: actorContext?.conductorNombre,
+                    })
                 })
                 : await fetch(`${API_URL}/api/mensajes`, {
                     method: 'POST',
@@ -605,7 +619,13 @@ export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", fillParent = f
                 ? await fetch(`${API_URL}/api/conductores/me/chat-ai`, {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({ rutaId, mensaje: mensajeObj.contenido })
+                    body: JSON.stringify({
+                        rutaId,
+                        mensaje: mensajeObj.contenido,
+                        conductorId: actorContext?.conductorId,
+                        conductorEmail: actorContext?.conductorEmail,
+                        conductorNombre: actorContext?.conductorNombre,
+                    })
                 })
                 : await fetch(`${API_URL}/api/mensajes`, {
                     method: 'POST',

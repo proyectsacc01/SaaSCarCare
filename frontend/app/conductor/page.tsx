@@ -1912,6 +1912,11 @@ export default function ConductorDashboard() {
                                     rutaId={rutaActiva?.id || (rutasPendientes.length > 0 ? rutasPendientes[0].id : "testing_room")}
                                     rol="CONDUCTOR"
                                     mode={chatMode}
+                                    actorContext={{
+                                        conductorId: driverUser?.id || null,
+                                        conductorEmail: driverUser?.email || null,
+                                        conductorNombre: driverUser?.nombre || null,
+                                    }}
                                     fillParent
                                 />
                             </div>
