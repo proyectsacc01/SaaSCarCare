@@ -141,6 +141,7 @@ public class ConductorController {
     public ResponseEntity<?> obtenerHistorialAi(
             @RequestParam(required = false) String conductorId,
             @RequestParam(required = false) String conductorEmail,
+            @RequestParam(required = false) String rutaId,
             HttpServletRequest request) {
         String role = (String) request.getAttribute("userRole");
         String empresaId = trimToNull((String) request.getAttribute("userId"));
@@ -150,6 +151,9 @@ public class ConductorController {
         }
 
         Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, conductorId, conductorEmail);
+        if (conductorOpt.isEmpty()) {
+            conductorOpt = resolverConductorDesdeRuta(empresaId, sanitizeOptionalRouteId(rutaId));
+        }
         if (conductorOpt.isEmpty()) {
             return ResponseEntity.status(403).body(Map.of("error", "No se pudo identificar al conductor"));
         }
@@ -186,6 +190,9 @@ public class ConductorController {
         String payloadConductorEmail = trimToNull(payload.get("conductorEmail"));
 
         Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, payloadConductorId, payloadConductorEmail);
+        if (conductorOpt.isEmpty()) {
+            conductorOpt = resolverConductorDesdeRuta(empresaId, sanitizeOptionalRouteId(payload.get("rutaId")));
+        }
         if (conductorOpt.isEmpty()) {
             return ResponseEntity.status(404).body(Map.of("error", "Conductor no encontrado"));
         }
@@ -720,6 +727,19 @@ public class ConductorController {
             return null;
         }
         return clean;
+    }
+
+    private Optional<Conductor> resolverConductorDesdeRuta(String empresaId, String rutaId) {
+        if (rutaId == null) {
+            return Optional.empty();
+        }
+
+        return rutaRepository.findById(rutaId)
+                .filter(r -> empresaId.equals(r.getUsuarioId()))
+                .map(Ruta::getConductorId)
+                .map(this::trimToNull)
+                .flatMap(conductorRepository::findById)
+                .filter(c -> empresaId.equals(c.getEmpresaId()));
     }
 
     private String buildSupportEmailHtml(Conductor conductor, Ruta ruta, String mensaje) {

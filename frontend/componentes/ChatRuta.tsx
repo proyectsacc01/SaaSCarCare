@@ -113,6 +113,7 @@ export default function ChatRuta({ rutaId, rol, mode = "CENTRAL", actorContext, 
                 ? `${API_URL}/api/conductores/me/chat-ai?${new URLSearchParams({
                     ...(actorContext?.conductorId ? { conductorId: actorContext.conductorId } : {}),
                     ...(actorContext?.conductorEmail ? { conductorEmail: actorContext.conductorEmail } : {}),
+                    ...(rutaId ? { rutaId } : {}),
                 }).toString()}`
                 : `${API_URL}/api/mensajes/${rutaId}`;
             const res = await fetch(endpoint, { headers: getAuthHeaders() });
