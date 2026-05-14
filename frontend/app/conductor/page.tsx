@@ -55,6 +55,10 @@ interface DriverUser {
     id: string;
     nombre?: string;
     email?: string;
+    // El backend siempre envía `role` (inglés). `rol` (español) se mantiene
+    // por compatibilidad con localStorage viejo. El guard del panel lee
+    // ambos para no kickear sesiones anteriores al cambio.
+    role?: string;
     rol?: string;
     empresaId?: string;
     nombreEmpresa?: string;
@@ -551,10 +555,17 @@ export default function ConductorDashboard() {
         // su JWT no tiene conductorId y el backend NO sabe filtrar por persona
         // → terminaría viendo rutas de otros conductores. Forzamos logout y
         // redirigimos al login de conductor para evitar mezclar sesiones.
+        //
+        // OJO: el backend manda el campo como `role` (inglés). Aceptamos `rol`
+        // también por compatibilidad con localStorage de sesiones viejas. Si
+        // no hay ninguno de los dos (sesión antigua sin el campo), dejamos
+        // pasar — el backend igualmente filtra en /api/rutas/me y los no
+        // conductores reciben 403 ahí.
         let parsedUser: DriverUser | null = null;
         try { parsedUser = JSON.parse(userStr) as DriverUser; } catch {}
-        const role = (parsedUser?.rol || '').toUpperCase();
-        if (role !== 'CONDUCTOR') {
+        const rawRole = parsedUser?.role ?? parsedUser?.rol;
+        const role = (rawRole || '').toUpperCase();
+        if (rawRole && role !== 'CONDUCTOR') {
             try {
                 localStorage.removeItem('user');
                 localStorage.removeItem('token');
@@ -2043,7 +2054,7 @@ export default function ConductorDashboard() {
                                 {[
                                     { label: 'Nombre', value: driverUser?.nombre || '—' },
                                     { label: 'Email', value: driverUser?.email || '—' },
-                                    { label: 'Rol', value: driverUser?.rol || 'CONDUCTOR' },
+                                    { label: 'Rol', value: driverUser?.role || driverUser?.rol || 'CONDUCTOR' },
                                     { label: 'ID', value: `#${driverUser?.id?.slice(-8).toUpperCase() || '—'}` },
                                 ].map((row, i) => (
                                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
