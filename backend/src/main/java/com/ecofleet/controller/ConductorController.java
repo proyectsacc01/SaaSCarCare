@@ -143,11 +143,10 @@ public class ConductorController {
             @RequestParam(required = false) String conductorEmail,
             @RequestParam(required = false) String rutaId,
             HttpServletRequest request) {
-        String role = (String) request.getAttribute("userRole");
         String empresaId = trimToNull((String) request.getAttribute("userId"));
 
-        if (!"CONDUCTOR".equals(role) || empresaId == null) {
-            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        if (empresaId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Token de autenticación requerido"));
         }
 
         Optional<Conductor> conductorOpt = resolverConductorDesdeRequest(request, empresaId, conductorId, conductorEmail);
@@ -170,11 +169,10 @@ public class ConductorController {
 
     @PostMapping("/me/chat-ai")
     public ResponseEntity<?> enviarMensajeAi(@RequestBody Map<String, String> payload, HttpServletRequest request) {
-        String role = (String) request.getAttribute("userRole");
         String empresaId = trimToNull((String) request.getAttribute("userId"));
 
-        if (!"CONDUCTOR".equals(role) || empresaId == null) {
-            return ResponseEntity.status(403).body(Map.of("error", "Solo conductores"));
+        if (empresaId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Token de autenticación requerido"));
         }
 
         if (!groqChatService.isConfigured()) {
