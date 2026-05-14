@@ -61,6 +61,31 @@ public class RutaController {
                 .toList();
     }
 
+    /**
+     * Endpoint exclusivo del panel del conductor. SIEMPRE filtra por
+     * conductorId del JWT, sin importar el role. Si el caller no es
+     * un conductor identificado (sin claim conductorId) devuelve 403.
+     *
+     * Defensa contra el bug donde un ADMIN entra a /conductor con su
+     * propio token y termina viendo TODAS las rutas de la empresa.
+     * El frontend `/conductor/page.tsx` consume ESTE endpoint, nunca
+     * `GET /api/rutas` (que sigue existiendo para el dashboard del admin).
+     */
+    @GetMapping("/me")
+    public List<Ruta> listarMisRutas(HttpServletRequest request) {
+        String usuarioId = (String) request.getAttribute("userId");
+        String role = (String) request.getAttribute("userRole");
+        String conductorId = (String) request.getAttribute("conductorId");
+
+        if (!"CONDUCTOR".equals(role) || conductorId == null || conductorId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo conductores pueden acceder a /api/rutas/me");
+        }
+        return rutaRepository.findByUsuarioIdAndConductorId(usuarioId, conductorId).stream()
+                .map(this::normalizarEstadoRuta)
+                .toList();
+    }
+
     @PostMapping
     public Ruta crearRuta(@RequestBody Ruta ruta, HttpServletRequest request) {
         String usuarioId = (String) request.getAttribute("userId");

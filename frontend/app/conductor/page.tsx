@@ -435,7 +435,10 @@ export default function ConductorDashboard() {
             // Timeout amplio (15s) — los conductores suelen estar en redes móviles
             // y un timeout corto solo genera falsos positivos.
             const timeoutId = setTimeout(() => controller.abort(), 15000);
-            const res = await fetch(`${API_URL}/api/rutas`, {
+            // /api/rutas/me filtra estrictamente por conductorId del JWT.
+            // Nunca usar /api/rutas en este panel — ese endpoint, para tokens
+            // sin claim conductorId, devuelve TODAS las rutas de la empresa.
+            const res = await fetch(`${API_URL}/api/rutas/me`, {
                 signal: controller.signal,
                 mode: 'cors',
                 headers: getAuthHeaders()
@@ -543,7 +546,24 @@ export default function ConductorDashboard() {
             router.push("/conductor/login");
             return;
         }
-        try { setDriverUser(JSON.parse(userStr)); } catch {}
+        // El panel /conductor es SOLO para usuarios con role=CONDUCTOR. Si un
+        // ADMIN entra acá (porque comparten localStorage en el mismo browser),
+        // su JWT no tiene conductorId y el backend NO sabe filtrar por persona
+        // → terminaría viendo rutas de otros conductores. Forzamos logout y
+        // redirigimos al login de conductor para evitar mezclar sesiones.
+        let parsedUser: DriverUser | null = null;
+        try { parsedUser = JSON.parse(userStr) as DriverUser; } catch {}
+        const role = (parsedUser?.rol || '').toUpperCase();
+        if (role !== 'CONDUCTOR') {
+            try {
+                localStorage.removeItem('user');
+                localStorage.removeItem('token');
+            } catch {}
+            toast.error("Este panel es solo para conductores. Iniciá sesión con tu cuenta de conductor.");
+            router.push("/conductor/login");
+            return;
+        }
+        if (parsedUser) setDriverUser(parsedUser);
         // Load profile photo from localStorage
         const savedPhoto = localStorage.getItem("profilePhoto");
         if (savedPhoto) setProfilePhoto(savedPhoto);
