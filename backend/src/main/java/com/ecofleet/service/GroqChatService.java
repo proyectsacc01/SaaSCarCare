@@ -2,6 +2,8 @@ package com.ecofleet.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -16,16 +18,18 @@ import java.util.List;
 @Service
 public class GroqChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(GroqChatService.class);
+
     private static final String SYSTEM_PROMPT = """
             Eres el asistente de conductores de CarCare Tracker.
             Tu rol es SOLO responder dudas generales y operativas de bajo riesgo.
             No inventes datos internos, no digas que hablaste con la central y no prometas acciones humanas.
             Si el conductor describe una emergencia, accidente, avería seria, amenaza, problema médico, inseguridad o una situación que requiera intervención humana, debes marcar escalateToCentral=true.
             Aunque escales, igual responde en tono breve, claro y calmado indicando que avisarás a la central y que, si hay riesgo inmediato, el conductor debe contactar emergencias.
-            Devuelve SIEMPRE JSON válido con esta forma exacta:
+            Devuelve SIEMPRE JSON válido PURO, sin markdown, sin backticks y sin texto extra, con esta forma exacta:
             {
               "answer": "texto para el conductor",
-              "escalateToCentral": true,
+              "escalateToCentral": false,
               "severity": "INFO|WARNING|CRITICAL",
               "reason": "motivo corto"
             }
@@ -71,6 +75,7 @@ public class GroqChatService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.error("Groq devolvió {}: {}", response.statusCode(), response.body());
                 throw new IllegalStateException("Groq devolvió " + response.statusCode() + ": " + response.body());
             }
 
@@ -110,26 +115,6 @@ public class GroqChatService {
                 .put("content", mensajeUsuario));
         root.set("messages", messages);
 
-        var responseFormat = objectMapper.createObjectNode();
-        responseFormat.put("type", "json_schema");
-        var jsonSchema = objectMapper.createObjectNode();
-        jsonSchema.put("name", "driver_ai_response");
-        var schema = objectMapper.createObjectNode();
-        schema.put("type", "object");
-        var properties = objectMapper.createObjectNode();
-        properties.set("answer", objectMapper.createObjectNode().put("type", "string"));
-        properties.set("escalateToCentral", objectMapper.createObjectNode().put("type", "boolean"));
-        properties.set("severity", objectMapper.createObjectNode()
-                .put("type", "string")
-                .set("enum", objectMapper.valueToTree(List.of("INFO", "WARNING", "CRITICAL"))));
-        properties.set("reason", objectMapper.createObjectNode().put("type", "string"));
-        schema.set("properties", properties);
-        schema.set("required", objectMapper.valueToTree(List.of("answer", "escalateToCentral", "severity", "reason")));
-        schema.put("additionalProperties", false);
-        jsonSchema.set("schema", schema);
-        responseFormat.set("json_schema", jsonSchema);
-        root.set("response_format", responseFormat);
-
         return root;
     }
 
@@ -140,17 +125,29 @@ public class GroqChatService {
             throw new IllegalStateException("Groq respondió sin contenido");
         }
 
-        JsonNode payload = objectMapper.readTree(content);
-        String answer = payload.path("answer").asText("").trim();
-        boolean escalate = payload.path("escalateToCentral").asBoolean(false);
-        String severity = normalizeSeverity(payload.path("severity").asText("INFO"));
-        String reason = payload.path("reason").asText("").trim();
+        String cleaned = cleanupJsonCandidate(content);
 
-        if (answer.isBlank()) {
-            throw new IllegalStateException("Groq devolvió respuesta vacía");
+        try {
+            JsonNode payload = objectMapper.readTree(cleaned);
+            String answer = payload.path("answer").asText("").trim();
+            boolean escalate = payload.path("escalateToCentral").asBoolean(false);
+            String severity = normalizeSeverity(payload.path("severity").asText("INFO"));
+            String reason = payload.path("reason").asText("").trim();
+
+            if (answer.isBlank()) {
+                throw new IllegalStateException("Groq devolvió respuesta vacía");
+            }
+
+            return new GroqAiResult(answer, escalate, severity, reason);
+        } catch (Exception parseError) {
+            log.warn("No se pudo parsear JSON de Groq, usando fallback. Contenido: {}", content);
+            return new GroqAiResult(
+                    content.replace("```json", "").replace("```", "").trim(),
+                    false,
+                    "INFO",
+                    "fallback_plain_text"
+            );
         }
-
-        return new GroqAiResult(answer, escalate, severity, reason);
     }
 
     private String normalizeSeverity(String severity) {
@@ -158,8 +155,25 @@ public class GroqChatService {
         return switch (normalized) {
             case "CRITICAL" -> "CRITICAL";
             case "WARNING" -> "WARNING";
+            case "LOW", "INFO", "NORMAL" -> "INFO";
             default -> "INFO";
         };
+    }
+
+    private String cleanupJsonCandidate(String raw) {
+        String trimmed = raw == null ? "" : raw.trim();
+        if (trimmed.startsWith("```")) {
+            trimmed = trimmed.replaceFirst("^```(?:json)?\\s*", "");
+            trimmed = trimmed.replaceFirst("\\s*```$", "");
+        }
+
+        int firstBrace = trimmed.indexOf('{');
+        int lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return trimmed.substring(firstBrace, lastBrace + 1);
+        }
+
+        return trimmed;
     }
 
     public record GroqAiResult(String answer, boolean escalateToCentral, String severity, String reason) {}
