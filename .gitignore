@@ -39,3 +39,10 @@ android/app/keystore.jks
 android/app/release.keystore
 *.jks
 *.keystore
+
+# Maven / Java backend build artifacts
+target/
+*.class
+*.jar
+*.war
+hs_err_pid*.log
