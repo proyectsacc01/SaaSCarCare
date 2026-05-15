@@ -10,21 +10,28 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-[#0ee936] text-black hover:bg-[#3bf63b]',
-        destructive: 'bg-red-600 text-white hover:bg-red-500',
+        default:
+          'bg-[#0ee936] text-black hover:bg-[#3bf63b] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#0ee936]/45',
+        destructive:
+          'bg-red-600 text-white hover:bg-red-500 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-500/45',
         outline:
-          'border-2 border-[#0ee936]/60 bg-transparent text-white hover:bg-[#0ee936]/10',
-        secondary: 'bg-gray-500 text-white hover:bg-gray-400',
-        success: 'bg-[#0ee936] text-black hover:bg-[#3bf63b]',
-        warning: 'bg-yellow-400 text-black hover:bg-yellow-300',
-        info: 'bg-blue-600 text-white hover:bg-blue-500',
-        gradient: 'bg-linear-to-r from-[#04e13f] to-[#22c55e] text-black',
+          'border-2 border-[#0ee936]/60 bg-transparent text-white hover:bg-[#0ee936]/10 hover:border-[#0ee936] hover:-translate-y-0.5 hover:shadow-lg hover:shadow-[#0ee936]/30',
+        secondary:
+          'bg-gray-500 text-white hover:bg-gray-400 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-gray-400/40',
+        success:
+          'bg-[#0ee936] text-black hover:bg-[#3bf63b] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-[#0ee936]/50',
+        warning:
+          'bg-yellow-400 text-black hover:bg-yellow-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-300/45',
+        info:
+          'bg-blue-600 text-white hover:bg-blue-500 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-400/45',
+        gradient:
+          'bg-linear-to-r from-[#04e13f] to-[#22c55e] text-black hover:-translate-y-0.5 hover:shadow-xl hover:shadow-[#22c55e]/50',
         link: 'text-[#0ee936] underline-offset-4 hover:underline bg-transparent shadow-none',
       },
       size: {
-        default: 'h-11 px-6 py-2.5 text-sm has-[>svg]:gap-2',
-        sm: 'h-9 rounded-md px-5 py-2 text-sm has-[>svg]:gap-1.5',
-        lg: 'h-12 rounded-md px-10 py-3 text-base has-[>svg]:gap-2.5',
+        default: 'h-12 px-7 py-3 text-sm has-[>svg]:gap-2',
+        sm: 'h-11 rounded-md px-6 py-2.5 text-sm has-[>svg]:gap-2',
+        lg: 'h-14 rounded-md px-12 py-4 text-base has-[>svg]:gap-2.5',
         xl: 'h-24 px-20 text-2xl has-[>svg]:gap-3',
         icon: 'h-9 w-9',
         'icon-sm': 'h-12 w-12',
